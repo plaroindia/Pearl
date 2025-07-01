@@ -1,0 +1,2 @@
+const String url = 'https://gcsundjelxodkbdnuaxr.supabase.co';
+const String anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdjc3VuZGplbHhvZGtiZG51YXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzNDM0NjEsImV4cCI6MjA2NjkxOTQ2MX0.TLblseK15hGH4h1nrc5vbQ52_rjfx8NPFzAmO8ZwIXU';
