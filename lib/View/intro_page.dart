@@ -18,9 +18,9 @@ class IntroPage extends StatelessWidget {
             child: Center(
               child:Image.asset(
                 'assets/plaro_logo.png',
-                width: 200, // Adjust width as needed
-                height: 200, // Adjust height as needed
-                fit: BoxFit.contain, // Adjust the fit as needed
+                width: 200,
+                height: 200,
+                fit: BoxFit.contain,
               ),
             ),
           ),
