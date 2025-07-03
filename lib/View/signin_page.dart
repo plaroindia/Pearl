@@ -19,10 +19,9 @@ class _SigninScreenState extends State<SigninScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black87, // Use the theme color you have
+      backgroundColor: Colors.black87,
       appBar: AppBar(
-        //title: Text('Sign Up'),
-        backgroundColor: Colors.black87, // Customize as needed
+        backgroundColor: Colors.black87,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

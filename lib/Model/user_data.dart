@@ -11,7 +11,7 @@ class User{
     required this.username,
     required this.email,
     required this.password,
-    required this.role,
-    required this.location,
+    this.role,
+    this.location,
   });
 }
