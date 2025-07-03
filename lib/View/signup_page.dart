@@ -38,7 +38,7 @@ class _SigninScreenState extends ConsumerState<SigninScreen> {
         setState(() => isLoading = false);
 
         if (success) {
-          Navigator.pushReplacementNamed(context, '/home');
+          Navigator.pushReplacementNamed(context, '/navpg');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('SignUp failed')),

@@ -36,7 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() => isLoading = false);
 
         if (success) {
-          Navigator.pushReplacementNamed(context, '/home');
+          Navigator.pushReplacementNamed(context, '/navpg');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Login failed')),

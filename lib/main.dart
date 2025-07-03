@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'View/intro_page.dart';
 import 'View/home_page.dart';
 import 'View/login_page.dart';
+import 'View/navipg.dart';
 import 'constants/auth_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -23,6 +24,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => LoginScreen(),
         '/home': (context) => HomeScreen(),
+        '/navipg': (context) => navCard(),
       },
       debugShowCheckedModeBanner: false,
       title: 'PLARO',
