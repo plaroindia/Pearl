@@ -44,10 +44,39 @@ class AuthController {
     }
   }
 
-  Future<bool> signin({
+  Future<bool> logUp({
     required String email,
     required String password,
-  })async{
+  }) async {
+    try {
+      debugPrint('Starting signup for email: $email');
 
+      final response = await ref.read(supAuthProv).signUp(
+        email: email,
+        password: password,
+      );
+
+      debugPrint('SignUp response: ${response.user?.email}');
+
+      // Check if user was created (even without session due to email confirmation)
+      if (response.user != null) {
+        if (response.session != null) {
+          debugPrint('SignUp successful with immediate session');
+          return true;
+        } else {
+          debugPrint('SignUp successful - email confirmation required');
+          return true; // User created but needs email confirmation
+        }
+      } else {
+        debugPrint('SignUp failed: No user created');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('SignUp error: $e');
+      return false;
+    }
+  }
+  Future<void> logout() async {
+    await ref.read(supAuthProv).signOut();
   }
 }

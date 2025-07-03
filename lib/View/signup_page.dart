@@ -1,20 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:plaro_3/View/login_page.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:plaro_3/ViewModel/auth_provider.dart';
 
-class SigninScreen extends StatefulWidget {
+
+class SigninScreen extends ConsumerStatefulWidget {
   const SigninScreen({super.key});
 
   @override
-  State<SigninScreen> createState() => _SigninScreenState();
+  ConsumerState<SigninScreen> createState() => _SigninScreenState();
 }
 
-class _SigninScreenState extends State<SigninScreen> {
-
+class _SigninScreenState extends ConsumerState<SigninScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   String _errorMessage = '';
+  bool isLoading =  false;
 
+  void _signUp() async {
+    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final success = await ref.read(authControllerProvider).logUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (mounted) {
+        setState(() => isLoading = false);
+
+        if (success) {
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('SignUp failed')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,8 +130,8 @@ class _SigninScreenState extends State<SigninScreen> {
               ),
             SizedBox(height: 16.0),
             ElevatedButton(
-              onPressed: (){},//_signUp,
-              child: Text('Sign In',style: TextStyle(color: Colors.white),),
+              onPressed: _signUp,//_signUp,
+              child: Text('Sign Up',style: TextStyle(color: Colors.white),),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
               ),

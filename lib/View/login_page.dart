@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'signin_page.dart';
+import 'signup_page.dart';
 import 'package:plaro_3/ViewModel/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
