@@ -75,7 +75,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             IconButton(
               onPressed: () {
-                // TODO: Implement search functionality
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Search functionality coming soon')),
                 );
@@ -158,7 +157,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: Navigate to settings
                 },
               ),
 
@@ -219,7 +217,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                // Add your main content here
                 Container(
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.symmetric(horizontal: 32),

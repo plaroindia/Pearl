@@ -4,16 +4,11 @@ import 'View/intro_page.dart';
 import 'View/home_page.dart';
 import 'View/login_page.dart';
 import 'View/navipg.dart';
-import 'constants/auth_keys.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: url,
-    anonKey: anonKey,
-   );
   runApp(ProviderScope(child: MyApp()));
 }
 
