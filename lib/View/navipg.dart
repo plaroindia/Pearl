@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'home_page.dart';
 // import 'shorts.dart';
 // import 'chatlist.dart';
-// import 'Profile.dart';
+import 'Profile.dart';
 
 void main() => runApp(MaterialApp(
   home: navCard(),
@@ -23,9 +23,9 @@ class _navCardState extends State<navCard> {
   final List<Widget> _pages = [
     HomeScreen(),
     NotificationsScreen(),
+    ProfileScreen(),
     // Shorts(),
     // MessagesScreen(),
-    // ProfileScreen(),
   ];
 
 
@@ -71,17 +71,17 @@ class _navCardState extends State<navCard> {
             label: 'Notifications',
           ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.slow_motion_video_rounded),
-              label: 'Bytes'
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.messenger_outline),
-            label: "chats",
-          ),
-          BottomNavigationBarItem(
               icon: Icon(Icons.person),
               label: 'Profile'
           ),
+          // BottomNavigationBarItem(
+          //     icon: Icon(Icons.slow_motion_video_rounded),
+          //     label: 'Bytes'
+          // ),
+          // BottomNavigationBarItem(
+          //   icon: Icon(Icons.messenger_outline),
+          //   label: "chats",
+          // ),
         ],
       ),
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
 import 'home_page.dart';
+import 'navipg.dart';
 import '../constants/auth_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,7 +46,7 @@ class _IntroPageState extends ConsumerState<IntroPage> {
           // User is already logged in, go to home screen
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            MaterialPageRoute(builder: (context) => navCard()),
           );
         } else {
           // User is not logged in, stay on intro page
