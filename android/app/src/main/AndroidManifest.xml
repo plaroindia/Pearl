@@ -4,6 +4,22 @@
         android:label="plaro_3"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <activity
+            android:name="com.supabase.flutter.SupabaseDeepLinkingActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="io.supabase.flutter"
+                    android:host="login-callback" />
+            </intent-filter>
+        </activity>
+        s
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

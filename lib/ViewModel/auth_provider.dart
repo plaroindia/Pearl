@@ -58,6 +58,8 @@ class AuthController {
 
       debugPrint('SignUp response: ${response.user?.email}');
 
+
+
       // Check if user was created (even without session due to email confirmation)
       if (response.user != null) {
         if (response.session != null) {
