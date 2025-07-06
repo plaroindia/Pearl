@@ -4,7 +4,7 @@ class User{
   String? email;
   String? password;
   String? role;
-  String? location;
+  String? purpose;
 
   User({
     required this.userid,
@@ -12,6 +12,6 @@ class User{
     required this.email,
     required this.password,
     this.role,
-    this.location,
+    this.purpose,
   });
 }

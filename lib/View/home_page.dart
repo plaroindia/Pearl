@@ -103,6 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SizedBox(height: 30.0,),
                     const CircleAvatar(
                       radius: 30,
                       backgroundColor: Colors.grey,
