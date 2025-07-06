@@ -183,7 +183,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                         ? FileImage(_profileImage!)
                         : _profileImageUrl != null
                         ? NetworkImage(_profileImageUrl!)
-                        : const AssetImage('assets/default_profile.png')
+                        : const AssetImage('assets/plaro_logo.png')
                     as ImageProvider,
                     child: _profileImage == null && _profileImageUrl == null
                         ? const Icon(Icons.camera_alt, size: 50, color: Colors.grey)
