@@ -15,6 +15,7 @@ class SetProfile extends ConsumerStatefulWidget {
 class _SetProfileState extends ConsumerState<SetProfile> {
   final _formKey = GlobalKey<FormState>();
   bool _isInitialized = false;
+  bool _isUploading = false; // Track upload state
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _userIdController = TextEditingController();
@@ -23,11 +24,11 @@ class _SetProfileState extends ConsumerState<SetProfile> {
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _roleController = TextEditingController();
 
-  File? _profileImage;
-  String? _profileImageUrl;
+  File? _profileImage; // New selected image
+  String? _profileImageUrl; // Current profile image URL from database
 
   @override
-  void initState(){
+  void initState() {
     super.initState();
   }
 
@@ -48,7 +49,9 @@ class _SetProfileState extends ConsumerState<SetProfile> {
             _bioController.text = profile.bio ?? '';
             _locationController.text = profile.location ?? '';
             _roleController.text = profile.role ?? '';
-            _profileImageUrl = profile.profilePic;
+            setState(() {
+              _profileImageUrl = profile.profilePic;
+            });
           }
         });
 
@@ -68,16 +71,89 @@ class _SetProfileState extends ConsumerState<SetProfile> {
   Future<void> _refreshProfile() async {
     setState(() {
       _isInitialized = false;
+      _profileImage = null; // Reset selected image on refresh
     });
     await _loadUserProfile();
   }
 
   // Pick image from gallery
   Future<void> _pickImage() async {
-    final pickedImage = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedImage != null) {
+    try {
+      final pickedImage = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 70,
+      );
+
+      if (pickedImage != null) {
+        setState(() {
+          _profileImage = File(pickedImage.path);
+        });
+        print("Image selected: ${_profileImage?.path}");
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      _showSnackBar('Error selecting image: $e', isError: true);
+    }
+  }
+
+  // Upload profile image to Supabase Storage
+  Future<String?> _uploadProfileImage() async {
+    if (_profileImage == null) return null;
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
       setState(() {
-        _profileImage = File(pickedImage.path);
+        _isUploading = true;
+      });
+
+      // Create unique filename
+      final fileExtension = _profileImage!.path.split('.').last.toLowerCase();
+      final fileName = 'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      final filePath = 'profiles/$fileName';
+
+      // Delete old profile image if exists
+      if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+        try {
+          final oldFileName = _profileImageUrl!.split('/').last;
+          final oldFilePath = 'profiles/$oldFileName';
+          await Supabase.instance.client.storage
+              .from('avatars')
+              .remove([oldFilePath]);
+        } catch (e) {
+          print('Warning: Could not delete old profile image: $e');
+        }
+      }
+
+      // Upload new image
+      final response = await Supabase.instance.client.storage
+          .from('avatars')
+          .upload(filePath, _profileImage!);
+
+      if (response.isEmpty) {
+        throw Exception('Upload failed - no response');
+      }
+
+      // Get public URL
+      final imageUrl = Supabase.instance.client.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+      print('Image uploaded successfully: $imageUrl');
+      return imageUrl;
+
+    } catch (e) {
+      print('Error uploading image: $e');
+      _showSnackBar('Failed to upload image: $e', isError: true);
+      return null;
+    } finally {
+      setState(() {
+        _isUploading = false;
       });
     }
   }
@@ -95,24 +171,36 @@ class _SetProfileState extends ConsumerState<SetProfile> {
         return;
       }
 
-      // TODO: Upload profile image to Supabase Storage if needed
-      String? uploadedImageUrl;
+      String? finalImageUrl = _profileImageUrl; // Keep existing URL by default
 
+      // Upload new image if selected
       if (_profileImage != null) {
-        uploadedImageUrl = await _uploadProfileImage();
+        final uploadedUrl = await _uploadProfileImage();
+        if (uploadedUrl != null) {
+          finalImageUrl = uploadedUrl;
+        } else {
+          _showSnackBar('Failed to upload image, but profile will be saved without image update', isError: true);
+        }
       }
 
+      // Save profile
       await ref.read(setProfileProvider.notifier).saveProfile(
         userid: user.id,
         username: _usernameController.text.trim(),
         email: user.email,
         role: _roleController.text.trim().isNotEmpty ? _roleController.text.trim() : null,
-        profilePic: uploadedImageUrl,// _profileImageUrl, // Use uploaded image URL
+        profilePic: finalImageUrl,
         bio: _bioController.text.trim().isNotEmpty ? _bioController.text.trim() : null,
         study: _schoolController.text.trim().isNotEmpty ? _schoolController.text.trim() : null,
         location: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
         isVerified: false,
       );
+
+      // Update local state
+      setState(() {
+        _profileImageUrl = finalImageUrl;
+        _profileImage = null; // Clear selected image after successful save
+      });
 
       _showSnackBar('Profile saved successfully!', isError: false);
 
@@ -127,6 +215,8 @@ class _SetProfileState extends ConsumerState<SetProfile> {
         errorMessage = 'Database error: ${error.message}';
       } else if (error is AuthException) {
         errorMessage = 'Authentication error: ${error.message}';
+      } else if (error is StorageException) {
+        errorMessage = 'Storage error: ${error.message}';
       } else if (error is Exception) {
         errorMessage = error.toString();
       }
@@ -135,38 +225,26 @@ class _SetProfileState extends ConsumerState<SetProfile> {
     }
   }
 
-  // Upload profile image to Supabase Storage
-  Future<String?> _uploadProfileImage() async {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null || _profileImage == null) return null;
-
-      final fileName = 'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final filePath = 'profiles/$fileName';
-
-      await Supabase.instance.client.storage
-          .from('avatars')
-          .upload(filePath, _profileImage!);
-
-      final imageUrl = Supabase.instance.client.storage
-          .from('avatars')
-          .getPublicUrl(filePath);
-
-      return imageUrl;
-    } catch (e) {
-      print('Error uploading image: $e');
-      return null;
+  void _showSnackBar(String message, {required bool isError}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? Colors.red : Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
-  void _showSnackBar(String message, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+  // Helper method to get the display image
+  ImageProvider? _getDisplayImage() {
+    if (_profileImage != null) {
+      return FileImage(_profileImage!);
+    } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+      return NetworkImage(_profileImageUrl!);
+    }
+    return null;
   }
 
   @override
@@ -218,40 +296,84 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                       ),
                     ),
 
-                  // Profile image section
-                  profileState.when(
-                    data: (profile) => GestureDetector(
-                      onTap:  _pickImage,
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.black,
-                        backgroundImage: _profileImage != null
-                            ? FileImage(_profileImage!)
-                            : profile?.profilePic != null
-                            ? NetworkImage(profile!.profilePic!)
-                            : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                        child: _profileImage == null && profile?.profilePic == null
-                            ? const Icon(Icons.camera_alt, size: 50, color: Colors.grey)
-                            : null,
+                  // Profile image section with upload indicator
+                  Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _isUploading ? null : _pickImage,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _profileImage != null ? Colors.blue : Colors.grey,
+                              width: 2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 50,
+                            backgroundColor: Colors.black,
+                            backgroundImage: _getDisplayImage(),
+                            child: _getDisplayImage() == null
+                                ? const Icon(Icons.camera_alt, size: 50, color: Colors.grey)
+                                : null,
+                          ),
+                        ),
                       ),
-                    ),
-                    loading: () => const CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.grey,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      ),
-                    ),
-                    error: (error, stack) => GestureDetector(
-                      onTap: _pickImage, // _pickImage,
-                      child: const CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.black,
-                        backgroundImage: AssetImage('assets/plaro_logo.png'),
-                        child: Icon(Icons.camera_alt, size: 50, color: Colors.grey),
-                      ),
-                    ),
+                      // Upload indicator overlay
+                      if (_isUploading)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.black.withOpacity(0.7),
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Camera icon overlay for better UX
+                      if (!_isUploading)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+
+                  const SizedBox(height: 10),
+
+                  // Image status text
+                  if (_profileImage != null)
+                    const Text(
+                      'New image selected',
+                      style: TextStyle(color: Colors.blue, fontSize: 12),
+                    )
+                  else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
+                    const Text(
+                      'Current profile image',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      'Tap to select profile image',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
 
                   const SizedBox(height: 20),
 
@@ -283,7 +405,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                         return null;
                       },
                     ),
-                    loading: () =>  TextFormField(
+                    loading: () => TextFormField(
                       decoration: InputDecoration(
                         labelText: 'Loading...',
                         border: OutlineInputBorder(
@@ -346,7 +468,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                       ),
                       style: const TextStyle(color: Colors.blue),
                     ),
-                    loading: () => TextFormField(
+                    loading: () =>  TextFormField(
                       decoration: InputDecoration(
                         labelText: 'Loading...',
                         border: OutlineInputBorder(
@@ -466,7 +588,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                       ),
                       style: const TextStyle(color: Colors.blue),
                     ),
-                    loading: () =>  TextFormField(
+                    loading: () => TextFormField(
                       decoration: InputDecoration(
                         labelText: 'Loading...',
                         border: OutlineInputBorder(
@@ -530,7 +652,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                         return null;
                       },
                     ),
-                    loading: () =>  TextFormField(
+                    loading: () => TextFormField(
                       decoration: InputDecoration(
                         labelText: 'Loading...',
                         border: OutlineInputBorder(
@@ -588,8 +710,17 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                       ),
-                      onPressed: _saveProfile,
-                      child: const Text(
+                      onPressed: _isUploading ? null : _saveProfile,
+                      child: _isUploading
+                          ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      )
+                          : const Text(
                         'Save Profile',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
@@ -608,14 +739,14 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.red),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
-                              const Icon(Icons.error, color: Colors.red),
-                              const SizedBox(width: 8),
+                              Icon(Icons.error, color: Colors.red),
+                              SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   'Error loading profile data',
-                                  style: const TextStyle(color: Colors.red),
+                                  style: TextStyle(color: Colors.red),
                                 ),
                               ),
                             ],
@@ -632,8 +763,17 @@ class _SetProfileState extends ConsumerState<SetProfile> {
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                           ),
-                          onPressed: _saveProfile,
-                          child: const Text(
+                          onPressed: _isUploading ? null : _saveProfile,
+                          child: _isUploading
+                              ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : const Text(
                             'Save Profile',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),

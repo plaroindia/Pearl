@@ -18,7 +18,7 @@
                     android:host=   "login-callback" />
             </intent-filter>
         </activity>
-        s
+
 
         <activity
             android:name=".MainActivity"
