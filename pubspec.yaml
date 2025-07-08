@@ -39,6 +39,7 @@ dependencies:
   riverpod_annotation: ^2.6.1
   hooks_riverpod: ^2.6.1
   flutter_hooks: ^0.21.2
+  image_picker: ^1.1.2
 
 
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'feed_dat.dart';
 import 'home_page.dart';
 // import 'shorts.dart';
@@ -9,11 +10,11 @@ void main() => runApp(MaterialApp(
   home: navCard(),
 ));
 
-class navCard extends StatefulWidget {
+class navCard extends ConsumerStatefulWidget {
   @override
-  State<navCard> createState() => _navCardState();
+  ConsumerState<navCard> createState() => _navCardState();
 }
-class _navCardState extends State<navCard> {
+class _navCardState extends ConsumerState<navCard> {
   //String wanted= '';
   //TextEditingController _otp = TextEditingController();
   //var _formkey= GlobalKey<FormState>();

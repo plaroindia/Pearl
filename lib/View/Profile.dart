@@ -4,10 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'set_profile.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
-// import 'feed_dat.dart';
-// import 'post.dart';
-// import 'create_screen.dart';
-// import 'package:audioplayers/audioplayers.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   @override
@@ -15,22 +11,36 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreen extends ConsumerState<ProfileScreen> {
+  bool _isInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
   }
 
-  // Load user profile on screen initialization
+  // Load user profile
   Future<void> _loadUserProfile() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile: $e');
+      setState(() {
+        _isInitialized = true;
+      });
     }
   }
 
   // Refresh profile data
   Future<void> _refreshProfile() async {
+    setState(() {
+      _isInitialized = false;
+    });
     await _loadUserProfile();
   }
 
@@ -38,6 +48,13 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
+
+    // Initialize profile loading if not done yet
+    if (!_isInitialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadUserProfile();
+      });
+    }
 
     return Center(
       child: RefreshIndicator(
@@ -86,6 +103,14 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                             loading: () => const CircleAvatar(
                               radius: 15.0,
                               backgroundColor: Colors.grey,
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                ),
+                              ),
                             ),
                             error: (error, stack) => const CircleAvatar(
                               backgroundImage: AssetImage('assets/plaro_logo.png'),
@@ -100,7 +125,7 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                             data: (session) {
                               return profileState.when(
                                 data: (profile) => Text(
-                                  profile?.username ?? session?.user?.email ?? 'No user',
+                                  profile?.username ?? session?.user.email ?? 'No user',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -113,7 +138,7 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                                   style: TextStyle(color: Colors.grey),
                                 ),
                                 error: (error, stack) => Text(
-                                  session?.user?.email ?? 'Error loading user',
+                                  session?.user.email ?? 'Error loading user',
                                   style: const TextStyle(color: Colors.red),
                                 ),
                               );
@@ -132,6 +157,17 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                     ),
                   ),
 
+                  // Show loading indicator if not initialized
+                  if (!_isInitialized && profileState.isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                        ),
+                      ),
+                    ),
+
                   // Profile information section
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -149,7 +185,9 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                           loading: () => const CircleAvatar(
                             radius: 45.0,
                             backgroundColor: Colors.grey,
-                            child: CircularProgressIndicator(),
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                            ),
                           ),
                           error: (error, stack) => const CircleAvatar(
                             backgroundImage: AssetImage('assets/plaro_logo.png'),

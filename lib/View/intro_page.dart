@@ -30,7 +30,10 @@ class _IntroPageState extends ConsumerState<IntroPage> {
     try {
       await Supabase.initialize(
         url: url,
-        anonKey: anonKey,
+        anonKey: anonKey, authOptions: const FlutterAuthClientOptions(
+        autoRefreshToken: true,
+        //persistSession: true,
+      ),
       );
 
       // Check if user is already logged in
