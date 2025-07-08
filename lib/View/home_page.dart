@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:ui';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -12,6 +14,24 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoading = false;
+  bool _isInitialized = false;
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile: $e');
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+  }
 
   Future<void> _handleSignOut() async {
     setState(() {
@@ -53,7 +73,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     // Listen to auth state changes
+    // final authState = ref.watch(authStateProvider);
     final authState = ref.watch(authStateProvider);
+    final profileState = ref.watch(setProfileProvider);
+
+    // Initialize profile loading if not done yet
+    if (!_isInitialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadUserProfile();
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -104,24 +133,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(height: 30.0,),
-                    const CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.grey,
-                      child: Icon(
-                        Icons.person,
-                        size: 35,
-                        color: Colors.white,
+                    Center(
+                      child: profileState.when(
+                        data: (profile) => CircleAvatar(
+                          backgroundImage: profile?.profilePic != null
+                              ? NetworkImage(profile!.profilePic!)
+                              : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                          radius: 30.0,
+                        ),
+                        loading: () => const CircleAvatar(
+                          radius: 30.0,
+                          backgroundColor: Colors.grey,
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                            ),
+                          ),
+                        ),
+                        error: (error, stack) => const CircleAvatar(
+                          backgroundImage: AssetImage('assets/plaro_logo.png'),
+                          radius: 30.0,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     authState.when(
                       data: (session) {
-                        return Text(
-                          session?.user?.email ?? 'No user',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
+                        return profileState.when(
+                          data: (profile) => Text(
+                            profile?.username ?? session?.user.email ?? 'No user',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          loading: () => const Text(
+                            'Loading...',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          error: (error, stack) => Text(
+                            session?.user.email ?? 'Error loading user',
+                            style: const TextStyle(color: Colors.red),
                           ),
                         );
                       },

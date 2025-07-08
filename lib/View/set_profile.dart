@@ -115,13 +115,13 @@ class _SetProfileState extends ConsumerState<SetProfile> {
       // Create unique filename
       final fileExtension = _profileImage!.path.split('.').last.toLowerCase();
       final fileName = 'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
-      final filePath = 'profiles/$fileName';
+      final filePath = '${user.id}/$fileName';
 
       // Delete old profile image if exists
       if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
         try {
           final oldFileName = _profileImageUrl!.split('/').last;
-          final oldFilePath = 'profiles/$oldFileName';
+          final oldFilePath = '${user.id}/$oldFileName';
           await Supabase.instance.client.storage
               .from('avatars')
               .remove([oldFilePath]);
