@@ -71,90 +71,74 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header container with user email
-                  Container(
-                    width: 400,
-                    height: 53,
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.shade900.withOpacity(0.7),
-                          blurRadius: 5.0,
-                          spreadRadius: 2.0,
-                          offset: const Offset(0.0, 1.0),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        // Profile picture in header
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: profileState.when(
-                            data: (profile) => CircleAvatar(
-                              backgroundImage: profile?.profilePic != null
-                                  ? NetworkImage(profile!.profilePic!)
-                                  : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                              radius: 15.0,
-                            ),
-                            loading: () => const CircleAvatar(
-                              radius: 15.0,
-                              backgroundColor: Colors.grey,
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                                ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      // Profile picture in header
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: profileState.when(
+                          data: (profile) => CircleAvatar(
+                            backgroundImage: profile?.profilePic != null
+                                ? NetworkImage(profile!.profilePic!)
+                                : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                            radius: 15.0,
+                          ),
+                          loading: () => const CircleAvatar(
+                            radius: 15.0,
+                            backgroundColor: Colors.grey,
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                               ),
                             ),
-                            error: (error, stack) => const CircleAvatar(
-                              backgroundImage: AssetImage('assets/plaro_logo.png'),
-                              radius: 15.0,
-                            ),
+                          ),
+                          error: (error, stack) => const CircleAvatar(
+                            backgroundImage: AssetImage('assets/plaro_logo.png'),
+                            radius: 15.0,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        // User email or username
-                        Expanded(
-                          child: authState.when(
-                            data: (session) {
-                              return profileState.when(
-                                data: (profile) => Text(
-                                  profile?.username ?? session?.user.email ?? 'No user',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 10),
+                      // User email or username
+                      Expanded(
+                        child: authState.when(
+                          data: (session) {
+                            return profileState.when(
+                              data: (profile) => Text(
+                                profile?.username ?? session?.user.email ?? 'No user',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                loading: () => const Text(
-                                  'Loading...',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                error: (error, stack) => Text(
-                                  session?.user.email ?? 'Error loading user',
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              );
-                            },
-                            loading: () => const Text(
-                              'Loading...',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            error: (error, stack) => const Text(
-                              'Error loading user',
-                              style: TextStyle(color: Colors.red),
-                            ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              loading: () => const Text(
+                                'Loading...',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              error: (error, stack) => Text(
+                                session?.user.email ?? 'Error loading user',
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                            );
+                          },
+                          loading: () => const Text(
+                            'Loading...',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          error: (error, stack) => const Text(
+                            'Error loading user',
+                            style: TextStyle(color: Colors.red),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
 
                   // Show loading indicator if not initialized
@@ -387,24 +371,24 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                             },
                             child: const Text("Profile"),
                           ),
-                          const SizedBox(width: 30.0),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black54,
-                              side: const BorderSide(width: 3.0, color: Colors.purple),
-                              foregroundColor: Colors.purple,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(100.0),
-                              ),
-                            ),
-                            onPressed: () {
-                              // Navigator.push(
-                              //   context,
-                              //   MaterialPageRoute(builder: (context) => const AddFeed()),
-                              // );
-                            },
-                            child: const Text("Create"),
-                          ),
+                          // const SizedBox(width: 30.0),
+                          // ElevatedButton(
+                          //   style: ElevatedButton.styleFrom(
+                          //     backgroundColor: Colors.black54,
+                          //     side: const BorderSide(width: 3.0, color: Colors.purple),
+                          //     foregroundColor: Colors.purple,
+                          //     shape: RoundedRectangleBorder(
+                          //       borderRadius: BorderRadius.circular(100.0),
+                          //     ),
+                          //   ),
+                          //   onPressed: () {
+                          //     // Navigator.push(
+                          //     //   context,
+                          //     //   MaterialPageRoute(builder: (context) => const AddFeed()),
+                          //     // );
+                          //   },
+                          //   child: const Text("Create"),
+                          // ),
                           const SizedBox(width: 30.0),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(

@@ -5,7 +5,7 @@ import 'home_page.dart';
 // import 'shorts.dart';
 // import 'chatlist.dart';
 import 'Profile.dart';
-
+import 'create_page.dart';
 void main() => runApp(MaterialApp(
   home: navCard(),
 ));
@@ -23,9 +23,9 @@ class _navCardState extends ConsumerState<navCard> {
   int _selectedIndex = 0;
   final List<Widget> _pages = [
     HomeScreen(),
+    CreateScreen(),
     NotificationsScreen(),
     ProfileScreen(),
-    // Shorts(),
     // MessagesScreen(),
   ];
 
@@ -68,6 +68,10 @@ class _navCardState extends ConsumerState<navCard> {
             backgroundColor: Colors.transparent,
           ),
           BottomNavigationBarItem(
+              icon: Icon(Icons.add),
+              label: 'Create'
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.notifications),
             label: 'Notifications',
           ),
@@ -75,10 +79,6 @@ class _navCardState extends ConsumerState<navCard> {
               icon: Icon(Icons.person),
               label: 'Profile'
           ),
-          // BottomNavigationBarItem(
-          //     icon: Icon(Icons.slow_motion_video_rounded),
-          //     label: 'Bytes'
-          // ),
           // BottomNavigationBarItem(
           //   icon: Icon(Icons.messenger_outline),
           //   label: "chats",
@@ -133,7 +133,7 @@ class _NotificationsScreen extends State<NotificationsScreen>  {
           Row(
             children: [
               CircleAvatar(
-                backgroundImage: AssetImage('assets/pingirl.png'),
+                backgroundImage: AssetImage('assets/plaro_logo.png'),
                 radius: 15.0,
               ),
               SizedBox(width: 13.0),
