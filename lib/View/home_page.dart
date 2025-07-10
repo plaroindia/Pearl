@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
+import '../ViewModel//toast_feed_provider.dart';
+import 'widgets/toast_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -15,6 +16,26 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoading = false;
   bool _isInitialized = false;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+      ref.read(toastFeedProvider.notifier).loadMorePosts();
+    }
+  }
 
   Future<void> _loadUserProfile() async {
     try {
@@ -70,12 +91,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _refreshFeed() async {
+    await ref.read(toastFeedProvider.notifier).refreshPosts();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Listen to auth state changes
-    // final authState = ref.watch(authStateProvider);
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
+    final toastFeedState = ref.watch(toastFeedProvider);
 
     // Initialize profile loading if not done yet
     if (!_isInitialized) {
@@ -102,13 +127,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 letterSpacing: 0.0,
               ),
             ),
-            IconButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Search functionality coming soon')),
-                );
-              },
-              icon: const Icon(Icons.search),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Search functionality coming soon')),
+                    );
+                  },
+                  icon: const Icon(Icons.search),
+                ),
+                IconButton(
+                  onPressed: () {
+                    // Navigate to create post screen
+                    Navigator.pushNamed(context, '/create_post');
+                  },
+                  icon: const Icon(Icons.add_box_outlined),
+                ),
+              ],
             ),
           ],
         ),
@@ -132,7 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(height: 30.0,),
+                    const SizedBox(height: 30.0),
                     Center(
                       child: profileState.when(
                         data: (profile) => CircleAvatar(
@@ -245,7 +281,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: authState.when(
         data: (session) {
           if (session == null) {
-            // User is not authenticated, this shouldn't happen if routing is correct
             return const Center(
               child: Text(
                 'Please log in to continue',
@@ -254,46 +289,155 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             );
           }
 
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // const Text(
-                //   'Welcome to PLARO',
-                //   style: TextStyle(
-                //     color: Colors.white,
-                //     fontSize: 24,
-                //     fontWeight: FontWeight.bold,
-                //   ),
-                // ),
-                // const SizedBox(height: 16),
-                // Text(
-                //   'Hello, ${session.user?.email}',
-                //   style: const TextStyle(
-                //     color: Colors.white54,
-                //     fontSize: 18,
-                //   ),
-                // ),
-                // const SizedBox(height: 32),
-                // Container(
-                //   padding: const EdgeInsets.all(16),
-                //   margin: const EdgeInsets.symmetric(horizontal: 32),
-                //   decoration: BoxDecoration(
-                //     color: Colors.grey[900],
-                //     borderRadius: BorderRadius.circular(12),
-                //   ),
-                //   child: const Text(
-                //     'Your main app content goes here',
-                //     style: TextStyle(
-                //       color: Colors.white70,
-                //       fontSize: 16,
-                //     ),
-                //     textAlign: TextAlign.center,
-                //   ),
-                // ),
+          // Load posts when authenticated
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
+              ref.read(toastFeedProvider.notifier).loadPosts();
+            }
+          });
 
+          return RefreshIndicator(
+            onRefresh: _refreshFeed,
+            backgroundColor: Colors.grey[900],
+            color: Colors.white,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                // Error handling
+                if (toastFeedState.error != null)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              toastFeedState.error!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              ref.read(toastFeedProvider.notifier).clearError();
+                              ref.read(toastFeedProvider.notifier).loadPosts();
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
+                // Posts list
+                if (toastFeedState.posts.isNotEmpty)
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                        final post = toastFeedState.posts[index];
+                        return ToastCard(
+                          toast: post,
+                          onTap: () {
+                            // Navigate to post details
+                            Navigator.pushNamed(
+                              context,
+                              '/post_details',
+                              arguments: post,
+                            );
+                          },
+                        );
+                      },
+                      childCount: toastFeedState.posts.length,
+                    ),
+                  ),
 
+                // Loading indicator for initial load
+                if (toastFeedState.posts.isEmpty && toastFeedState.isLoading)
+                  const SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                      ),
+                    ),
+                  ),
+
+                // Empty state
+                if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading && toastFeedState.error == null)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.article_outlined,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No posts yet',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Be the first to share something!',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.pushNamed(context, '/create_post');
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: const Text('Create Post'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Loading indicator for pagination
+                if (toastFeedState.isLoading && toastFeedState.posts.isNotEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Bottom padding
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 16),
+                ),
               ],
             ),
           );

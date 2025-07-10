@@ -1,42 +1,89 @@
-class Toast{
-  String? user;
-  String profilePic;
-  String? ufeed;
-  String? caption;
-  int likes;
-  bool uliked;
-  int comments;
-  int shares;
+class Toast_feed {
+  String? toast_id;
+  String? user_id;
+  String? profile_pic;
+  String? username;
+  String? content;
+  String? title;
+  List<String>? tags;
+  String? created_at;
+  int like_count;
+  bool isliked;
+  int comment_count;
+  int share_count;
   List<Comment> commentsList;
 
-  Toast({
-    required this.user,
-    required this.profilePic,
-    required this.ufeed,
-    required this.caption,
-    this.likes = 0,
-    this.uliked = false,
-    this.comments = 0,
-    this.shares = 0,
+  Toast_feed({
+    required this.toast_id,
+    required this.user_id,
+    required this.username,
+    this.profile_pic,
+    this.content,
+    this.title,
+    this.tags,
+    this.created_at,
+    this.like_count = 0,
+    this.isliked = false,
+    this.comment_count = 0,
+    this.share_count = 0,
     required this.commentsList,
   });
 
+  factory Toast_feed.fromMap(Map<String, dynamic> data) {
+    return Toast_feed(
+      toast_id: data['toast_id'],
+      user_id: data['user_id'],
+      username: data['username'],
+      profile_pic: data['profile_pic'],
+      content: data['content'],
+      title: data['title'],
+      tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+      created_at: data['created_at'],
+      like_count: data['like_count'] ?? 0,
+      comment_count: data['comment_count'] ?? 0,
+      share_count: data['share_count'] ?? 0,
+      isliked: data['isliked'] ?? false,
+      commentsList: data['toast_comments'] != null
+          ? (data['toast_comments'] as List)
+          .map((comment) => Comment.fromMap(comment))
+          .toList()
+          : [],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'toast_id': toast_id,
+      'user_id': user_id,
+      'username': username,
+      'profile_pic': profile_pic,
+      'content': content,
+      'title': title,
+      'tags': tags,
+      'created_at': created_at,
+      'like_count': like_count,
+      'comment_count': comment_count,
+      'share_count': share_count,
+      'isliked': isliked,
+    };
+  }
+
   void incrementLikes() {
-    if (uliked) {
-      likes--;
-      uliked = false;
+    if (isliked) {
+      like_count--;
+      isliked = false;
     } else {
-      likes++;
-      uliked = true;
+      like_count++;
+      isliked = true;
     }
   }
 
   void incrementComments() {
-    comments++;
+    comment_count++;
   }
 
   void incrementShares() {
-    shares++;
+    share_count++;
   }
 }
 
@@ -67,15 +114,13 @@ class Comment {
     }
   }
 
-
   Comment.fromMap(Map<String, dynamic> map)
       : username = map['username'] ?? '',
-        profileImage = map['profileImage'] ?? 'assets/default_profile.png',
+        profileImage = map['profileImage'] ?? 'assets/plaro_logo.png',
         content = map['content'] ?? '',
         timeAgo = map['timeAgo'] ?? '',
         likes = map['likes'] ?? 0,
         uliked = map['uliked'] ?? false;
-
 
   Map<String, dynamic> toMap() {
     return {

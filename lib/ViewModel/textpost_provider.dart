@@ -121,7 +121,7 @@ class TextPostNotifier extends StateNotifier<TextPostState> {
         'tags': state.tags,
         'created_at': DateTime.now().toIso8601String(),
         'is_published': false,
-        'likes': 0,
+        'like_count': 0,
         'comment_count': 0,
       };
 
@@ -169,7 +169,7 @@ class TextPostNotifier extends StateNotifier<TextPostState> {
         'tags': state.tags,
         'created_at': DateTime.now().toIso8601String(),
         'is_published': true,
-        'likes': 0,
+        'like_count': 0,
         'comment_count': 0,
       };
 

@@ -78,6 +78,9 @@ class AuthController {
       return false;
     }
   }
+
+
+
   Future<void> logout() async {
     await ref.read(supAuthProv).signOut();
   }
