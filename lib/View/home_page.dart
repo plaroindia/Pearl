@@ -258,39 +258,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Welcome to PLARO',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Hello, ${session.user?.email}',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.symmetric(horizontal: 32),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Your main app content goes here',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+                // const Text(
+                //   'Welcome to PLARO',
+                //   style: TextStyle(
+                //     color: Colors.white,
+                //     fontSize: 24,
+                //     fontWeight: FontWeight.bold,
+                //   ),
+                // ),
+                // const SizedBox(height: 16),
+                // Text(
+                //   'Hello, ${session.user?.email}',
+                //   style: const TextStyle(
+                //     color: Colors.white54,
+                //     fontSize: 18,
+                //   ),
+                // ),
+                // const SizedBox(height: 32),
+                // Container(
+                //   padding: const EdgeInsets.all(16),
+                //   margin: const EdgeInsets.symmetric(horizontal: 32),
+                //   decoration: BoxDecoration(
+                //     color: Colors.grey[900],
+                //     borderRadius: BorderRadius.circular(12),
+                //   ),
+                //   child: const Text(
+                //     'Your main app content goes here',
+                //     style: TextStyle(
+                //       color: Colors.white70,
+                //       fontSize: 16,
+                //     ),
+                //     textAlign: TextAlign.center,
+                //   ),
+                // ),
+
+
+
               ],
             ),
           );
