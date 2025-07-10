@@ -1,5 +1,5 @@
 class UserProfile {
-  final String userid;
+  final String user_id;
   final String username;
   final String? email;
   final String? role;
@@ -14,7 +14,7 @@ class UserProfile {
   final bool? isVerified;
 
   UserProfile({
-    required this.userid,
+    required this.user_id,
     required this.username,
     this.email,
     this.role,

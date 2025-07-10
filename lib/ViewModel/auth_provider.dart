@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'river_prov.dart';
+//import 'river_prov.dart';
 
 final supAuthProv = Provider((ref) => Supabase.instance.client.auth);
 

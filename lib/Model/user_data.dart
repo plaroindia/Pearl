@@ -1,5 +1,5 @@
 class User{
-  String? userid;
+  String? user_id;
   String username;
   String? email;
   String? password;
@@ -7,7 +7,7 @@ class User{
   String? purpose;
 
   User({
-    required this.userid,
+    required this.user_id,
     required this.username,
     required this.email,
     required this.password,

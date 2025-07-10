@@ -14,7 +14,7 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
 
   // Create or update user profile
   Future<void> saveProfile({
-    required String userid,
+    required String user_id,
     required String username,
     String? email,
     String? role,
@@ -35,7 +35,7 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
 
       // Create UserProfile object
       final userProfile = UserProfile(
-        userid: userid,
+        user_id: user_id,
         username: username,
         email: email,
         role: role,
@@ -54,13 +54,13 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
       final existingProfile = await _supabase
           .from('user_profiles')
           .select()
-          .eq('userid', userid)
+          .eq('user_id', user_id)
           .maybeSingle();
 
       if (existingProfile == null) {
         // Create new profile
         await _supabase.from('user_profiles').insert({
-          'userid': userProfile.userid,
+          'user_id': userProfile.user_id,
           'username': userProfile.username,
           'email': userProfile.email,
           'role': userProfile.role,
@@ -88,7 +88,7 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
           'followers_count': userProfile.followersCount,
           'following_count': userProfile.followingCount,
           'is_verified': userProfile.isVerified,
-        }).eq('userid', userid);
+        }).eq('user_id', user_id);
       }
 
       state = AsyncValue.data(userProfile);
@@ -99,19 +99,19 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
   }
 
   // Get user profile
-  Future<void> getUserProfile(String userid) async {
+  Future<void> getUserProfile(String user_id) async {
     state = const AsyncValue.loading();
 
     try {
       final response = await _supabase
           .from('user_profiles')
           .select()
-          .eq('userid', userid)
+          .eq('user_id', user_id)
           .maybeSingle();
 
       if (response != null) {
         final userProfile = UserProfile(
-          userid: response['userid'],
+          user_id: response['user_id'],
           username: response['username'],
           email: response['email'],
           role: response['role'],
@@ -140,13 +140,13 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
   Future<void> _ensureTableExists() async {
     try {
       // Try to query the table to check if it exists
-      await _supabase.from('user_profiles').select('userid').limit(1);
+      await _supabase.from('user_profiles').select('user_id').limit(1);
     } catch (error) {
       // If table doesn't exist, create it
       // Note: In production, you should create tables through Supabase dashboard
       // or migration scripts. This is just for development purposes.
       throw Exception('user_profiles table does not exist. Please create it in Supabase dashboard with the following columns:\n'
-          '- userid (text, primary key)\n'
+          '- user_id (text, primary key)\n'
           '- username (text, not null)\n'
           '- email (text)\n'
           '- role (text)\n'

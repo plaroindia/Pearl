@@ -44,7 +44,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
         profileState.whenData((profile) {
           if (profile != null) {
             _usernameController.text = profile.username;
-            _userIdController.text = profile.userid;
+            _userIdController.text = profile.user_id;
             _schoolController.text = profile.study ?? '';
             _bioController.text = profile.bio ?? '';
             _locationController.text = profile.location ?? '';
@@ -185,7 +185,7 @@ class _SetProfileState extends ConsumerState<SetProfile> {
 
       // Save profile
       await ref.read(setProfileProvider.notifier).saveProfile(
-        userid: user.id,
+        user_id: user.id,
         username: _usernameController.text.trim(),
         email: user.email,
         role: _roleController.text.trim().isNotEmpty ? _roleController.text.trim() : null,
