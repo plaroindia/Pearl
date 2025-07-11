@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:plaro_3/Model/toast.dart';
 
-
 // State for toast feed
 class ToastFeedState {
   final List<Toast_feed> posts;
@@ -10,6 +9,7 @@ class ToastFeedState {
   final bool hasMore;
   final String? error;
   final int currentPage;
+  final Set<String> likingPosts; // Track posts being liked/unliked
 
   const ToastFeedState({
     this.posts = const [],
@@ -17,6 +17,7 @@ class ToastFeedState {
     this.hasMore = true,
     this.error,
     this.currentPage = 0,
+    this.likingPosts = const {},
   });
 
   ToastFeedState copyWith({
@@ -25,6 +26,7 @@ class ToastFeedState {
     bool? hasMore,
     String? error,
     int? currentPage,
+    Set<String>? likingPosts,
   }) {
     return ToastFeedState(
       posts: posts ?? this.posts,
@@ -32,6 +34,7 @@ class ToastFeedState {
       hasMore: hasMore ?? this.hasMore,
       error: error ?? this.error,
       currentPage: currentPage ?? this.currentPage,
+      likingPosts: likingPosts ?? this.likingPosts,
     );
   }
 }
@@ -54,6 +57,15 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'User not authenticated',
+        );
+        return;
+      }
+
       final response = await _supabase
           .from('toasts')
           .select('''
@@ -73,8 +85,18 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
 
+      // Get liked posts for current user
+      final likedToastsResponse = await _supabase
+          .from('toast_likes')
+          .select('toast_id')
+          .eq('user_id', user.id);
+
+      final likedToastIds = (likedToastsResponse as List)
+          .map((e) => e['toast_id'] as String)
+          .toSet();
+
       final posts = (response as List)
-          .map((json) => _mapToToastFeed(json))
+          .map((json) => _mapToToastFeed(json, user.id, likedToastIds))
           .toList();
 
       state = state.copyWith(
@@ -95,6 +117,9 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   Future<void> loadMorePosts() async {
     if (state.isLoading || !state.hasMore) return;
 
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
     state = state.copyWith(isLoading: true);
 
     try {
@@ -104,24 +129,33 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       final response = await _supabase
           .from('toasts')
           .select('''
-            toast_id,
-            user_id,
-            title,
-            content,
-            tags,
-            created_at,
-            is_published,
-            like_count,
-            comment_count,
-            share_count,
-            user_profiles!inner(username, profile_pic)
-          ''')
+          toast_id,
+          user_id,
+          title,
+          content,
+          tags,
+          created_at,
+          is_published,
+          like_count,
+          comment_count,
+          share_count,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
 
+      final likedToastsResponse = await _supabase
+          .from('toast_likes')
+          .select('toast_id')
+          .eq('user_id', user.id);
+
+      final likedToastIds = (likedToastsResponse as List)
+          .map((e) => e['toast_id'] as String)
+          .toSet();
+
       final newPosts = (response as List)
-          .map((json) => _mapToToastFeed(json))
+          .map((json) => _mapToToastFeed(json, user.id, likedToastIds))
           .toList();
 
       state = state.copyWith(
@@ -144,68 +178,218 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     await loadPosts();
   }
 
-  // Toggle like for a post
+
+
+  // Updated toggleLike method with Instagram-like optimistic updates
   Future<void> toggleLike(String toastId) async {
+    print('🔵 toggleLike called for toast: $toastId');
+
+    // Check if posts are loaded
+    if (state.posts.isEmpty) {
+      print('🟡 No posts loaded yet, loading posts first...');
+      await loadPosts();
+
+      // Check again after loading
+      if (state.posts.isEmpty) {
+        print('🔴 Still no posts after loading, cannot toggle like');
+        return;
+      }
+    }
+
+    // Prevent multiple simultaneous like operations on the same post
+    if (state.likingPosts.contains(toastId)) {
+      print('🟡 Already liking this post, returning');
+      return;
+    }
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      print('🔴 User not authenticated');
+      return;
+    }
+
+    print('🔵 User ID: ${user.id}');
+    print('🔍 Current posts in state: ${state.posts.length}');
+
+    // Find the post in current state
+    final postIndex = state.posts.indexWhere((post) => post.toast_id == toastId);
+    if (postIndex == -1) {
+      print('🔴 Post not found in current state');
+      print('🔍 Available post IDs: ${state.posts.map((p) => p.toast_id).toList()}');
+
+      // Try to refresh the specific post
+      await refreshPost(toastId);
+
+      // Try one more time
+      final newPostIndex = state.posts.indexWhere((post) => post.toast_id == toastId);
+      if (newPostIndex == -1) {
+        print('🔴 Post still not found after refresh');
+        return;
+      }
+    }
+
+    final currentPost = state.posts[postIndex];
+    final currentlyLiked = currentPost.isliked;
+    final currentLikeCount = currentPost.like_count;
+
+    print('🔵 Current like status: $currentlyLiked, count: $currentLikeCount');
+
+    // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
+    final newPosts = [...state.posts];
+    newPosts[postIndex] = currentPost.copyWith(
+      like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
+      isliked: !currentlyLiked,
+    );
+
+    state = state.copyWith(
+      posts: newPosts,
+      likingPosts: {...state.likingPosts, toastId},
+    );
+
+    print('🔵 Optimistic update applied - UI updated immediately');
+
     try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
-      // Find the post in current state
-      final postIndex = state.posts.indexWhere((post) => post.toast_id == toastId);
-      if (postIndex == -1) return;
-
-      final post = state.posts[postIndex];
-      final newPosts = [...state.posts];
-
-      // Optimistically update UI
-      newPosts[postIndex].incrementLikes();
-      state = state.copyWith(posts: newPosts);
-
-      // Check if user already liked this post
-      final existingLike = await _supabase
-          .from('toast_likes')
-          .select('toast_like_id')
-          .eq('toast_id', toastId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-      if (existingLike != null) {
+      if (currentlyLiked) {
         // Unlike the post
-        await _supabase
+        print('🔵 Attempting to unlike post...');
+
+        final deleteResponse = await _supabase
             .from('toast_likes')
             .delete()
             .eq('toast_id', toastId)
             .eq('user_id', user.id);
 
+        print('🔵 Delete response: $deleteResponse');
+
         // Update likes count in toasts table
-        await _supabase
+        final updateResponse = await _supabase
             .from('toasts')
-            .update({'like_count': post.like_count - 1})
+            .update({'like_count': currentLikeCount - 1})
             .eq('toast_id', toastId);
+
+        print('🔵 Update response: $updateResponse');
+        //await refreshSinglePost(toastId);
+
       } else {
         // Like the post
-        await _supabase
-            .from('toast_likes')
-            .insert({
+        print('🔵 Attempting to like post...');
+
+        final insertResponse = await _supabase.from('toast_likes').insert({
           'toast_id': toastId,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
+        print('🔵 Insert response: $insertResponse');
+
         // Update likes count in toasts table
-        await _supabase
+        final updateResponse = await _supabase
             .from('toasts')
-            .update({'like_count': post.like_count + 1})
+            .update({'like_count': currentLikeCount + 1})
             .eq('toast_id', toastId);
+
+        print('🔵 Update response: $updateResponse');
+
+      }
+     // await refreshSinglePost(toastId);
+
+      print('🟢 Like operation completed successfully');
+
+      // Remove from likingPosts - keep the optimistic update since it succeeded
+      state = state.copyWith(
+        likingPosts: {...state.likingPosts}..remove(toastId),
+      );
+
+      print('🟢 Loading indicator removed, optimistic update kept');
+
+    } catch (error) {
+      print('🔴 Error in toggleLike: $error');
+
+      // REVERT OPTIMISTIC UPDATE: Restore original state on error
+      final revertedPosts = [...state.posts];
+      final currentPostIndex = revertedPosts.indexWhere((post) => post.toast_id == toastId);
+      if (currentPostIndex != -1) {
+        revertedPosts[currentPostIndex] = currentPost; // Restore original state
+      }
+
+      state = state.copyWith(
+        posts: revertedPosts,
+        likingPosts: {...state.likingPosts}..remove(toastId),
+        error: 'Failed to update like: ${error.toString()}',
+      );
+
+      print('🔴 Optimistic update reverted due to error');
+    }
+  }
+
+  // Updated refreshPost method to handle the specific post update
+  Future<void> refreshPost(String toastId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      print('🔵 Refreshing post: $toastId');
+
+      // Get the updated post from database
+      final response = await _supabase
+          .from('toasts')
+          .select('''
+          toast_id,
+          user_id,
+          title,
+          content,
+          tags,
+          created_at,
+          is_published,
+          like_count,
+          comment_count,
+          share_count,
+          user_profiles!inner(username, profile_pic)
+        ''')
+          .eq('toast_id', toastId)
+          .eq('is_published', true)
+          .single();
+
+      // Get liked status
+      final likedResponse = await _supabase
+          .from('toast_likes')
+          .select('toast_id')
+          .eq('toast_id', toastId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      final isLiked = likedResponse != null;
+      final updatedPost = _mapToToastFeed(
+        response,
+        user.id,
+        isLiked ? {toastId} : <String>{},
+      );
+
+      // Update the post in the current state
+      final postIndex = state.posts.indexWhere((post) => post.toast_id == toastId);
+      if (postIndex != -1) {
+        final newPosts = [...state.posts];
+        newPosts[postIndex] = updatedPost;
+        state = state.copyWith(posts: newPosts);
+        print('🟢 Post updated in state with fresh data');
+      } else {
+        // Add to beginning of the list if not found
+        state = state.copyWith(
+          posts: [updatedPost, ...state.posts],
+        );
+        print('🟢 Post added to state');
       }
     } catch (error) {
-      // Revert optimistic update on error
-      await refreshPosts();
+      print('🔴 Error refreshing post: $error');
     }
   }
 
   // Helper method to map JSON to Toast_feed
-  Toast_feed _mapToToastFeed(Map<String, dynamic> json) {
+  Toast_feed _mapToToastFeed(
+      Map<String, dynamic> json,
+      String userId,
+      Set<String> likedToastIds,
+      ) {
     final userProfile = json['user_profiles'] as Map<String, dynamic>?;
 
     return Toast_feed(
@@ -220,10 +404,13 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       like_count: json['like_count'] ?? 0,
       comment_count: json['comment_count'] ?? 0,
       share_count: json['share_count'] ?? 0,
-      isliked: false, // You'll need to check this based on current user
-      commentsList: [], // Load comments separately when needed
+      isliked: likedToastIds.contains(json['toast_id']),
+      commentsList: [],
     );
   }
+
+
+
 
   // Clear error
   void clearError() {

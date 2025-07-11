@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/View/post_page.dart';
 import 'home_page.dart';
 import 'Profile.dart';
-import 'textpost_page.dart';
+import 'toast_page.dart';
 
 void main() => runApp(MaterialApp(
   home: navCard(),

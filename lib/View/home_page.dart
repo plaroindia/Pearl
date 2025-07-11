@@ -47,7 +47,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
     } catch (e) {
-      print('Error loading profile: $e');
+      //print('Error loading profile: $e');
       setState(() {
         _isInitialized = true;
       });
@@ -235,7 +235,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ListTile(
                 leading: const Icon(Icons.home, color: Colors.grey),
                 title: const Text(
-                  'Home',
+                  'Compete',
                   style: TextStyle(color: Colors.grey),
                 ),
                 onTap: () {
@@ -346,12 +346,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         return ToastCard(
                           toast: post,
                           onTap: () {
-                            // Navigate to post details
-                            Navigator.pushNamed(
-                              context,
-                              '/post_details',
-                              arguments: post,
-                            );
+                            // // Navigate to post details
+                            // Navigator.pushNamed(
+                            //   context,
+                            //   '/post_details',
+                            //   arguments: post,
+                            // );
                           },
                         );
                       },

@@ -1,4 +1,4 @@
-// Updated textpost_page.dart
+// Updated toast_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ViewModel/textpost_provider.dart';

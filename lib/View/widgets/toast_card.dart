@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
-import '../../ViewModel//toast_feed_provider.dart';
+import '../../ViewModel/toast_feed_provider.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -16,6 +16,27 @@ class ToastCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final toastFeedState = ref.watch(toastFeedProvider);
+    final toast = toastFeedState.posts.firstWhere((p) => p.toast_id == this.toast.toast_id, orElse: () => this.toast);
+
+    final isLiking = toastFeedState.likingPosts.contains(toast.toast_id);
+
+    // Show error if there's one
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (toastFeedState.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(toastFeedState.error!),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Dismiss',
+              onPressed: () => ref.read(toastFeedProvider.notifier).clearError(),
+            ),
+          ),
+        );
+      }
+    });
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey[900],
@@ -133,11 +154,17 @@ class ToastCard extends ConsumerWidget {
                 children: [
                   // Like Button
                   _ActionButton(
-                    icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
+                      icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
                     label: '${toast.like_count}',
                     color: toast.isliked ? Colors.red : Colors.grey,
-                    onPressed: () {
-                      ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
+                    isLoading: isLiking,
+                    onPressed: isLiking ? null : () {
+                      print('🔵 Like button pressed for toast: ${toast.toast_id}');
+                      if (toast.toast_id != null) {
+                        ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
+                      } else {
+                        print('🔴 Toast ID is null!');
+                      }
                     },
                   ),
 
@@ -268,13 +295,15 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.color,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   @override
@@ -287,7 +316,20 @@ class _ActionButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: color),
+            if (isLoading)
+              //Icon(icon, size: 20, color: color)
+
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              )
+              //_ActionButton(icon: icon, label: label, color: color, onPressed: onPressed)
+            else
+              Icon(icon, size: 20, color: color),
             if (label.isNotEmpty) ...[
               const SizedBox(width: 4),
               Text(

@@ -68,14 +68,67 @@ class Toast_feed {
     };
   }
 
-  void incrementLikes() {
+  // Create a copy of the toast with updated fields
+  Toast_feed copyWith({
+    String? toast_id,
+    String? user_id,
+    String? profile_pic,
+    String? username,
+    String? content,
+    String? title,
+    List<String>? tags,
+    String? created_at,
+    int? like_count,
+    bool? isliked,
+    int? comment_count,
+    int? share_count,
+    List<Comment>? commentsList,
+  }) {
+    return Toast_feed(
+      toast_id: toast_id ?? this.toast_id,
+      user_id: user_id ?? this.user_id,
+      profile_pic: profile_pic ?? this.profile_pic,
+      username: username ?? this.username,
+      content: content ?? this.content,
+      title: title ?? this.title,
+      tags: tags ?? this.tags,
+      created_at: created_at ?? this.created_at,
+      like_count: like_count ?? this.like_count,
+      isliked: isliked ?? this.isliked,
+      comment_count: comment_count ?? this.comment_count,
+      share_count: share_count ?? this.share_count,
+      commentsList: commentsList ?? this.commentsList,
+    );
+  }
+
+  // Toggle like state (used for optimistic updates)
+  void toggleLike() {
     if (isliked) {
-      like_count--;
+      like_count = like_count > 0 ? like_count - 1 : 0;
       isliked = false;
     } else {
       like_count++;
       isliked = true;
     }
+  }
+
+  // Increment like count (legacy method - prefer using copyWith)
+  void incrementLikes() {
+    if (isliked) {
+      like_count = like_count > 0 ? like_count - 1 : 0;
+      isliked = false;
+    } else {
+      like_count++;
+      isliked = true;
+    }
+  }
+
+  // Decrement like count
+  void decrementLikes() {
+    if (like_count > 0) {
+      like_count--;
+    }
+    isliked = false;
   }
 
   void incrementComments() {
@@ -106,7 +159,7 @@ class Comment {
 
   void incrementLikes() {
     if (uliked) {
-      likes--;
+      likes = likes > 0 ? likes - 1 : 0;
       uliked = false;
     } else {
       likes++;
