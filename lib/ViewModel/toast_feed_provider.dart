@@ -409,10 +409,148 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     );
   }
 
+  Future<List<Comment>> loadComments(String toastId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return [];
 
+    try {
+      final response = await _supabase
+          .from('toast_comments')
+          .select('''
+            comment_id,
+            toast_id,
+            user_id,
+            content,
+            like_count,
+            created_at,
+            user_profiles!inner(username, profile_pic)
+          ''')
+          .eq('toast_id', toastId)
+          .order('created_at', ascending: false);
 
+      // Get liked comments for current user
+      final likedCommentsResponse = await _supabase
+          .from('comment_likes')
+          .select('comment_id')
+          .eq('user_id', user.id);
 
-  // Clear error
+      final likedCommentIds = (likedCommentsResponse as List)
+          .map((e) => e['comment_id'] as int)
+          .toSet();
+
+      return (response as List)
+          .map((json) => Comment.fromMap({
+        ...json,
+        'username': json['user_profiles']['username'],
+        'profile_pic': json['user_profiles']['profile_pic'],
+        'uliked': likedCommentIds.contains(json['comment_id']),
+      }))
+          .toList();
+    } catch (error) {
+      print('Error loading comments: $error');
+      return [];
+    }
+  }
+
+  // Add method to create a comment
+  Future<bool> addComment(String toastId, String content) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return false;
+
+    try {
+      // Insert comment
+      await _supabase.from('toast_comments').insert({
+        'toast_id': toastId,
+        'user_id': user.id,
+        'content': content,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      // Update comment count in toasts table
+      final currentPost = state.posts.firstWhere(
+            (post) => post.toast_id == toastId,
+        orElse: () => Toast_feed(toast_id: toastId, user_id: '', username: '', commentsList: []),
+      );
+
+      await _supabase
+          .from('toasts')
+          .update({'comment_count': currentPost.comment_count + 1})
+          .eq('toast_id', toastId);
+
+      // Update local state
+      final postIndex = state.posts.indexWhere((post) => post.toast_id == toastId);
+      if (postIndex != -1) {
+        final newPosts = [...state.posts];
+        newPosts[postIndex] = currentPost.copyWith(
+          comment_count: currentPost.comment_count + 1,
+        );
+        state = state.copyWith(posts: newPosts);
+      }
+
+      return true;
+    } catch (error) {
+      print('Error adding comment: $error');
+      return false;
+    }
+  }
+  Future<void> toggleCommentLike(int commentId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      // Check if already liked
+      final existingLike = await _supabase
+          .from('toast_comment_likes')
+          .select('comment_id')
+          .eq('comment_id', commentId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (existingLike != null) {
+        // Unlike
+        await _supabase
+            .from('toast_comment_likes')
+            .delete()
+            .eq('comment_id', commentId)
+            .eq('user_id', user.id);
+
+        // Decrement like count - get current count first
+        final currentComment = await _supabase
+            .from('toast_comments')
+            .select('like_count')
+            .eq('comment_id', commentId)
+            .single();
+
+        final newCount = (currentComment['like_count'] as int) - 1;
+        await _supabase
+            .from('toast_comments')
+            .update({'like_count': newCount >= 0 ? newCount : 0})
+            .eq('comment_id', commentId);
+      } else {
+        // Like
+        await _supabase.from('toast_comment_likes').insert({
+          'comment_id': commentId,
+          'user_id': user.id,
+          'liked_at': DateTime.now().toIso8601String(),
+        });
+
+        // Increment like count - get current count first
+        final currentComment = await _supabase
+            .from('toast_comments')
+            .select('like_count')
+            .eq('comment_id', commentId)
+            .single();
+
+        final newCount = (currentComment['like_count'] as int) + 1;
+        await _supabase
+            .from('toast_comments')
+            .update({'like_count': newCount})
+            .eq('comment_id', commentId);
+      }
+    } catch (error) {
+      print('Error toggling comment like: $error');
+    }
+  }
   void clearError() {
     state = state.copyWith(error: null);
   }

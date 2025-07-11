@@ -174,7 +174,7 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
           // Bottom Section with Options
           Container(
             decoration: BoxDecoration(
-              color: Colors.grey[900],
+              color: Colors.black87,
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(24),
                 topRight: Radius.circular(24),

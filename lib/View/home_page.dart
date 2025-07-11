@@ -168,14 +168,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 30.0),
+                    const SizedBox(height: 10.0),
                     Center(
                       child: profileState.when(
                         data: (profile) => CircleAvatar(
                           backgroundImage: profile?.profilePic != null
                               ? NetworkImage(profile!.profilePic!)
                               : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                          radius: 30.0,
+                          radius: 60.0,
                         ),
                         loading: () => const CircleAvatar(
                           radius: 30.0,

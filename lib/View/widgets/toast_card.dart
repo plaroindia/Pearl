@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
+import 'comment_card.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -13,6 +14,19 @@ class ToastCard extends ConsumerWidget {
     required this.toast,
     this.onTap,
   }) : super(key: key);
+
+
+  void _showCommentsSheet(BuildContext context, String toastId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return CommentsBottomSheet(toastId: toastId);
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +50,21 @@ class ToastCard extends ConsumerWidget {
         );
       }
     });
+
+
+
+
+
+    void _showCommentsSheet(BuildContext context, String toastId) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (BuildContext context) {
+          return CommentsBottomSheet(toastId: toastId);
+        },
+      );
+    }
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -174,7 +203,7 @@ class ToastCard extends ConsumerWidget {
                     label: '${toast.comment_count}',
                     color: Colors.grey,
                     onPressed: () {
-                      _showComments(context);
+                      _showCommentsSheet(context, toast.toast_id!);
                     },
                   ),
 
@@ -269,12 +298,15 @@ class ToastCard extends ConsumerWidget {
     );
   }
 
-  void _showComments(BuildContext context) {
-    // Navigate to comments screen or show comments modal
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Comments functionality coming soon')),
-    );
-  }
+
+  //
+  // void _showComments(BuildContext context) {
+  //   // Navigate to comments screen or show comments modal
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //    // const SnackBar(content: Text('Comments functionality coming soon')),
+  //       _showCommentsSheet(context),
+  //   );
+  // }
 
   void _sharePost(BuildContext context) {
     // Implement share functionality
@@ -345,5 +377,181 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+class CommentsBottomSheet extends ConsumerStatefulWidget {
+  final String toastId;
+
+  const CommentsBottomSheet({Key? key, required this.toastId}) : super(key: key);
+
+  @override
+  ConsumerState<CommentsBottomSheet> createState() => _CommentsBottomSheetState();
+}
+
+class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
+  final TextEditingController _commentController = TextEditingController();
+  List<Comment> _comments = [];
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() => _isLoading = true);
+    final comments = await ref.read(toastFeedProvider.notifier).loadComments(widget.toastId);
+    setState(() {
+      _comments = comments;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _submitComment() async {
+    if (_commentController.text.trim().isEmpty) return;
+
+    setState(() => _isSubmitting = true);
+
+    final success = await ref.read(toastFeedProvider.notifier).addComment(
+      widget.toastId,
+      _commentController.text.trim(),
+    );
+
+    if (success) {
+      _commentController.clear();
+      await _loadComments(); // Reload comments
+    }
+
+    setState(() => _isSubmitting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+
+              // Header
+              const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: Text(
+                  'Comments',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              // Comments list
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _comments.isEmpty
+                    ? const Center(
+                  child: Text(
+                    'No comments yet. Be the first to comment!',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
+                    : ListView.builder(
+                  controller: scrollController,
+                  itemCount: _comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = _comments[index];
+                    return CommentCard(
+                      comment: comment,
+                      onLike: () async {
+                        await ref.read(toastFeedProvider.notifier).toggleCommentLike(comment.commentId);
+                        await _loadComments(); // Refresh comments
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // Comment input
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  border: Border(top: BorderSide(color: Colors.grey[700]!)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Add a comment...',
+                          hintStyle: const TextStyle(color: Colors.white54),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[900],
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        maxLines: null,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: IconButton(
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                            : const Icon(Icons.send, color: Colors.white),
+                        onPressed: _isSubmitting ? null : _submitComment,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
   }
 }
