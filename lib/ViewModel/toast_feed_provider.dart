@@ -526,6 +526,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
             .from('toast_comments')
             .update({'like_count': newCount >= 0 ? newCount : 0})
             .eq('comment_id', commentId);
+
       } else {
         // Like
         await _supabase.from('toast_comment_likes').insert({

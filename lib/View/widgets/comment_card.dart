@@ -50,7 +50,7 @@ class CommentCard extends ConsumerWidget {
               IconButton(
                 padding: EdgeInsets.zero,
                 icon: Icon(
-                  comment.uliked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
+                  comment.uliked ? Icons.favorite : Icons.favorite_border,
                   size: 16,
                   color: Colors.blue,
                 ),

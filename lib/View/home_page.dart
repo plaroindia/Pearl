@@ -5,7 +5,7 @@ import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
 import '../ViewModel//toast_feed_provider.dart';
 import 'widgets/toast_card.dart';
-
+import 'search_page.dart';
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -131,9 +131,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 IconButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Search functionality coming soon')),
-                    );
+                    // ScaffoldMessenger.of(context).showSnackBar(
+                    //   const SnackBar(content: Text('Search functionality coming soon')),
+                    // );
+                    Navigator.push(context,MaterialPageRoute(builder: (context) => const SearchScreen()));
+
                   },
                   icon: const Icon(Icons.search),
                 ),
