@@ -40,6 +40,8 @@ dependencies:
   hooks_riverpod: ^2.6.1
   flutter_hooks: ^0.21.2
   image_picker: ^1.1.2
+  share_plus: ^7.2.1
+  video_player: ^2.8.1
 
 
 

@@ -235,9 +235,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               // Navigation Items
               ListTile(
-                leading: const Icon(Icons.home, color: Colors.grey),
+                leading: const Icon(Icons.event_note, color: Colors.grey),
                 title: const Text(
-                  'Compete',
+                  'Events',
                   style: TextStyle(color: Colors.grey),
                 ),
                 onTap: () {
