@@ -116,7 +116,7 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
       case 0: // Text
         //_showComingSoon('Text Creation');
         Navigator.push(context,
-        MaterialPageRoute(builder:  (context) =>  TextPostPage()));
+        MaterialPageRoute(builder:  (context) =>  ToastPage()));
         break;
       case 1: // Post
         //_showComingSoon('Post Creation');

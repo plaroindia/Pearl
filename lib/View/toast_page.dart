@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ViewModel/textpost_provider.dart';
 
-class TextPostPage extends ConsumerStatefulWidget {
-  const TextPostPage({super.key});
+class ToastPage extends ConsumerStatefulWidget {
+  const ToastPage({super.key});
 
   @override
-  ConsumerState<TextPostPage> createState() => _TextPostPageState();
+  ConsumerState<ToastPage> createState() => _TextPostPageState();
 }
 
-class _TextPostPageState extends ConsumerState<TextPostPage> {
+class _TextPostPageState extends ConsumerState<ToastPage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _tagController = TextEditingController();

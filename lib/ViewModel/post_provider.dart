@@ -105,30 +105,37 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
     try {
       final response = await _supabase
-          .from('posts')
+          .from('post')
           .select('''
-            *,
-            user_profiles!inner(username, profile_pic),
-            post_comments(count),
-            postt_likes(count)
-          ''')
+          *,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(_currentPage * _pageSize, (_currentPage + 1) * _pageSize - 1);
 
       final List<Post_feed> newPosts = [];
+
       for (var postData in response) {
+        final String postId = postData['post_id'].toString();
+
+        // Avoid duplicate post_id before processing
+        final alreadyExists = state.posts.any((p) => p.post_id == postId);
+        if (!refresh && alreadyExists) continue;
+
         // Get like count
         final likeCountResponse = await _supabase
-            .from('postt_likes')
-            .select('count',) // const FetchOptions(count: CountOption.exact))
-            .eq('post_id', postData['post_id']);
+            .from('post_likes')
+            .select('*')
+            .eq('post_id', postId);
+        final int likeCount = likeCountResponse.length;
 
         // Get comment count
         final commentCountResponse = await _supabase
             .from('post_comments')
-            .select('count',) //const FetchOptions(count: CountOption.exact))
-            .eq('post_id', postData['post_id']);
+            .select('*')
+            .eq('post_id', postId);
+        final int commentCount = commentCountResponse.length;
 
         // Check if current user liked this post
         final currentUserId = _supabase.auth.currentUser?.id;
@@ -136,8 +143,8 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         if (currentUserId != null) {
           final likeResponse = await _supabase
               .from('post_likes')
-              .select('post_like_id')
-              .eq('post_id', postData['post_id'])
+              .select('like_id')
+              .eq('post_id', postId)
               .eq('user_id', currentUserId)
               .maybeSingle();
           isLiked = likeResponse != null;
@@ -147,10 +154,10 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         final commentsResponse = await _supabase
             .from('post_comments')
             .select('''
-              *,
-              user_profiles!inner(username, profile_pic)
-            ''')
-            .eq('post_id', postData['post_id'])
+            *,
+            user_profiles!inner(username, profile_pic)
+          ''')
+            .eq('post_id', postId)
             .order('created_at', ascending: false)
             .limit(5);
 
@@ -164,11 +171,11 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
         final post = Post_feed.fromMap({
           ...postData,
-          'post_id': postData['post_id'],
+          'post_id': postId,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          'like_count': postData['like_count'] ?? 0,
-          'comment_count': postData['comment_count'] ?? 0,
+          'like_count': likeCount,
+          'comment_count': commentCount,
           'isliked': isLiked,
           'post_comments': comments.map((c) => c.toMap()).toList(),
         });
@@ -202,6 +209,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
+
   Future<void> toggleLike(String postId) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
@@ -216,7 +224,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       final existingLike = await _supabase
           .from('post_likes')
           .select('post_like_id')
-          .eq('post_id', postId)
+          .eq('post_id', postId) // postId is already a string
           .eq('user_id', currentUserId)
           .maybeSingle();
 
@@ -242,7 +250,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       } else {
         // Like
         await _supabase.from('post_likes').insert({
-          'post_id': postId,
+          'post_id': postId, // postId is already a string
           'user_id': currentUserId,
         });
 
@@ -424,18 +432,35 @@ class PostCreateNotifier extends StateNotifier<PostCreateState> {
 
   Future<String?> _uploadFile(XFile file) async {
     try {
-      final bytes = await file.readAsBytes();
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-      final filePath = 'posts/$fileName';
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
 
+      final bytes = await file.readAsBytes();
+      final fileExtension = file.path.split('.').last.toLowerCase();
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${currentUserId.substring(0, 8)}.$fileExtension';
+
+      // Create user-specific folder structure
+      final filePath = '$currentUserId/$fileName';
+
+      // Upload with proper headers
       await _supabase.storage
           .from('post-media')
-          .uploadBinary(filePath, bytes);
+          .uploadBinary(
+        filePath,
+        bytes,
+        fileOptions: FileOptions(
+          cacheControl: '3600',
+          upsert: false,
+        ),
+      );
 
       return _supabase.storage
           .from('post-media')
           .getPublicUrl(filePath);
     } catch (e) {
+      print('Upload error: $e'); // For debugging
       throw Exception('Failed to upload file: $e');
     }
   }
@@ -457,23 +482,39 @@ class PostCreateNotifier extends StateNotifier<PostCreateState> {
     try {
       // Upload media files
       List<String> mediaUrls = [];
-      for (XFile file in state.selectedMedia) {
-        final url = await _uploadFile(file);
-        if (url != null) {
-          mediaUrls.add(url);
+      for (int i = 0; i < state.selectedMedia.length; i++) {
+        try {
+          final file = state.selectedMedia[i];
+          final url = await _uploadFile(file);
+          if (url != null) {
+            mediaUrls.add(url);
+          }
+        } catch (uploadError) {
+          print('Failed to upload file ${i + 1}: $uploadError');
+          // Continue with other files, but log the error
+          state = state.copyWith(
+            error: 'Failed to upload some media files. Please try again.',
+          );
+          return false;
         }
       }
 
       // Create post in database
-      final response = await _supabase.from('posts').insert({
+      final postData = {
         'user_id': currentUserId,
         'title': state.title.isEmpty ? null : state.title,
         'content': state.content.isEmpty ? null : state.content,
         'tags': state.tags.isEmpty ? null : state.tags,
         'is_published': true,
-        // Store media URLs as JSON array or create separate media table
         'media_urls': mediaUrls.isEmpty ? null : mediaUrls,
-      }).select().single();
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      final response = await _supabase
+          .from('post')
+          .insert(postData)
+          .select()
+          .single();
 
       state = state.copyWith(
         isLoading: false,
@@ -487,9 +528,18 @@ class PostCreateNotifier extends StateNotifier<PostCreateState> {
 
       return true;
     } catch (e) {
+      print('Create post error: $e'); // For debugging
+      String errorMessage = 'Failed to create post';
+
+      if (e.toString().contains('StorageException')) {
+        errorMessage = 'Failed to upload media. Please check your permissions and try again.';
+      } else if (e.toString().contains('row-level security')) {
+        errorMessage = 'Permission denied. Please contact support.';
+      }
+
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to create post: $e',
+        error: errorMessage,
       );
       return false;
     }

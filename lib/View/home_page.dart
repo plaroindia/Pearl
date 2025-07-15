@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
-import '../ViewModel//toast_feed_provider.dart';
+import '../ViewModel/toast_feed_provider.dart';
+import '../ViewModel/post_provider.dart';
 import 'widgets/toast_card.dart';
+import 'widgets/post_card.dart';
 import 'search_page.dart';
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -33,7 +36,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+      // Load more content for both feeds
       ref.read(toastFeedProvider.notifier).loadMorePosts();
+      ref.read(postFeedProvider.notifier).loadPosts();
     }
   }
 
@@ -47,7 +52,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
     } catch (e) {
-      //print('Error loading profile: $e');
       setState(() {
         _isInitialized = true;
       });
@@ -62,7 +66,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       await ref.read(authControllerProvider).logout();
 
-      // Show success message
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -73,7 +76,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     } catch (e) {
-      // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -92,17 +94,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refreshFeed() async {
-    await ref.read(toastFeedProvider.notifier).refreshPosts();
+    // Refresh both feeds
+    await Future.wait([
+      ref.read(toastFeedProvider.notifier).refreshPosts(),
+      ref.read(postFeedProvider.notifier).loadPosts(refresh: true),
+    ]);
+  }
+
+  // Helper method to combine and sort posts by timestamp
+  List<Map<String, dynamic>> _getCombinedFeed(toastFeedState, postFeedState) {
+    List<Map<String, dynamic>> combinedFeed = [];
+
+    // Add toasts with type identifier
+    for (var toast in toastFeedState.posts) {
+      DateTime timestamp;
+      try {
+        // Access the created_at property (snake_case from database)
+        timestamp = toast.created_at ?? DateTime.now();
+      } catch (e) {
+        // If the property doesn't exist, use current time
+        timestamp = DateTime.now();
+      }
+
+      combinedFeed.add({
+        'type': 'toast',
+        'data': toast,
+        'timestamp': timestamp,
+      });
+    }
+
+    // Add posts with type identifier
+    for (var post in postFeedState.posts) {
+      DateTime timestamp;
+      try {
+        // Access the created_at property (snake_case from database)
+        timestamp = post.created_at ?? DateTime.now();
+      } catch (e) {
+        // If the property doesn't exist, use current time
+        timestamp = DateTime.now();
+      }
+
+      combinedFeed.add({
+        'type': 'post',
+        'data': post,
+        'timestamp': timestamp,
+      });
+    }
+
+    // Sort by timestamp (newest first)
+    combinedFeed.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
+
+    return combinedFeed;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen to auth state changes
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
     final toastFeedState = ref.watch(toastFeedProvider);
+    final postFeedState = ref.watch(postFeedProvider);
 
-    // Initialize profile loading if not done yet
     if (!_isInitialized) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadUserProfile();
@@ -131,17 +182,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 IconButton(
                   onPressed: () {
-                    // ScaffoldMessenger.of(context).showSnackBar(
-                    //   const SnackBar(content: Text('Search functionality coming soon')),
-                    // );
-                    Navigator.push(context,MaterialPageRoute(builder: (context) => const SearchScreen()));
-
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const SearchScreen()),
+                    );
                   },
                   icon: const Icon(Icons.search),
                 ),
                 IconButton(
                   onPressed: () {
-                    // Navigate to create post screen
                     Navigator.pushNamed(context, '/create_post');
                   },
                   icon: const Icon(Icons.add_box_outlined),
@@ -291,158 +340,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             );
           }
 
-          // Load posts when authenticated
+          // Initialize feeds when authenticated
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
               ref.read(toastFeedProvider.notifier).loadPosts();
             }
+            if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
+              ref.read(postFeedProvider.notifier).loadPosts();
+            }
           });
 
-          return RefreshIndicator(
-            onRefresh: _refreshFeed,
-            backgroundColor: Colors.grey[900],
-            color: Colors.white,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                // Error handling
-                if (toastFeedState.error != null)
-                  SliverToBoxAdapter(
-                    child: Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.red),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              toastFeedState.error!,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              ref.read(toastFeedProvider.notifier).clearError();
-                              ref.read(toastFeedProvider.notifier).loadPosts();
-                            },
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Posts list
-                if (toastFeedState.posts.isNotEmpty)
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                        final post = toastFeedState.posts[index];
-                        return ToastCard(
-                          toast: post,
-                          onTap: () {
-                            // // Navigate to post details
-                            // Navigator.pushNamed(
-                            //   context,
-                            //   '/post_details',
-                            //   arguments: post,
-                            // );
-                          },
-                        );
-                      },
-                      childCount: toastFeedState.posts.length,
-                    ),
-                  ),
-
-                // Loading indicator for initial load
-                if (toastFeedState.posts.isEmpty && toastFeedState.isLoading)
-                  const SliverFillRemaining(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-                      ),
-                    ),
-                  ),
-
-                // Empty state
-                if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading && toastFeedState.error == null)
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.article_outlined,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No posts yet',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Be the first to share something!',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/create_post');
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            child: const Text('Create Post'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Loading indicator for pagination
-                if (toastFeedState.isLoading && toastFeedState.posts.isNotEmpty)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Bottom padding
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 16),
-                ),
-              ],
-            ),
-          );
+          return _buildCombinedFeed(toastFeedState, postFeedState);
         },
         loading: () => const Center(
           child: CircularProgressIndicator(
@@ -469,5 +377,174 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildCombinedFeed(dynamic toastFeedState, dynamic postFeedState) {
+    final combinedFeed = _getCombinedFeed(toastFeedState, postFeedState);
+    final hasError = toastFeedState.error != null || postFeedState.error != null;
+    final isLoading = toastFeedState.isLoading || postFeedState.isLoading;
+    final isEmpty = combinedFeed.isEmpty;
+
+    return RefreshIndicator(
+      onRefresh: _refreshFeed,
+      backgroundColor: Colors.grey[900],
+      color: Colors.white,
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          // Error handling
+          if (hasError)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        toastFeedState.error ?? postFeedState.error ?? 'Unknown error',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        if (toastFeedState.error != null) {
+                          ref.read(toastFeedProvider.notifier).clearError();
+                        }
+                        if (postFeedState.error != null) {
+                          ref.read(postFeedProvider.notifier).clearError();
+                        }
+                        _refreshFeed();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Combined feed list
+          if (combinedFeed.isNotEmpty)
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                  final feedItem = combinedFeed[index];
+                  final type = feedItem['type'] as String;
+                  final data = feedItem['data'];
+
+                  if (type == 'toast') {
+                    return ToastCard(
+                      toast: data,
+                      onTap: () {
+                        // Navigate to toast details if needed
+                      },
+                    );
+                  } else {
+                    return PostCard(
+                      post: data,
+                      onTap: () {
+                        // Navigate to post details if needed
+                      },
+                    );
+                  }
+                },
+                childCount: combinedFeed.length,
+              ),
+            ),
+
+          // Loading and empty states
+          _buildEmptyOrLoadingState(isEmpty, isLoading, hasError),
+
+          // Loading indicator for pagination
+          if (isLoading && combinedFeed.isNotEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                  ),
+                ),
+              ),
+            ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyOrLoadingState(bool isEmpty, bool isLoading, bool hasError) {
+    if (isEmpty && isLoading) {
+      return const SliverFillRemaining(
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+          ),
+        ),
+      );
+    }
+
+    if (isEmpty && !isLoading && !hasError) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.article_outlined,
+                size: 64,
+                color: Colors.grey,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No posts yet',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Be the first to share something!',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/create_post');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: const Text('Create Post'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
 }
