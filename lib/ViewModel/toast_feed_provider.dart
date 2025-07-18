@@ -502,7 +502,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       // Check if already liked
       final existingLike = await _supabase
           .from('toast_comment_likes')
-          .select('comment_id')
+          .select('toast_comment_like_id')
           .eq('comment_id', commentId)
           .eq('user_id', user.id)
           .maybeSingle();

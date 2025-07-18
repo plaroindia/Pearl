@@ -337,14 +337,29 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
             .delete()
             .eq('post_id', postId)
             .eq('user_id', user.id);
+
+        await _supabase
+            .from('post')
+            .update({'like_count': currentLikeCount - 1})
+            .eq('post_id', postId);
+
         print('🔵 Unlike successful');
+
       } else {
         // Like the post
         print('🔵 Attempting to like post...');
+
         await _supabase.from('post_likes').insert({
           'post_id': postId,
           'user_id': user.id,
+          'liked_at': DateTime.now().toIso8601String(),
         });
+
+        await _supabase
+            .from('post')
+            .update({'like_count': currentLikeCount + 1})
+            .eq('post_id', postId);
+
         print('🔵 Like successful');
       }
 
@@ -410,7 +425,18 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         'post_id': postId,
         'user_id': currentUserId,
         'content': content,
+        'created_at': DateTime.now().toIso8601String(),
       });
+
+      final currentPost = state.posts.firstWhere(
+            (post) => post.post_id == postId,
+        orElse: () => Post_feed(post_id: postId, user_id: '', username: '', commentsList: []),
+      );
+
+      await _supabase
+          .from('post')
+          .update({'comment_count': currentPost.comment_count + 1})
+          .eq('post_id', postId);
 
       // Update comment count in local state
       final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
@@ -435,22 +461,53 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
     try {
       final existingLike = await _supabase
-          .from('post_comment_likes')
-          .select('post_comment_like_id')
+          .from('comment_likes')
+          .select('comment_like_id')
           .eq('comment_id', commentId)
           .eq('user_id', currentUserId)
           .maybeSingle();
 
       if (existingLike != null) {
+        //unlike
         await _supabase
-            .from('post_comment_likes')
+            .from('comment_likes')
             .delete()
-            .eq('post_comment_like_id', existingLike['post_comment_like_id']);
+            .eq('comment_like_id', existingLike['comment_like_id'])
+            .eq('user_id', currentUserId);
+
+        // Decrement like count - get current count first
+        final currentComment = await _supabase
+            .from('post_comments')
+            .select('like_count')
+            .eq('comment_id', commentId)
+            .single();
+
+        final newCount = (currentComment['like_count'] as int) - 1;
+        await _supabase
+            .from('post_comments')
+            .update({'like_count': newCount >= 0 ? newCount : 0})
+            .eq('comment_id', commentId);
+
       } else {
-        await _supabase.from('post_comment_likes').insert({
+        //Like
+        await _supabase.from('comment_likes').insert({
           'comment_id': commentId,
           'user_id': currentUserId,
+          'liked_at': DateTime.now().toIso8601String(),
         });
+
+        // Increment like count - get current count first
+        final currentComment = await _supabase
+            .from('post_comments')
+            .select('like_count')
+            .eq('comment_id', commentId)
+            .single();
+
+        final newCount = (currentComment['like_count'] as int) + 1;
+        await _supabase
+            .from('post_comments')
+            .update({'like_count': newCount})
+            .eq('comment_id', commentId);
       }
     } catch (e) {
       state = state.copyWith(error: 'Failed to toggle comment like: $e');
