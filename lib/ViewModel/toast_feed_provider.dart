@@ -493,6 +493,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       return false;
     }
   }
+
   Future<void> toggleCommentLike(int commentId) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -552,6 +553,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       print('Error toggling comment like: $error');
     }
   }
+
   void clearError() {
     state = state.copyWith(error: null);
   }

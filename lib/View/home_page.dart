@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
 import '../ViewModel/toast_feed_provider.dart';
-import '../ViewModel/post_provider.dart';
+import '../ViewModel/post_feed_provider.dart';
 import 'widgets/toast_card.dart';
 import 'widgets/post_card.dart';
 import 'search_page.dart';
@@ -19,6 +19,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoading = false;
   bool _isInitialized = false;
+  bool _feedsInitialized = false;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -35,27 +36,75 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent * 0.8) {
       // Load more content for both feeds
-      ref.read(toastFeedProvider.notifier).loadMorePosts();
-      ref.read(postFeedProvider.notifier).loadPosts();
+      _loadMoreContent();
+    }
+  }
+
+  Future<void> _loadMoreContent() async {
+    final toastFeedState = ref.read(toastFeedProvider);
+    final postFeedState = ref.read(postFeedProvider);
+
+    // Load more for both feeds if they have more content
+    final futures = <Future>[];
+
+    if (toastFeedState.hasMore && !toastFeedState.isLoading) {
+      futures.add(ref.read(toastFeedProvider.notifier).loadMorePosts());
+    }
+
+    if (postFeedState.hasMore && !postFeedState.isLoadingMore) {
+      futures.add(ref.read(postFeedProvider.notifier).loadMorePosts());
+    }
+
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
   }
 
   Future<void> _loadUserProfile() async {
+    if (_isInitialized) return;
+
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
         await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
-        setState(() {
-          _isInitialized = true;
-        });
       }
     } catch (e) {
+      print('Error loading user profile: $e');
+    } finally {
       setState(() {
         _isInitialized = true;
       });
     }
+  }
+
+  Future<void> _initializeFeeds() async {
+    if (_feedsInitialized) return;
+
+    final toastFeedState = ref.read(toastFeedProvider);
+    final postFeedState = ref.read(postFeedProvider);
+
+    final futures = <Future>[];
+
+    // Initialize toast feed if not loaded
+    if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
+      futures.add(ref.read(toastFeedProvider.notifier).loadPosts());
+    }
+
+    // Initialize post feed if not loaded
+    if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
+      futures.add(ref.read(postFeedProvider.notifier).loadPosts());
+    }
+
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+
+    setState(() {
+      _feedsInitialized = true;
+    });
   }
 
   Future<void> _handleSignOut() async {
@@ -94,11 +143,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refreshFeed() async {
-    // Refresh both feeds
-    await Future.wait([
-      ref.read(toastFeedProvider.notifier).refreshPosts(),
-      ref.read(postFeedProvider.notifier).loadPosts(refresh: true),
-    ]);
+    print('🔄 Refreshing feeds...');
+
+    // Reset initialization flag to allow re-initialization
+    setState(() {
+      _feedsInitialized = false;
+    });
+
+    try {
+      // Refresh both feeds in parallel
+      await Future.wait([
+        ref.read(toastFeedProvider.notifier).refreshPosts(),
+        ref.read(postFeedProvider.notifier).refreshPosts(),
+      ]);
+
+      setState(() {
+        _feedsInitialized = true;
+      });
+
+      print('🟢 Feeds refreshed successfully');
+    } catch (e) {
+      print('🔴 Error refreshing feeds: $e');
+    }
   }
 
   // Helper method to combine and sort posts by timestamp
@@ -109,10 +175,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     for (var toast in toastFeedState.posts) {
       DateTime timestamp;
       try {
-        // Access the created_at property (snake_case from database)
         timestamp = toast.created_at ?? DateTime.now();
       } catch (e) {
-        // If the property doesn't exist, use current time
         timestamp = DateTime.now();
       }
 
@@ -127,10 +191,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     for (var post in postFeedState.posts) {
       DateTime timestamp;
       try {
-        // Access the created_at property (snake_case from database)
         timestamp = post.created_at ?? DateTime.now();
       } catch (e) {
-        // If the property doesn't exist, use current time
         timestamp = DateTime.now();
       }
 

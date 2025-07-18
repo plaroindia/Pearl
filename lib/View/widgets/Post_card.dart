@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../Model/post.dart';
-import '../../ViewModel/post_provider.dart';
+import '../../ViewModel/post_feed_provider.dart';
 import 'post_comment_card.dart';
 
 class PostCard extends ConsumerStatefulWidget {
@@ -52,7 +52,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.grey[900],
+      color: Colors.black87,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -426,24 +426,28 @@ class _PostCardState extends ConsumerState<PostCard> {
   void _showCommentsSheet(BuildContext context, String postId) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.3,
-          maxChildSize: 0.9,
-          builder: (context, scrollController) {
-            return CommentSheet(
-              postId: postId,
-              scrollController: scrollController,
-            );
-          },
-        );
+      builder: (BuildContext context) {
+        return CommentSheet(postId: postId);
       },
+
+      // shape: const RoundedRectangleBorder(
+      //   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      // ),
+      // builder: (context) {
+      //   return DraggableScrollableSheet(
+      //     initialChildSize: 0.7,
+      //     minChildSize: 0.3,
+      //     maxChildSize: 0.9,
+      //     builder: (context, scrollController) {
+      //       return CommentSheet(
+      //         postId: postId,
+      //         scrollController: scrollController,
+      //       );
+      //     },
+      //   );
+      // },
     );
   }
 
@@ -689,12 +693,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 // Comment Sheet Widget
 class CommentSheet extends ConsumerStatefulWidget {
   final String postId;
-  final ScrollController scrollController;
+  //final ScrollController scrollController;
 
   const CommentSheet({
     Key? key,
     required this.postId,
-    required this.scrollController,
+    //required this.scrollController,
   }) : super(key: key);
 
   @override
@@ -705,6 +709,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
   final TextEditingController _commentController = TextEditingController();
   List<Comment> _comments = [];
   bool _isLoading = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -731,7 +736,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
     });
   }
 
-  Future<void> _addComment() async {
+  Future<void> _submitComment() async {
     if (_commentController.text.trim().isEmpty) return;
 
     final success = await ref.read(postFeedProvider.notifier).addComment(
@@ -747,92 +752,129 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Handle
-        Container(
-          width: 40,
-          height: 4,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.grey[600],
-            borderRadius: BorderRadius.circular(2),
-          ),
+    return DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) {
+        return Container(
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-
-        // Header
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'Comments',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-
-        // Comments List
-        Expanded(
-          child: _isLoading
-              ? const Center(
-            child: CircularProgressIndicator(color: Colors.blue),
-          )
-              : _comments.isEmpty
-              ? const Center(
-            child: Text(
-              'No comments yet',
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-              : ListView.builder(
-            controller: widget.scrollController,
-            itemCount: _comments.length,
-            itemBuilder: (context, index) {
-              return CommentCard(comment: _comments[index]);
-            },
-          ),
-        ),
-
-        // Comment Input
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            border: Border(top: BorderSide(color: Colors.grey[700]!)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Add a comment...',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[900],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
+        child: Column(
+          children: [
+            // Handle
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: _addComment,
-                icon: const Icon(Icons.send, color: Colors.blue),
+            ),
+
+            // Header
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Comments',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ],
-          ),
+            ),
+
+            // Comments List
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                child: CircularProgressIndicator(color: Colors.blue),
+              )
+                  : _comments.isEmpty
+                  ? const Center(
+                child: Text(
+                  'No comments yet. Be the first to comment!',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              )
+                  : ListView.builder(
+                controller: scrollController,
+                itemCount: _comments.length,
+                itemBuilder: (context, index) {
+                  final comment = _comments[index];
+                  return CommentCard(
+                      comment: comment,
+                    onTap: () async {
+                      await ref.read(postFeedProvider.notifier).toggleCommentLike(comment.commentId);
+                      await _loadComments(); // Refresh comments
+                    },
+                  );
+                },
+              ),
+            ),
+
+            // Comment Input
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                border: Border(top: BorderSide(color: Colors.grey[700]!)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _commentController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment...',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[900],
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: IconButton(
+                      icon: _isSubmitting
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                          : const Icon(Icons.send, color: Colors.white),
+                      onPressed: _isSubmitting ? null : _submitComment,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
+      );
+        },
     );
   }
 }

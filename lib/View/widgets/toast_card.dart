@@ -15,17 +15,17 @@ class ToastCard extends ConsumerWidget {
     this.onTap,
   }) : super(key: key);
 
-
-  void _showCommentsSheet(BuildContext context, String toastId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
-        return CommentsBottomSheet(toastId: toastId);
-      },
-    );
-  }
+  //
+  // void _showCommentsSheet(BuildContext context, String toastId) {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (BuildContext context) {
+  //       return CommentsBottomSheet(toastId: toastId);
+  //     },
+  //   );
+  // }
 
 
   @override
@@ -68,7 +68,7 @@ class ToastCard extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.grey[900],
+      color: Colors.black87,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),

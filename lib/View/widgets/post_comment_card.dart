@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/post.dart';
-import '../../ViewModel/post_provider.dart';
+import '../../ViewModel/post_feed_provider.dart';
 
 class CommentCard extends ConsumerStatefulWidget {
   final Comment comment;
