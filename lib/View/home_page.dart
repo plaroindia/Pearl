@@ -402,15 +402,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             );
           }
 
-          // Initialize feeds when authenticated
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
-              ref.read(toastFeedProvider.notifier).loadPosts();
-            }
-            if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
-              ref.read(postFeedProvider.notifier).loadPosts();
-            }
-          });
+          // // Initialize feeds when authenticated
+          // WidgetsBinding.instance.addPostFrameCallback((_) {
+          //   if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
+          //     ref.read(toastFeedProvider.notifier).loadPosts();
+          //   }
+          //   if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
+          //     ref.read(postFeedProvider.notifier).loadPosts();
+          //   }
+          // });
 
           return _buildCombinedFeed(toastFeedState, postFeedState);
         },

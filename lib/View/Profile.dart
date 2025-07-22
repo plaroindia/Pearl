@@ -371,24 +371,6 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                             },
                             child: const Text("Profile"),
                           ),
-                          // const SizedBox(width: 30.0),
-                          // ElevatedButton(
-                          //   style: ElevatedButton.styleFrom(
-                          //     backgroundColor: Colors.black54,
-                          //     side: const BorderSide(width: 3.0, color: Colors.purple),
-                          //     foregroundColor: Colors.purple,
-                          //     shape: RoundedRectangleBorder(
-                          //       borderRadius: BorderRadius.circular(100.0),
-                          //     ),
-                          //   ),
-                          //   onPressed: () {
-                          //     // Navigator.push(
-                          //     //   context,
-                          //     //   MaterialPageRoute(builder: (context) => const AddFeed()),
-                          //     // );
-                          //   },
-                          //   child: const Text("Create"),
-                          // ),
                           const SizedBox(width: 30.0),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
@@ -445,6 +427,9 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> {
                       ),
                     ),
                   ),
+
+
+
                 ],
               ),
             ),

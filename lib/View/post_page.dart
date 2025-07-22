@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'widgets/Post_card.dart';
+import '../Model/post.dart';
 import 'dart:io';
 import '../ViewModel/post_provider.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../ViewModel/auth_provider.dart';
+import '../ViewModel/setProfileProvider.dart';
 class PostCreateScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<PostCreateScreen> createState() => _PostCreateScreenState();
@@ -20,8 +24,13 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
   final FocusNode _captionFocusNode = FocusNode();
   final FocusNode _tagsFocusNode = FocusNode();
 
+  final SupabaseClient _supabase = Supabase.instance.client;
+
+
+
   bool _isExpanded = false;
   List<String> _tags = [];
+
 
   @override
   void initState() {
@@ -34,6 +43,13 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
     });
     _captionController.addListener(() {
       ref.read(postCreateProvider.notifier).updateCaption(_captionController.text);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = ref.read(authStateProvider).value;
+      if (session != null) {
+        ref.read(setProfileProvider.notifier).getUserProfile(session.user!.id);
+      }
     });
   }
 
@@ -158,6 +174,8 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
   Widget build(BuildContext context) {
     final postCreateState = ref.watch(postCreateProvider);
     final screenHeight = MediaQuery.of(context).size.height;
+    final authState = ref.watch(authStateProvider);
+    final profileState = ref.watch(setProfileProvider);
 
     // Show error messages
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -220,73 +238,6 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title Input
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _titleFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
-                  width: 1,
-                ),
-              ),
-              child: TextField(
-                controller: _titleController,
-                focusNode: _titleFocusNode,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Add a title...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 18,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                ),
-                maxLines: 2,
-                textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _contentFocusNode.requestFocus(),
-              ),
-            ),
-
-            // Content Input
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _contentFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
-                  width: 1,
-                ),
-              ),
-              child: TextField(
-                controller: _contentController,
-                focusNode: _contentFocusNode,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'What\'s on your mind?',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 16,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                ),
-                maxLines: null,
-                minLines: 5,
-                textInputAction: TextInputAction.newline,
-              ),
-            ),
 
             // Media Section
             if (postCreateState.selectedMedia.isNotEmpty)
@@ -380,167 +331,227 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
               ),
             ),
 
-            // Advanced Options Toggle
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _isExpanded = !_isExpanded;
-                });
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
+
+            // Title Input
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _titleFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
+                  width: 1,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Advanced Options',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      _isExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: Colors.blue,
-                    ),
-                  ],
+              ),
+              child: TextField(
+                controller: _titleController,
+                focusNode: _titleFocusNode,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
+                decoration: InputDecoration(
+                  hintText: 'Add a title...',
+                  hintStyle: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 18,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(16),
+                ),
+                maxLines: 2,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _contentFocusNode.requestFocus(),
               ),
             ),
 
-            // Expanded Advanced Options
-            if (_isExpanded) ...[
-              const SizedBox(height: 16),
-
-              // Caption Input
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _captionFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
-                    width: 1,
-                  ),
+            // Content Input
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _contentFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
+                  width: 1,
                 ),
-                child: TextField(
-                  controller: _captionController,
-                  focusNode: _captionFocusNode,
-                  style: const TextStyle(
-                    color: Colors.white,
+              ),
+              child: TextField(
+                controller: _contentController,
+                focusNode: _contentFocusNode,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'What\'s on your mind?',
+                  hintStyle: TextStyle(
+                    color: Colors.grey[600],
                     fontSize: 16,
                   ),
-                  decoration: InputDecoration(
-                    hintText: 'Add a caption...',
-                    hintStyle: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 16,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.all(16),
-                  ),
-                  maxLines: 3,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _tagsFocusNode.requestFocus(),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(16),
+                ),
+                maxLines: null,
+                minLines: 5,
+                textInputAction: TextInputAction.newline,
+              ),
+            ),
+
+            // Tags Section
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _tagsFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
+                  width: 1,
                 ),
               ),
-
-              // Tags Section
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _tagsFocusNode.hasFocus ? Colors.blue : Colors.grey[700]!,
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Tags Input
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _tagsController,
-                            focusNode: _tagsFocusNode,
-                            style: const TextStyle(
-                              color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Tags Input
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _tagsController,
+                          focusNode: _tagsFocusNode,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Add tags...',
+                            hintStyle: TextStyle(
+                              color: Colors.grey[600],
                               fontSize: 16,
                             ),
-                            decoration: InputDecoration(
-                              hintText: 'Add tags...',
-                              hintStyle: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 16,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.all(16),
-                            ),
-                            onSubmitted: (_) => _addTag(),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(16),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: _addTag,
-                          icon: const Icon(Icons.add, color: Colors.blue),
-                        ),
-                      ],
-                    ),
-
-                    // Tags Display
-                    if (_tags.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _tags.map((tag) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '#$tag',
-                                    style: const TextStyle(
-                                      color: Colors.blue,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () => _removeTag(tag),
-                                    child: const Icon(
-                                      Icons.close,
-                                      color: Colors.blue,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
+                          onSubmitted: (_) => _addTag(),
                         ),
                       ),
-                  ],
+                      IconButton(
+                        onPressed: _addTag,
+                        icon: const Icon(Icons.add, color: Colors.blue),
+                      ),
+                    ],
+                  ),
+
+                  // Tags Display
+                  if (_tags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _tags.map((tag) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '#$tag',
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                GestureDetector(
+                                  onTap: () => _removeTag(tag),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.blue,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            SizedBox(height: 10.0),
+            Text(
+              'Preview',
+              style: const TextStyle(
+                color: Colors.blue,
+                fontSize: 14,
+              ),
+            ),
+            Divider(thickness: 0.1,),
+
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                child: (_titleController.text.isEmpty &&
+                    _contentController.text.isEmpty &&
+                    _tags.isEmpty &&
+                    postCreateState.selectedMedia.isEmpty)
+                    ? const Center(
+                  child: Text(
+                    'Start typing to see a preview',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+                    : authState.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => Center(
+                    child: Text('Error loading user data: $error'),
+                  ),
+                  data: (session) {
+                    return profileState.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (error, stack) => Center(
+                        child: Text('Error loading profile: $error'),
+                      ),
+                      data: (profile) {
+                        final userId = session?.user?.id ?? 'preview_user';
+                        final username = profile?.username ?? 'You';
+                        final profilePic = profile?.profilePic;
+
+                        return PostCard(
+                          post: Post_feed(
+                            post_id: 'preview_${DateTime.now().millisecondsSinceEpoch}',
+                            user_id: userId,
+                            title: _titleController.text,
+                            content: _contentController.text,
+                            caption: _captionController.text,
+                            tags: _tags,
+                            localMediaFiles: postCreateState.selectedMedia,
+                            username: username,
+                            profile_pic: profilePic,
+                            created_at: DateTime.now(),
+                            like_count: 0,
+                            comment_count: 0,
+                            share_count: 0,
+                            isliked: false,
+                            commentsList: [],
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
-            ],
-
+            ),
             // Bottom spacing
             SizedBox(height: screenHeight * 0.1),
           ],
@@ -549,138 +560,3 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
     );
   }
 }
-//
-// // Text-only post page for quick text posts
-// class TextPostPage extends ConsumerStatefulWidget {
-//   @override
-//   ConsumerState<TextPostPage> createState() => _TextPostPageState();
-// }
-//
-// class _TextPostPageState extends ConsumerState<TextPostPage> {
-//   final TextEditingController _textController = TextEditingController();
-//   final FocusNode _textFocusNode = FocusNode();
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _textController.addListener(() {
-//       ref.read(postCreateProvider.notifier).updateContent(_textController.text);
-//     });
-//
-//     // Auto-focus on text input
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       _textFocusNode.requestFocus();
-//     });
-//   }
-//
-//   @override
-//   void dispose() {
-//     _textController.dispose();
-//     _textFocusNode.dispose();
-//     super.dispose();
-//   }
-//
-//   Future<void> _handleCreatePost() async {
-//     final success = await ref.read(postCreateProvider.notifier).createPost();
-//     if (success) {
-//       Navigator.pop(context);
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         const SnackBar(
-//           content: Text('Post created successfully!'),
-//           backgroundColor: Colors.green,
-//         ),
-//       );
-//     }
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final postCreateState = ref.watch(postCreateProvider);
-//     final screenHeight = MediaQuery.of(context).size.height;
-//
-//     // Show error messages
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       if (postCreateState.error != null) {
-//         ScaffoldMessenger.of(context).showSnackBar(
-//           SnackBar(
-//             content: Text(postCreateState.error!),
-//             backgroundColor: Colors.red,
-//             action: SnackBarAction(
-//               label: 'Dismiss',
-//               onPressed: () => ref.read(postCreateProvider.notifier).clearError(),
-//             ),
-//           ),
-//         );
-//       }
-//     });
-//
-//     return Scaffold(
-//       backgroundColor: Colors.black,
-//       appBar: AppBar(
-//         backgroundColor: Colors.black,
-//         elevation: 0,
-//         leading: IconButton(
-//           icon: const Icon(Icons.close, color: Colors.white),
-//           onPressed: () => Navigator.pop(context),
-//         ),
-//         title: const Text(
-//           'Text Post',
-//           style: TextStyle(
-//             color: Colors.white,
-//             fontSize: 18,
-//             fontWeight: FontWeight.w600,
-//           ),
-//         ),
-//         actions: [
-//           TextButton(
-//             onPressed: postCreateState.isLoading || _textController.text.trim().isEmpty
-//                 ? null
-//                 : _handleCreatePost,
-//             child: postCreateState.isLoading
-//                 ? const SizedBox(
-//               width: 20,
-//               height: 20,
-//               child: CircularProgressIndicator(
-//                 color: Colors.blue,
-//                 strokeWidth: 2,
-//               ),
-//             )
-//                 : Text(
-//               'Post',
-//               style: TextStyle(
-//                 color: _textController.text.trim().isEmpty
-//                     ? Colors.grey
-//                     : Colors.blue,
-//                 fontSize: 16,
-//                 fontWeight: FontWeight.w600,
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16),
-//         child: TextField(
-//           controller: _textController,
-//           focusNode: _textFocusNode,
-//           style: const TextStyle(
-//             color: Colors.white,
-//             fontSize: 18,
-//             height: 1.5,
-//           ),
-//           decoration: InputDecoration(
-//             hintText: 'What\'s on your mind?',
-//             hintStyle: TextStyle(
-//               color: Colors.grey[600],
-//               fontSize: 18,
-//             ),
-//             border: InputBorder.none,
-//           ),
-//           maxLines: null,
-//           minLines: 10,
-//           textInputAction: TextInputAction.newline,
-//         ),
-//       ),
-//     );
-//   }
-// }

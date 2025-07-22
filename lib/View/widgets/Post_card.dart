@@ -6,10 +6,58 @@ import 'package:share_plus/share_plus.dart';
 import '../../Model/post.dart';
 import '../../ViewModel/post_feed_provider.dart';
 import 'post_comment_card.dart';
+import 'dart:io';
+
+
+class _LocalVideoPlayer extends StatefulWidget {
+  final File file;
+
+  const _LocalVideoPlayer({required this.file});
+
+  @override
+  __LocalVideoPlayerState createState() => __LocalVideoPlayerState();
+}
+
+class __LocalVideoPlayerState extends State<_LocalVideoPlayer> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.file(widget.file)
+      ..initialize().then((_) {
+        setState(() => _isInitialized = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Center(child: CircularProgressIndicator());
+    }
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: VideoPlayer(_controller),
+    );
+  }
+}
+
+bool _isVideoFile(String path) {
+  final videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  return videoExtensions.any((ext) => path.toLowerCase().endsWith(ext));
+}
 
 class PostCard extends ConsumerStatefulWidget {
   final Post_feed post;
   final VoidCallback? onTap;
+
 
   const PostCard({
     Key? key,
@@ -51,21 +99,21 @@ class _PostCardState extends ConsumerState<PostCard> {
     });
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+     // margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.black87,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(3),
       ),
       child: InkWell(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Info Header
-              Row(
+        borderRadius: BorderRadius.circular(3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // User Info Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
+              child: Row(
                 children: [
                   CircleAvatar(
                     backgroundImage: currentPost.profile_pic != null
@@ -104,247 +152,279 @@ class _PostCardState extends ConsumerState<PostCard> {
                   ),
                 ],
               ),
+            ),
 
-              const SizedBox(height: 12),
+      //      const SizedBox(height: 3),
 
-              // Title
-              if (currentPost.title != null && currentPost.title!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    currentPost.title!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+            // Title
+            if (currentPost.title != null && currentPost.title!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8.0,0.0,8.0,2.0),
+                child: Text(
+                  currentPost.title!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-
-              // Content
-              if (currentPost.content != null && currentPost.content!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    currentPost.content!,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      height: 1.4,
-                    ),
-                    maxLines: 10,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-
-              // Media Section
-              if (currentPost.  media_urls != null && currentPost.media_urls!.isNotEmpty)
-                _buildMediaSection(currentPost.media_urls!),
-
-              // Caption
-              if (currentPost.caption != null && currentPost.caption!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 12),
-                  child: Text(
-                    currentPost.caption!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-
-              // Tags
-              if (currentPost.tags != null && currentPost.tags!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: currentPost.tags!.map((tag) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                        ),
-                        child: Text(
-                          '#$tag',
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-              // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  // Like Button
-                  _ActionButton(
-                    icon: currentPost.isliked ? Icons.favorite : Icons.favorite_border,
-                    label: '${currentPost.like_count}',
-                    color: currentPost.isliked ? Colors.red : Colors.grey,
-                    isLoading: isLiking,
-                    onPressed: isLiking ? null : () {
-                      if (currentPost.post_id != null) {
-                        ref.read(postFeedProvider.notifier).toggleLike(currentPost.post_id!);
-                      }
-                    },
-                  ),
-
-                  // Comment Button
-                  _ActionButton(
-                    icon: Icons.comment_outlined,
-                    label: '${currentPost.comment_count}',
-                    color: Colors.grey,
-                    onPressed: () {
-                      _showCommentsSheet(context, currentPost.post_id!);
-                    },
-                  ),
-
-                  // Share Button
-                  _ActionButton(
-                    icon: Icons.share_outlined,
-                    label: '${currentPost.share_count ?? 0}',
-                    color: Colors.grey,
-                    onPressed: () {
-                      _sharePost(context, currentPost);
-                    },
-                  ),
-
-                  // Bookmark Button
-                  _ActionButton(
-                    icon: _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    label: '',
-                    color: _isBookmarked ? Colors.blue : Colors.grey,
-                    onPressed: () {
-                      _toggleBookmark();
-                    },
-                  ),
-                ],
               ),
-            ],
-          ),
+
+
+            // Media Section
+            if ((currentPost.media_urls != null && currentPost.media_urls!.isNotEmpty) ||
+                (currentPost.localMediaFiles != null && currentPost.localMediaFiles!.isNotEmpty))
+              _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
+
+            // Captions
+            if (currentPost.content != null && currentPost.content!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  currentPost.content!,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                  maxLines: 10,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+
+
+            // // Caption
+            // if (currentPost.caption != null && currentPost.caption!.isNotEmpty)
+            //   Padding(
+            //     padding: const EdgeInsets.only(top: 8, bottom: 12),
+            //     child: Text(
+            //       currentPost.caption!,
+            //       style: const TextStyle(
+            //         color: Colors.white,
+            //         fontSize: 16,
+            //         fontWeight: FontWeight.w500,
+            //       ),
+            //     ),
+            //   ),
+
+            // Tags
+            if (currentPost.tags != null && currentPost.tags!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: currentPost.tags!.map((tag) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                      ),
+                      child: Text(
+                        '#$tag',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+            // Action Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // Like Button
+                _ActionButton(
+                  icon: currentPost.isliked ? Icons.favorite : Icons.favorite_border,
+                  label: '${currentPost.like_count}',
+                  color: currentPost.isliked ? Colors.red : Colors.grey,
+                  isLoading: isLiking,
+                  onPressed: isLiking ? null : () {
+                    if (currentPost.post_id != null) {
+                      ref.read(postFeedProvider.notifier).toggleLike(currentPost.post_id!);
+                    }
+                  },
+                ),
+
+                // Comment Button
+                _ActionButton(
+                  icon: Icons.comment_outlined,
+                  label: '${currentPost.comment_count}',
+                  color: Colors.grey,
+                  onPressed: () {
+                    _showCommentsSheet(context, currentPost.post_id!);
+                  },
+                ),
+
+                // Share Button
+                _ActionButton(
+                  icon: Icons.share_outlined,
+                  label: '${currentPost.share_count ?? 0}',
+                  color: Colors.grey,
+                  onPressed: () {
+                    _sharePost(context, currentPost);
+                  },
+                ),
+
+                // Bookmark Button
+                _ActionButton(
+                  icon: _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  label: '',
+                  color: _isBookmarked ? Colors.blue : Colors.grey,
+                  onPressed: () {
+                    _toggleBookmark();
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
   // Media Section Builder
-  Widget _buildMediaSection(List<String> mediaUrls) {
-    if (mediaUrls.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      height: 300,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: mediaUrls.length == 1
+  Widget _buildMediaSection(List<String> mediaUrls, List<XFile>? localFiles) {
+    if (localFiles != null && localFiles.isNotEmpty) {
+      return _buildLocalMediaSection(localFiles);
+    } else if (mediaUrls.isNotEmpty) {
+      return mediaUrls.length == 1
           ? _buildSingleMedia(mediaUrls[0])
-          : _buildMultipleMedia(mediaUrls),
-    );
+          : _buildMultipleMedia(mediaUrls);
+    }
+    return const SizedBox.shrink();
   }
 
-  Widget _buildSingleMedia(String mediaUrl) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: _isVideoUrl(mediaUrl)
-          ? VideoPlayerWidget(videoUrl: mediaUrl)
-          : Image.network(
-        mediaUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: 300,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            color: Colors.grey[800],
-            child: Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                    loadingProgress.expectedTotalBytes!
-                    : null,
-                color: Colors.blue,
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            color: Colors.grey[800],
-            child: const Center(
-              child: Icon(
-                Icons.image_not_supported,
-                color: Colors.grey,
-                size: 50,
-              ),
-            ),
-          );
+  Widget _buildLocalMediaSection(List<XFile> files) {
+    return AspectRatio(
+      aspectRatio: 5/6,
+      child: PageView.builder(
+        itemCount: files.length,
+        itemBuilder: (context, index) {
+          final file = files[index];
+          return _isVideoFile(file.path)
+              ? _LocalVideoPlayer(file: File(file.path))
+              : Image.file(File(file.path), fit: BoxFit.cover);
         },
       ),
     );
   }
 
-  Widget _buildMultipleMedia(List<String> mediaUrls) {
-    return Stack(
-      children: [
-        PageView.builder(
-          itemCount: mediaUrls.length,
-          itemBuilder: (context, index) {
-            final mediaUrl = mediaUrls[index];
+  Widget _buildSingleMedia(String mediaUrl) {
+    return AspectRatio(
+      aspectRatio: 5/6 ,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: _isVideoUrl(mediaUrl)
+            ? VideoPlayerWidget(videoUrl: mediaUrl)
+            : Image.network(
+          mediaUrl,
+          fit: BoxFit.cover, // Important: center crop like Instagram
+          width: double.infinity,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
             return Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _isVideoUrl(mediaUrl)
-                    ? VideoPlayerWidget(videoUrl: mediaUrl)
-                    : Image.network(
-                  mediaUrl,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[800],
-                      child: const Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey,
-                          size: 50,
-                        ),
-                      ),
-                    );
-                  },
+              color: Colors.black87,
+              child: Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                      loadingProgress.expectedTotalBytes!
+                      : null,
+                  color: Colors.blue,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.black87,
+              child: const Center(
+                child: Icon(
+                  Icons.image_not_supported,
+                  color: Colors.grey,
+                  size: 50,
                 ),
               ),
             );
           },
         ),
-        // Media counter indicator
-        Positioned(
-          top: 8,
-          right: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '1/${mediaUrls.length}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
+      ),
+    );
+  }
+
+  Widget _buildMultipleMedia(List<String> mediaUrls) {
+    final PageController pageController = PageController();
+    int currentPage = 0; // Add this as a state variable in your widget class
+
+    return AspectRatio(
+      aspectRatio: 5/6,
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          return Stack(
+            children: [
+              PageView.builder(
+                controller: pageController,
+                itemCount: mediaUrls.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    currentPage = index;
+                  });
+                },
+                itemBuilder: (context, index) {
+                  final mediaUrl = mediaUrls[index];
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: _isVideoUrl(mediaUrl)
+                        ? VideoPlayerWidget(videoUrl: mediaUrl)
+                        : Image.network(
+                      mediaUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.black87,
+                          child: const Center(
+                            child: Icon(
+                              Icons.image_not_supported,
+                              color: Colors.grey,
+                              size: 50,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
-            ),
-          ),
-        ),
-      ],
+              // Media counter indicator - NOW UPDATES!
+              Positioned(
+                top: 8,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${currentPage + 1}/${mediaUrls.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -791,6 +871,58 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
               ),
             ),
 
+            // Comment Input
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                border: Border(top: BorderSide(color: Colors.grey[700]!)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _commentController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment...',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.black87,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: IconButton(
+                      icon: _isSubmitting
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                        ),
+                      )
+                          : const Icon(Icons.send, color: Colors.blue),
+                      onPressed: _isSubmitting ? null : _submitComment,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // Comments List
             Expanded(
               child: _isLoading
@@ -817,58 +949,6 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
                     },
                   );
                 },
-              ),
-            ),
-
-            // Comment Input
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                border: Border(top: BorderSide(color: Colors.grey[700]!)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Add a comment...',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(25),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[900],
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: IconButton(
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                          : const Icon(Icons.send, color: Colors.white),
-                      onPressed: _isSubmitting ? null : _submitComment,
-                    ),
-                  ),
-                ],
               ),
             ),
           ],

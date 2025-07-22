@@ -1,3 +1,4 @@
+import 'package:image_picker/image_picker.dart';
 class Post_feed {
   String? post_id;
   String? user_id;
@@ -14,6 +15,7 @@ class Post_feed {
   int? share_count;  // Made nullable to match usage
   List<Comment> commentsList;
   List<String>? media_urls;  // Added missing media_urls property
+  List<XFile>? localMediaFiles;
 
   Post_feed({
     required this.post_id,
@@ -31,6 +33,7 @@ class Post_feed {
     this.share_count = 0,
     required this.commentsList,
     this.media_urls,  // Added media_urls parameter
+    this.localMediaFiles,
   });
 
   factory Post_feed.fromMap(Map<String, dynamic> data) {
@@ -76,7 +79,8 @@ class Post_feed {
       'comment_count': comment_count,
       'share_count': share_count,
       'isliked': isliked,
-      'media_urls': media_urls,  // Added media_urls to map
+      'media_urls': media_urls,
+      'localMediaFiles': localMediaFiles,
     };
   }
 
@@ -96,7 +100,9 @@ class Post_feed {
     int? comment_count,
     int? share_count,
     List<Comment>? commentsList,
-    List<String>? media_urls,  // Added media_urls parameter
+    List<String>? media_urls,
+    List<XFile>? localMediaFiles,
+
   }) {
     return Post_feed(
       post_id: post_id ?? this.post_id,
@@ -113,7 +119,8 @@ class Post_feed {
       comment_count: comment_count ?? this.comment_count,
       share_count: share_count ?? this.share_count,
       commentsList: commentsList ?? this.commentsList,
-      media_urls: media_urls ?? this.media_urls,  // Added media_urls
+      media_urls: media_urls ?? this.media_urls,
+      localMediaFiles: localMediaFiles ?? this.localMediaFiles,
     );
   }
 
