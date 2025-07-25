@@ -530,6 +530,7 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
                         return PostCard(
                           post: Post_feed(
                             post_id: 'preview_${DateTime.now().millisecondsSinceEpoch}',
+
                             user_id: userId,
                             title: _titleController.text,
                             content: _contentController.text,
@@ -545,6 +546,7 @@ class _PostCreateScreenState extends ConsumerState<PostCreateScreen> {
                             isliked: false,
                             commentsList: [],
                           ),
+                          isPreview:true,
                         );
                       },
                     );

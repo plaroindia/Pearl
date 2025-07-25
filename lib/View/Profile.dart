@@ -372,14 +372,17 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> with TickerProviderSta
                                 _buildStatItem(
                                   'Followers',
                                   profile.followersCount?.toString() ?? '0',
+                                  'Followers_page'
                                 ),
                                 _buildStatItem(
                                   'Following',
                                   profile.followingCount?.toString() ?? '0',
+                                  'Followee_page'
                                 ),
                                 _buildStatItem(
                                   'Streak',
                                   profile.streakCount?.toString() ?? '0',
+                                  'streak_page'
                                 ),
                               ],
                             ),
@@ -428,7 +431,7 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> with TickerProviderSta
                                 ),
                               ),
                               onPressed: () {},
-                              child: const Text("Friends"),
+                              child: const Text("Stats"),
                             ),
                           ],
                         ),
@@ -730,25 +733,30 @@ class _ProfileScreen extends ConsumerState<ProfileScreen> with TickerProviderSta
   }
 
   // Helper method to build stat items
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+  Widget _buildStatItem(String label, String value, String route) {
+    return GestureDetector(
+      onTap: (){
+        Navigator.pushNamed(context, route);
+      },
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 12,
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

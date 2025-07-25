@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
 import 'dart:ui';
+import '../../ViewModel/user_feed_provider.dart';
+
 
 class ToastProfileCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -119,6 +121,12 @@ class ToastProfileCard extends ConsumerWidget {
                     ),
                   ],
                 ),
+                IconButton(
+                  icon:Icon(Icons.more_vert),
+                  onPressed: (){
+                    _showMoreOptions(context,toast);
+                  },
+                ),
               ],
             ),
           ],
@@ -163,7 +171,7 @@ class _StatIcon extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context ) {
     return Row(
       children: [
         Icon(icon, size: 12, color: color),
@@ -190,3 +198,104 @@ class _StatIcon extends StatelessWidget {
     }
   }
 }
+
+
+
+// Replace the existing _showMoreOptions function with this:
+void _showMoreOptions(BuildContext context, Toast_feed toast) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.grey[900],
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => Consumer(
+      builder: (context, ref, child) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: Colors.blue),
+                title: const Text('Edit Toast', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Navigate to edit toast screen
+                  // Navigator.pushNamed(context, '/edit-toast', arguments: toast);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Toast', style: TextStyle(color: Colors.white)),
+                onTap: () async {
+                  //Navigator.pop(context);
+
+                  // Show confirmation dialog
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: Colors.grey[900],
+                      title: const Text('Delete Toast', style: TextStyle(color: Colors.white)),
+                      content: const Text('Are you sure you want to delete this toast?',
+                          style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                        ),
+                        TextButton(
+                          onPressed: () async{
+                              final success = await ref.read(profileFeedProvider.notifier).deleteToast(toast.toast_id!);
+
+                              Navigator.pop(context);
+                              Navigator.pop(context);
+
+
+                              if (success) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Toast deleted successfully')),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Failed to delete toast')),
+                                );
+                              }
+
+                          },//=> Navigator.pop(context, true),
+                          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_outlined, color: Colors.blue),
+                title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Copy toast link to clipboard
+                  // Clipboard.setData(ClipboardData(text: 'https://yourapp.com/toast/${toast.toast_id}'));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Link copied to clipboard')),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+

@@ -4,6 +4,8 @@ import 'View/intro_page.dart';
 import 'View/home_page.dart';
 import 'View/login_page.dart';
 import 'View/navipg.dart';
+import 'View/followers_page.dart';
+import 'View/following_page.dart';
 
 
 
@@ -20,6 +22,8 @@ class MyApp extends StatelessWidget {
         '/login': (context) => LoginScreen(),
         '/home': (context) => HomeScreen(),
         '/navipg': (context) => navCard(),
+        'Followers_page': (context) => const FollowersPage(),
+        'Followee_page': (context) => const FollowingPage(),
       },
       debugShowCheckedModeBanner: false,
       title: 'PLARO',

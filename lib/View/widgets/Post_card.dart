@@ -57,12 +57,14 @@ bool _isVideoFile(String path) {
 class PostCard extends ConsumerStatefulWidget {
   final Post_feed post;
   final VoidCallback? onTap;
+  final bool isPreview;
 
 
   const PostCard({
     Key? key,
     required this.post,
     this.onTap,
+    this.isPreview = false,
   }) : super(key: key);
 
   @override
@@ -74,6 +76,168 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   @override
   Widget build(BuildContext context) {
+    // For preview posts, use the widget.post directly and don't access postFeedState
+    if (widget.isPreview) {
+      return Card(
+        color: Colors.black87,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User Info Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundImage: widget.post.profile_pic != null
+                          ? NetworkImage(widget.post.profile_pic!)
+                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                      radius: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.post.username ?? 'Unknown User',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            _formatTimeAgo(widget.post.created_at),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Disable more options for preview
+                    IconButton(
+                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      onPressed: null, // Disabled for preview
+                    ),
+                  ],
+                ),
+              ),
+
+              // Title
+              if (widget.post.title != null && widget.post.title!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8.0,0.0,8.0,2.0),
+                  child: Text(
+                    widget.post.title!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+              // Media Section
+              if ((widget.post.media_urls != null && widget.post.media_urls!.isNotEmpty) ||
+                  (widget.post.localMediaFiles != null && widget.post.localMediaFiles!.isNotEmpty))
+                _buildMediaSection(widget.post.media_urls ?? [], widget.post.localMediaFiles),
+
+              // Content
+              if (widget.post.content != null && widget.post.content!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    widget.post.content!,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                    maxLines: 10,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+
+              // Tags
+              if (widget.post.tags != null && widget.post.tags!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: widget.post.tags!.map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                        ),
+                        child: Text(
+                          '#$tag',
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+              // Action Buttons - All disabled for preview
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  // Like Button - disabled
+                  _ActionButton(
+                    icon: Icons.favorite_border,
+                    label: '0',
+                    color: Colors.grey,
+                    onPressed: null, // Disabled for preview
+                  ),
+
+                  // Comment Button - disabled
+                  _ActionButton(
+                    icon: Icons.comment_outlined,
+                    label: '0',
+                    color: Colors.grey,
+                    onPressed: null, // Disabled for preview
+                  ),
+
+                  // Share Button - disabled
+                  _ActionButton(
+                    icon: Icons.share_outlined,
+                    label: '0',
+                    color: Colors.grey,
+                    onPressed: null, // Disabled for preview
+                  ),
+
+                  // Bookmark Button - disabled
+                  _ActionButton(
+                    icon: Icons.bookmark_border,
+                    label: '',
+                    color: Colors.grey,
+                    onPressed: null, // Disabled for preview
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Original code for non-preview posts
     final postFeedState = ref.watch(postFeedProvider);
     final currentPost = postFeedState.posts.firstWhere(
             (p) => p.post_id == widget.post.post_id,
@@ -99,7 +263,6 @@ class _PostCardState extends ConsumerState<PostCard> {
     });
 
     return Card(
-     // margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.black87,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(3),
@@ -110,6 +273,7 @@ class _PostCardState extends ConsumerState<PostCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ... rest of your existing non-preview code
             // User Info Header
             Padding(
               padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
@@ -154,8 +318,6 @@ class _PostCardState extends ConsumerState<PostCard> {
               ),
             ),
 
-      //      const SizedBox(height: 3),
-
             // Title
             if (currentPost.title != null && currentPost.title!.isNotEmpty)
               Padding(
@@ -170,13 +332,12 @@ class _PostCardState extends ConsumerState<PostCard> {
                 ),
               ),
 
-
             // Media Section
             if ((currentPost.media_urls != null && currentPost.media_urls!.isNotEmpty) ||
                 (currentPost.localMediaFiles != null && currentPost.localMediaFiles!.isNotEmpty))
               _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
 
-            // Captions
+            // Content
             if (currentPost.content != null && currentPost.content!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.all(12),
@@ -191,21 +352,6 @@ class _PostCardState extends ConsumerState<PostCard> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-
-
-            // // Caption
-            // if (currentPost.caption != null && currentPost.caption!.isNotEmpty)
-            //   Padding(
-            //     padding: const EdgeInsets.only(top: 8, bottom: 12),
-            //     child: Text(
-            //       currentPost.caption!,
-            //       style: const TextStyle(
-            //         color: Colors.white,
-            //         fontSize: 16,
-            //         fontWeight: FontWeight.w500,
-            //       ),
-            //     ),
-            //   ),
 
             // Tags
             if (currentPost.tags != null && currentPost.tags!.isNotEmpty)
@@ -528,6 +674,7 @@ class _PostCardState extends ConsumerState<PostCard> {
       //     },
       //   );
       // },
+
     );
   }
 

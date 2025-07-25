@@ -4,6 +4,8 @@ import 'package:video_player/video_player.dart';
 import '../../Model/post.dart';
 import '../../ViewModel/post_feed_provider.dart';
 import 'dart:io';
+import '../../ViewModel/user_feed_provider.dart';
+
 
 class PostProfileCard extends ConsumerWidget {
   final Post_feed post;
@@ -107,6 +109,12 @@ class PostProfileCard extends ConsumerWidget {
                               color: Colors.grey,
                             ),
                           ],
+                        ),
+                        IconButton(
+                          icon:Icon(Icons.more_vert),
+                          onPressed: (){
+                            _showMoreOptions(context,post);
+                            },
                         ),
                       ],
                     ),
@@ -300,4 +308,118 @@ class _StatIcon extends StatelessWidget {
       return count.toString();
     }
   }
+}
+
+void _showMoreOptions(BuildContext context, Post_feed post) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.grey[900],
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (context) {
+      return Consumer(
+        builder: (context, ref, child) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined, color: Colors.blue),
+                  title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // Navigate to edit post screen
+                    // Navigator.pushNamed(context, '/edit-post', arguments: post);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
+                  onTap: () async {
+
+
+                    // final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
+                    // if (success) {
+                    //   ScaffoldMessenger.of(context).showSnackBar(
+                    //     const SnackBar(content: Text('Post deleted successfully')),
+                    //   );
+                    // } else {
+                    //   ScaffoldMessenger.of(context).showSnackBar(
+                    //     const SnackBar(content: Text('Failed to delete post')),
+                    //   );
+                    // }
+
+
+                   // Navigator.pop(context);
+
+                    // Show confirmation dialog
+                  showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: Colors.grey[900],
+                        title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
+                        content: const Text('Are you sure you want to delete this post?',
+                            style: TextStyle(color: Colors.white70)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                          ),
+                          TextButton(
+                            onPressed: () async{
+                                final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
+
+                                Navigator.pop(context);
+                                Navigator.pop(context);
+
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Post deleted successfully')),
+                                  );
+
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Failed to delete post')),
+                                  );
+                                  // Navigator.pop(context);
+                                  // Navigator.pop(context);
+                                }
+                            },// => Navigator.pop(context, true),
+                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+                  //Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.visibility_off_outlined, color: Colors.orange),
+                  title: const Text('Hide Post', style: TextStyle(color: Colors.white)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // Implement hide post functionality
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Post hidden')),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
 }
