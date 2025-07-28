@@ -166,4 +166,9 @@ class SetProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
   void reset() {
     state = const AsyncValue.data(null);
   }
+
+  void clearProfile() {
+    // Reset to initial state - adjust this based on your actual state structure
+    state = const AsyncValue.data(null); // or whatever your initial state is
+  }
 }

@@ -51,7 +51,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   static const int _pageSize = 10;
 
   // Load initial posts
-  Future<void> loadPosts() async {
+  Future<void> loadTosts() async {
     if (state.isLoading) return;
 
     state = state.copyWith(isLoading: true, error: null);
@@ -175,7 +175,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   // Refresh posts
   Future<void> refreshPosts() async {
     state = const ToastFeedState();
-    await loadPosts();
+    await loadTosts();
   }
 
 
@@ -187,7 +187,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     // Check if posts are loaded
     if (state.posts.isEmpty) {
       print('🟡 No posts loaded yet, loading posts first...');
-      await loadPosts();
+      await loadTosts();
 
       // Check again after loading
       if (state.posts.isEmpty) {

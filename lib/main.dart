@@ -6,7 +6,8 @@ import 'View/login_page.dart';
 import 'View/navipg.dart';
 import 'View/followers_page.dart';
 import 'View/following_page.dart';
-
+import 'View/foll_page.dart';
+import 'package:plaro_3/View/foll_page.dart';
 
 
 void main() async{
@@ -15,6 +16,8 @@ void main() async{
 }
 
 class MyApp extends StatelessWidget {
+
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -22,8 +25,9 @@ class MyApp extends StatelessWidget {
         '/login': (context) => LoginScreen(),
         '/home': (context) => HomeScreen(),
         '/navipg': (context) => navCard(),
-        'Followers_page': (context) => const FollowersPage(),
-        'Followee_page': (context) => const FollowingPage(),
+        // 'Followers_page': (context) => const FollowersPage(),
+        // 'Followee_page': (context) => const FollowingPage(),
+        //'/FollowPage': (context) => const FollowPage(userId: userId)
       },
       debugShowCheckedModeBanner: false,
       title: 'PLARO',

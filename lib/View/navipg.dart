@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/View/post_page.dart';
 import 'home_page.dart';
-import 'Profile.dart';
+import 'other_profile.dart';
 import 'toast_page.dart';
+import '../ViewModel/setProfileProvider.dart';
+import '../ViewModel/user_feed_provider.dart';
+import '../ViewModel/follow_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../Model/user_profile.dart';
 
 void main() => runApp(MaterialApp(
   home: navCard(),
@@ -16,22 +21,114 @@ class navCard extends ConsumerStatefulWidget {
 
 class _navCardState extends ConsumerState<navCard> {
   int _selectedIndex = 0;
-  final List<Widget> _pages = [
-    HomeScreen(),
-    Container(), // Placeholder for create (won't be used)
-    NotificationsScreen(),
-    ProfileScreen(),
-  ];
+  final SupabaseClient _supabase = Supabase.instance.client;
+
+  // Get current user from Supabase
+  User? get currentUser => _supabase.auth.currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    // Don't load profile here - let OtherProfileScreen handle it
+  }
+
+  // Get the appropriate widget for each tab
+  Widget _getPageForIndex(int index) {
+    switch (index) {
+      case 0:
+        return HomeScreen();
+      case 1:
+        return Container(); // Placeholder for create (won't be used due to modal)
+      case 2:
+        return NotificationsScreen();
+      case 3:
+        return _buildProfileScreen();
+      default:
+        return HomeScreen();
+    }
+  }
+
+  // Build profile screen with proper error handling and loading states
+  Widget _buildProfileScreen() {
+    final user = currentUser;
+
+    if (user == null) {
+      return _buildAuthRequiredScreen();
+    }
+
+    // Pass null as userId to indicate this is the current user's profile
+    // Don't pass initialUserData to force fresh loading
+    return OtherProfileScreen(
+      userId: null, // This indicates it's the current user's profile
+      key: ValueKey('own_profile_${user.id}'), // Force rebuild when user changes
+    );
+  }
+
+  // Build screen when user is not authenticated
+  Widget _buildAuthRequiredScreen() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.person_off,
+              color: Colors.grey[400],
+              size: 64,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Please log in to view profile',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                // Navigate to login screen
+                // You can implement this based on your app structure
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              child: Text('Log In'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _onItemTapped(int index) {
     if (index == 1) {
       // Show create modal instead of navigating
       _showCreateModal();
     } else {
+      // Clear profile-related state when navigating to profile tab
+      if (index == 3) {
+        _clearProfileState();
+      }
+
       setState(() {
         _selectedIndex = index;
       });
     }
+  }
+
+  // Clear profile state to ensure fresh data when switching to profile tab
+  void _clearProfileState() {
+    // Clear profile provider
+    ref.read(setProfileProvider.notifier).clearProfile();
+    // Clear feed provider
+    ref.read(profileFeedProvider.notifier).clearFeed();
+    // Clear follow provider
+    ref.read(followProvider.notifier).clear();
   }
 
   void _showCreateModal() {
@@ -52,10 +149,7 @@ class _navCardState extends ConsumerState<navCard> {
         backgroundColor: Colors.black,
         toolbarHeight: 0.0,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: _getPageForIndex(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         elevation: 3.0,
@@ -98,8 +192,6 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
   int _selectedIndex = 0;
   final List<String> _options = ['Text', 'Post', 'Byte', 'Course'];
 
-
-
   void _onOptionSelected(int index) {
     setState(() {
       _selectedIndex = index;
@@ -114,12 +206,10 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
     // Handle navigation based on selection
     switch (index) {
       case 0: // Text
-        //_showComingSoon('Text Creation');
         Navigator.push(context,
-        MaterialPageRoute(builder:  (context) =>  ToastPage()));
+            MaterialPageRoute(builder:  (context) =>  ToastPage()));
         break;
       case 1: // Post
-        //_showComingSoon('Post Creation');
         Navigator.push(context,
             MaterialPageRoute(builder:  (context) =>  PostCreateScreen()));
         break;
@@ -149,7 +239,7 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
     final isTablet = screenWidth > 600;
 
     return Container(
-      height: screenHeight * 0.23, // Takes up 75% of screen height
+      height: screenHeight * 0.23, // Takes up 23% of screen height
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.only(
@@ -160,7 +250,6 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
       child: Column(
         children: [
           // Handle bar
-
           Container(
             margin: EdgeInsets.only(top: 8),
             width: 40,

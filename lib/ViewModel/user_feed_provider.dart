@@ -78,16 +78,19 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   ProfileFeedNotifier() : super(const ProfileFeedState());
 
   final SupabaseClient _supabase = Supabase.instance.client;
+
+ // _supabase.auth.currentUser;
+
   static const int _pageSize = 12; // Increased for grid layout
 
   // Load user's posts
-  Future<void> loadUserPosts() async {
+  Future<void> loadUserPosts(final UserId) async {
     if (state.isLoadingPosts) return;
 
     state = state.copyWith(isLoadingPosts: true, error: null);
 
     try {
-      final user = _supabase.auth.currentUser;
+      final user = UserId; // _supabase.auth.currentUser;
       if (user == null) {
         state = state.copyWith(
           isLoadingPosts: false,
@@ -102,7 +105,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             *,
             user_profiles!inner(username, profile_pic)
           ''')
-          .eq('user_id', user.id)
+          .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
@@ -132,7 +135,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .from('post_likes')
             .select('like_id')
             .eq('post_id', postId)
-            .eq('user_id', user.id)
+            .eq('user_id', user)
             .maybeSingle();
         isLiked = likeResponse != null;
 
@@ -164,13 +167,13 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   }
 
   // Load user's toasts
-  Future<void> loadUserToasts() async {
+  Future<void> loadUserToasts(final UserId) async {
     if (state.isLoadingToasts) return;
 
     state = state.copyWith(isLoadingToasts: true, error: null);
 
     try {
-      final user = _supabase.auth.currentUser;
+      final user = UserId;//_supabase.auth.currentUser;
       if (user == null) {
         state = state.copyWith(
           isLoadingToasts: false,
@@ -179,7 +182,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         return;
       }
 
-      print('Loading toasts for user: ${user.id}'); // Debug log
+      print('Loading toasts for user: ${user}'); // Debug log
 
       final response = await _supabase
           .from('toasts')
@@ -187,7 +190,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           *,
           user_profiles!inner(username, profile_pic)
         ''')
-          .eq('user_id', user.id)
+          .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
@@ -231,7 +234,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
               .from('toast_likes')
               .select('toast_like_id')
               .eq('toast_id', toastId)
-              .eq('user_id', user.id)
+              .eq('user_id', user)
               .maybeSingle();
           isLiked = likeResponse != null;
 
@@ -272,10 +275,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   }
 
   // Load more posts (pagination)
-  Future<void> loadMoreUserPosts() async {
+  Future<void> loadMoreUserPosts(final UserId) async {
     if (state.isLoadingMorePosts || !state.hasMorePosts) return;
 
-    final user = _supabase.auth.currentUser;
+    final user = UserId;//_supabase.auth.currentUser;
     if (user == null) return;
 
     state = state.copyWith(isLoadingMorePosts: true, error: null);
@@ -290,7 +293,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             *,
             user_profiles!inner(username, profile_pic)
           ''')
-          .eq('user_id', user.id)
+          .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
@@ -324,7 +327,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .from('post_likes')
             .select('like_id')
             .eq('post_id', postId)
-            .eq('user_id', user.id)
+            .eq('user_id', user)
             .maybeSingle();
         isLiked = likeResponse != null;
 
@@ -356,10 +359,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   }
 
   // Load more toasts (pagination)
-  Future<void> loadMoreUserToasts() async {
+  Future<void> loadMoreUserToasts(final UserId) async {
     if (state.isLoadingMoreToasts || !state.hasMoreToasts) return;
 
-    final user = _supabase.auth.currentUser;
+    final user = UserId;
     if (user == null) return;
 
     state = state.copyWith(isLoadingMoreToasts: true, error: null);
@@ -374,7 +377,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             *,
             user_profiles!inner(username, profile_pic)
           ''')
-          .eq('user_id', user.id)
+          .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
@@ -408,7 +411,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .from('toast_likes')
             .select('toast_like_id')
             .eq('toast_id', toastId)
-            .eq('user_id', user.id)
+            .eq('user_id', user)
             .maybeSingle();
         isLiked = likeResponse != null;
 
@@ -440,11 +443,11 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   }
 
   // Refresh user's posts and toasts
-  Future<void> refreshUserContent() async {
+  Future<void> refreshUserContent(final UserId) async {
     state = const ProfileFeedState();
     await Future.wait([
-      loadUserPosts(),
-      loadUserToasts(),
+      loadUserPosts(UserId),
+      loadUserToasts(UserId),
     ]);
   }
 
@@ -481,7 +484,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .from('post_likes')
             .delete()
             .eq('post_id', postId)
-            .eq('user_id', user.id);
+            .eq('user_id', user);
 
         await _supabase
             .from('post')
@@ -491,7 +494,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         // Like the post
         await _supabase.from('post_likes').insert({
           'post_id': postId,
-          'user_id': user.id,
+          'user_id': user,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
@@ -555,12 +558,12 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .from('toast_likes')
             .delete()
             .eq('toast_id', toastId)
-            .eq('user_id', user.id);
+            .eq('user_id', user);
       } else {
         // Like the toast
         await _supabase.from('toast_likes').insert({
           'toast_id': toastId,
-          'user_id': user.id,
+          'user_id': user,
           'liked_at': DateTime.now().toIso8601String(),
         });
       }
@@ -599,7 +602,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('post')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user.id); // Ensure only owner can delete
+          .eq('user_id', user); // Ensure only owner can delete
 
       // Remove from local state
       final updatedPosts = state.posts.where((post) => post.post_id != postId).toList();
@@ -623,7 +626,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('toasts')
           .delete()
           .eq('toast_id', toastId)
-          .eq('user_id', user.id); // Ensure only owner can delete
+          .eq('user_id', user); // Ensure only owner can delete
 
       // Remove from local state
       final updatedToasts = state.toasts.where((toast) => toast.toast_id != toastId).toList();
@@ -634,6 +637,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       state = state.copyWith(error: 'Failed to delete toast: $e');
       return false;
     }
+  }
+
+  void clearFeed() {
+    state = const ProfileFeedState();
   }
 
   void clearError() {

@@ -90,7 +90,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Initialize toast feed if not loaded
     if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
-      futures.add(ref.read(toastFeedProvider.notifier).loadPosts());
+      futures.add(ref.read(toastFeedProvider.notifier).loadTosts());
     }
 
     // Initialize post feed if not loaded
@@ -405,11 +405,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // Initialize feeds when authenticated
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
-              ref.read(toastFeedProvider.notifier).loadPosts();
+              ref.read(toastFeedProvider.notifier).loadTosts();
             }
-            if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
-              ref.read(postFeedProvider.notifier).loadPosts();
-            }
+            // if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
+            //   ref.read(postFeedProvider.notifier).loadPosts();
+            // }
           });
 
           return _buildCombinedFeed(toastFeedState, postFeedState);

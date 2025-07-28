@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../Model/user_profile.dart';
 import 'widgets/Profile_card.dart';
 import '../ViewModel/search_provider.dart';
-
+import '../View/other_profile.dart';
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -223,13 +223,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       return ProfileCard(
                         user: user,
                         onTap: () {
-                          // Handle profile tap - navigate to profile details
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Tapped on ${user.username}'),
-                              backgroundColor: Colors.grey[800],
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => OtherProfileScreen(
+                                userId: user.user_id, // Pass the user ID
+                                initialUserData: user, // Pass initial data to avoid loading delay
+                              ),
                             ),
                           );
+
+
+                          // // Handle profile tap - navigate to profile details
+                          // ScaffoldMessenger.of(context).showSnackBar(
+                          //   SnackBar(
+                          //     content: Text('Tapped on ${user.username}'),
+                          //     backgroundColor: Colors.grey[800],
+                          //   ),
+                          // );
                         },
                       );
                     },
