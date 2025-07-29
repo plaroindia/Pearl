@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../Model/post.dart';
 import '../../ViewModel/post_feed_provider.dart';
+import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'post_comment_card.dart';
 import 'dart:io';
 
@@ -59,7 +60,6 @@ class PostCard extends ConsumerStatefulWidget {
   final VoidCallback? onTap;
   final bool isPreview;
 
-
   const PostCard({
     Key? key,
     required this.post,
@@ -76,10 +76,14 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final themeMode = ref.watch(themeNotifierProvider);
+    final isDark = themeMode == ThemeMode.dark;
+
     // For preview posts, use the widget.post directly and don't access postFeedState
     if (widget.isPreview) {
       return Card(
-        color: Colors.black87,
+        color: theme.cardTheme.color,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(3),
         ),
@@ -107,16 +111,16 @@ class _PostCardState extends ConsumerState<PostCard> {
                         children: [
                           Text(
                             widget.post.username ?? 'Unknown User',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           Text(
                             _formatTimeAgo(widget.post.created_at),
-                            style: const TextStyle(
-                              color: Colors.grey,
+                            style: TextStyle(
+                              color: theme.dividerColor,
                               fontSize: 12,
                             ),
                           ),
@@ -125,7 +129,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     ),
                     // Disable more options for preview
                     IconButton(
-                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      icon: Icon(Icons.more_vert, color: theme.dividerColor),
                       onPressed: null, // Disabled for preview
                     ),
                   ],
@@ -138,8 +142,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                   padding: const EdgeInsets.fromLTRB(8.0,0.0,8.0,2.0),
                   child: Text(
                     widget.post.title!,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -157,8 +161,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                   padding: const EdgeInsets.all(12),
                   child: Text(
                     widget.post.content!,
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.8),
                       fontSize: 14,
                       height: 1.4,
                     ),
@@ -178,14 +182,14 @@ class _PostCardState extends ConsumerState<PostCard> {
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.2),
+                          color: theme.colorScheme.primary.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.5)),
                         ),
                         child: Text(
                           '#$tag',
-                          style: const TextStyle(
-                            color: Colors.blue,
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
                             fontSize: 12,
                           ),
                         ),
@@ -202,7 +206,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.favorite_border,
                     label: '0',
-                    color: Colors.grey,
+                    color: theme.dividerColor!,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -210,7 +214,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.comment_outlined,
                     label: '0',
-                    color: Colors.grey,
+                    color: theme.dividerColor!,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -218,7 +222,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.share_outlined,
                     label: '0',
-                    color: Colors.grey,
+                    color: theme.dividerColor!,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -226,7 +230,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.bookmark_border,
                     label: '',
-                    color: Colors.grey,
+                    color: theme.dividerColor!,
                     onPressed: null, // Disabled for preview
                   ),
                 ],
@@ -263,7 +267,7 @@ class _PostCardState extends ConsumerState<PostCard> {
     });
 
     return Card(
-      color: Colors.black87,
+      color: theme.cardTheme.color,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(3),
       ),
@@ -273,7 +277,6 @@ class _PostCardState extends ConsumerState<PostCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ... rest of your existing non-preview code
             // User Info Header
             Padding(
               padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
@@ -292,16 +295,16 @@ class _PostCardState extends ConsumerState<PostCard> {
                       children: [
                         Text(
                           currentPost.username ?? 'Unknown User',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
                           _formatTimeAgo(currentPost.created_at),
-                          style: const TextStyle(
-                            color: Colors.grey,
+                          style: TextStyle(
+                            color: theme.dividerColor,
                             fontSize: 12,
                           ),
                         ),
@@ -309,7 +312,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.more_vert, color: Colors.grey),
+                    icon: Icon(Icons.more_vert, color: theme.dividerColor),
                     onPressed: () {
                       _showMoreOptions(context, currentPost);
                     },
@@ -324,8 +327,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                 padding: const EdgeInsets.fromLTRB(8.0,0.0,8.0,2.0),
                 child: Text(
                   currentPost.title!,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -343,8 +346,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   currentPost.content!,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.8),
                     fontSize: 14,
                     height: 1.4,
                   ),
@@ -364,14 +367,14 @@ class _PostCardState extends ConsumerState<PostCard> {
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
+                        color: theme.colorScheme.primary.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.5)),
                       ),
                       child: Text(
                         '#$tag',
-                        style: const TextStyle(
-                          color: Colors.blue,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
                           fontSize: 12,
                         ),
                       ),
@@ -388,7 +391,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: currentPost.isliked ? Icons.favorite : Icons.favorite_border,
                   label: '${currentPost.like_count}',
-                  color: currentPost.isliked ? Colors.red : Colors.grey,
+                  color: currentPost.isliked ? Colors.red : theme.dividerColor!,
                   isLoading: isLiking,
                   onPressed: isLiking ? null : () {
                     if (currentPost.post_id != null) {
@@ -401,7 +404,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: Icons.comment_outlined,
                   label: '${currentPost.comment_count}',
-                  color: Colors.grey,
+                  color: theme.dividerColor!,
                   onPressed: () {
                     _showCommentsSheet(context, currentPost.post_id!);
                   },
@@ -411,7 +414,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: Icons.share_outlined,
                   label: '${currentPost.share_count ?? 0}',
-                  color: Colors.grey,
+                  color: theme.dividerColor!,
                   onPressed: () {
                     _sharePost(context, currentPost);
                   },
@@ -421,7 +424,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
                   label: '',
-                  color: _isBookmarked ? Colors.blue : Colors.grey,
+                  color: _isBookmarked ? theme.colorScheme.primary : theme.dividerColor!,
                   onPressed: () {
                     _toggleBookmark();
                   },
@@ -462,6 +465,8 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   Widget _buildSingleMedia(String mediaUrl) {
+    final theme = Theme.of(context);
+
     return AspectRatio(
       aspectRatio: 5/6 ,
       child: ClipRRect(
@@ -470,30 +475,30 @@ class _PostCardState extends ConsumerState<PostCard> {
             ? VideoPlayerWidget(videoUrl: mediaUrl)
             : Image.network(
           mediaUrl,
-          fit: BoxFit.cover, // Important: center crop like Instagram
+          fit: BoxFit.cover,
           width: double.infinity,
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
             return Container(
-              color: Colors.black87,
+              color: theme.cardTheme.color,
               child: Center(
                 child: CircularProgressIndicator(
                   value: loadingProgress.expectedTotalBytes != null
                       ? loadingProgress.cumulativeBytesLoaded /
                       loadingProgress.expectedTotalBytes!
                       : null,
-                  color: Colors.blue,
+                  color: theme.colorScheme.primary,
                 ),
               ),
             );
           },
           errorBuilder: (context, error, stackTrace) {
             return Container(
-              color: Colors.black87,
-              child: const Center(
+              color: theme.cardTheme.color,
+              child: Center(
                 child: Icon(
                   Icons.image_not_supported,
-                  color: Colors.grey,
+                  color: theme.dividerColor,
                   size: 50,
                 ),
               ),
@@ -506,7 +511,7 @@ class _PostCardState extends ConsumerState<PostCard> {
 
   Widget _buildMultipleMedia(List<String> mediaUrls) {
     final PageController pageController = PageController();
-    int currentPage = 0; // Add this as a state variable in your widget class
+    int currentPage = 0;
 
     return AspectRatio(
       aspectRatio: 5/6,
@@ -524,6 +529,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                 },
                 itemBuilder: (context, index) {
                   final mediaUrl = mediaUrls[index];
+                  final theme = Theme.of(context);
+
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(3),
                     child: _isVideoUrl(mediaUrl)
@@ -534,11 +541,11 @@ class _PostCardState extends ConsumerState<PostCard> {
                       width: double.infinity,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
-                          color: Colors.black87,
-                          child: const Center(
+                          color: theme.cardTheme.color,
+                          child: Center(
                             child: Icon(
                               Icons.image_not_supported,
-                              color: Colors.grey,
+                              color: theme.dividerColor,
                               size: 50,
                             ),
                           ),
@@ -548,7 +555,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   );
                 },
               ),
-              // Media counter indicator - NOW UPDATES!
+              // Media counter indicator
               Positioned(
                 top: 8,
                 right: 16,
@@ -597,9 +604,11 @@ class _PostCardState extends ConsumerState<PostCard> {
   }
 
   void _showMoreOptions(BuildContext context, Post_feed post) {
+    final theme = Theme.of(context);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: theme.cardTheme.color,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -613,13 +622,13 @@ class _PostCardState extends ConsumerState<PostCard> {
                 height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.grey[600],
+                  color: theme.dividerColor,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.report_outlined, color: Colors.red),
-                title: const Text('Report Post', style: TextStyle(color: Colors.white)),
+                title: Text('Report Post', style: TextStyle(color: theme.colorScheme.onSurface)),
                 onTap: () {
                   Navigator.pop(context);
                   _reportPost(context, post);
@@ -627,15 +636,15 @@ class _PostCardState extends ConsumerState<PostCard> {
               ),
               ListTile(
                 leading: const Icon(Icons.block_outlined, color: Colors.orange),
-                title: const Text('Block User', style: TextStyle(color: Colors.white)),
+                title: Text('Block User', style: TextStyle(color: theme.colorScheme.onSurface)),
                 onTap: () {
                   Navigator.pop(context);
                   _blockUser(context, post);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.copy_outlined, color: Colors.grey),
-                title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.copy_outlined, color: theme.dividerColor),
+                title: Text('Copy Link', style: TextStyle(color: theme.colorScheme.onSurface)),
                 onTap: () {
                   Navigator.pop(context);
                   _copyPostLink(context, post);
@@ -657,24 +666,6 @@ class _PostCardState extends ConsumerState<PostCard> {
       builder: (BuildContext context) {
         return CommentSheet(postId: postId);
       },
-
-      // shape: const RoundedRectangleBorder(
-      //   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      // ),
-      // builder: (context) {
-      //   return DraggableScrollableSheet(
-      //     initialChildSize: 0.7,
-      //     minChildSize: 0.3,
-      //     maxChildSize: 0.9,
-      //     builder: (context, scrollController) {
-      //       return CommentSheet(
-      //         postId: postId,
-      //         scrollController: scrollController,
-      //       );
-      //     },
-      //   );
-      // },
-
     );
   }
 
@@ -698,21 +689,23 @@ Shared from MyApp
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(_isBookmarked ? 'Post bookmarked' : 'Post removed from bookmarks'),
-        backgroundColor: _isBookmarked ? Colors.blue : Colors.grey,
+        backgroundColor: _isBookmarked ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
         duration: const Duration(seconds: 1),
       ),
     );
   }
 
   void _reportPost(BuildContext context, Post_feed post) {
+    final theme = Theme.of(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Report Post', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: theme.cardTheme.color,
+        title: Text('Report Post', style: TextStyle(color: theme.colorScheme.onSurface)),
+        content: Text(
           'Are you sure you want to report this post? We will review it and take appropriate action.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8)),
         ),
         actions: [
           TextButton(
@@ -737,14 +730,16 @@ Shared from MyApp
   }
 
   void _blockUser(BuildContext context, Post_feed post) {
+    final theme = Theme.of(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Block User', style: TextStyle(color: Colors.white)),
+        backgroundColor: theme.cardTheme.color,
+        title: Text('Block User', style: TextStyle(color: theme.colorScheme.onSurface)),
         content: Text(
           'Are you sure you want to block ${post.username ?? 'this user'}? You won\'t see their posts anymore.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8)),
         ),
         actions: [
           TextButton(
@@ -769,10 +764,8 @@ Shared from MyApp
   }
 
   void _copyPostLink(BuildContext context, Post_feed post) {
-    // In a real app, you'd generate an actual link
     final link = 'https://myapp.com/post/${post.post_id}';
 
-    // Copy to clipboard (you'd need to import 'package:flutter/services.dart')
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Link copied to clipboard'),
@@ -875,11 +868,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (!_isInitialized) {
       return Container(
-        color: Colors.grey[800],
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.blue),
+        color: theme.cardTheme.color,
+        child: Center(
+          child: CircularProgressIndicator(color: theme.colorScheme.primary),
         ),
       );
     }
@@ -920,12 +915,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 // Comment Sheet Widget
 class CommentSheet extends ConsumerStatefulWidget {
   final String postId;
-  //final ScrollController scrollController;
 
   const CommentSheet({
     Key? key,
     required this.postId,
-    //required this.scrollController,
   }) : super(key: key);
 
   @override
@@ -979,129 +972,131 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) {
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, scrollController) {
         return Container(
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            // Handle
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12.0),
-              child: Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(10),
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: theme.dividerColor?.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
-            ),
 
-            // Header
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Comments',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-
-            // Comment Input
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                border: Border(top: BorderSide(color: Colors.grey[700]!)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Add a comment...',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(25),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.black87,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: IconButton(
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                        ),
-                      )
-                          : const Icon(Icons.send, color: Colors.blue),
-                      onPressed: _isSubmitting ? null : _submitComment,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Comments List
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                child: CircularProgressIndicator(color: Colors.blue),
-              )
-                  : _comments.isEmpty
-                  ? const Center(
+              // Header
+              Padding(
+                padding: EdgeInsets.all(16),
                 child: Text(
-                  'No comments yet. Be the first to comment!',
-                  style: TextStyle(color: Colors.white54),
+                  'Comments',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              )
-                  : ListView.builder(
-                controller: scrollController,
-                itemCount: _comments.length,
-                itemBuilder: (context, index) {
-                  final comment = _comments[index];
-                  return CommentCard(
-                      comment: comment,
-                    onTap: () async {
-                      await ref.read(postFeedProvider.notifier).toggleCommentLike(comment.commentId);
-                      await _loadComments(); // Refresh comments
-                    },
-                  );
-                },
               ),
-            ),
-          ],
-        ),
-      );
-        },
+
+              // Comment Input
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  border: Border(top: BorderSide(color: theme.dividerColor!)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                        decoration: InputDecoration(
+                          hintText: 'Add a comment...',
+                          hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: theme.scaffoldBackgroundColor,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        maxLines: null,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: theme.scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: IconButton(
+                        icon: _isSubmitting
+                            ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                          ),
+                        )
+                            : Icon(Icons.send, color: theme.colorScheme.primary),
+                        onPressed: _isSubmitting ? null : _submitComment,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Comments List
+              Expanded(
+                child: _isLoading
+                    ? Center(
+                  child: CircularProgressIndicator(color: theme.colorScheme.primary),
+                )
+                    : _comments.isEmpty
+                    ? Center(
+                  child: Text(
+                    'No comments yet. Be the first to comment!',
+                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                  ),
+                )
+                    : ListView.builder(
+                  controller: scrollController,
+                  itemCount: _comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = _comments[index];
+                    return CommentCard(
+                      comment: comment,
+                      onTap: () async {
+                        await ref.read(postFeedProvider.notifier).toggleCommentLike(comment.commentId);
+                        await _loadComments(); // Refresh comments
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

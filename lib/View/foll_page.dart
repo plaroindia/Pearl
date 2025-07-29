@@ -155,7 +155,7 @@ class _FollowPageState extends ConsumerState<FollowPage>
           ),
         )
             : const Text(
-          'Connections',
+          'Squires',
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,

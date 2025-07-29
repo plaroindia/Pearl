@@ -8,6 +8,9 @@ import '../ViewModel/post_feed_provider.dart';
 import 'widgets/toast_card.dart';
 import 'widgets/post_card.dart';
 import 'search_page.dart';
+import '../ViewModel/theme_provider.dart';
+import 'allevents_page.dart';
+
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -215,6 +218,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final profileState = ref.watch(setProfileProvider);
     final toastFeedState = ref.watch(toastFeedProvider);
     final postFeedState = ref.watch(postFeedProvider);
+    final themeMode = ref.watch(themeNotifierProvider);
 
     if (!_isInitialized) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -223,20 +227,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(
-          color: Colors.white54,
-        ),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
+        elevation: Theme.of(context).appBarTheme.elevation,
+        iconTheme: Theme.of(context).appBarTheme.iconTheme,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               "PLARO",
               style: TextStyle(
-                color: Colors.white54,
+                color: Theme.of(context).appBarTheme.foregroundColor,
                 fontSize: 20.0,
+                fontWeight: FontWeight.bold,
                 letterSpacing: 0.0,
               ),
             ),
@@ -249,13 +254,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       MaterialPageRoute(builder: (context) => const SearchScreen()),
                     );
                   },
-                  icon: const Icon(Icons.search),
+                  icon: Icon(
+                    Icons.search,
+                    color: Theme.of(context).appBarTheme.iconTheme?.color,
+                  ),
                 ),
                 IconButton(
                   onPressed: () {
                     Navigator.pushNamed(context, '/create_post');
                   },
-                  icon: const Icon(Icons.add_box_outlined),
+                  icon: Icon(
+                    Icons.add_box_outlined,
+                    color: Theme.of(context).appBarTheme.iconTheme?.color,
+                  ),
                 ),
               ],
             ),
@@ -263,7 +274,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
       drawer: Drawer(
-        backgroundColor: Colors.black87,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(8.0),
           child: Column(
@@ -273,9 +284,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16.0),
-                margin: const EdgeInsets.only(bottom: 16.0),
+                margin: const EdgeInsets.only(bottom: 16.0, top: 32.0), // Added top margin for status bar
                 decoration: BoxDecoration(
-                  color: Colors.grey[900],
+                  color: Theme.of(context).colorScheme.primary,
                   borderRadius: BorderRadius.circular(8.0),
                 ),
                 child: Column(
@@ -288,56 +299,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           backgroundImage: profile?.profilePic != null
                               ? NetworkImage(profile!.profilePic!)
                               : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                          radius: 60.0,
+                          radius: 40.0, // Reduced size for better proportions
                         ),
                         loading: () => const CircleAvatar(
-                          radius: 30.0,
+                          radius: 40.0,
                           backgroundColor: Colors.grey,
                           child: SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           ),
                         ),
                         error: (error, stack) => const CircleAvatar(
                           backgroundImage: AssetImage('assets/plaro_logo.png'),
-                          radius: 30.0,
+                          radius: 40.0,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    authState.when(
-                      data: (session) {
-                        return profileState.when(
-                          data: (profile) => Text(
-                            profile?.username ?? session?.user.email ?? 'No user',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                    const SizedBox(height: 12),
+                    Center(
+                      child: authState.when(
+                        data: (session) {
+                          return profileState.when(
+                            data: (profile) => Text(
+                              profile?.username ?? session?.user.email ?? 'No user',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          loading: () => const Text(
-                            'Loading...',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                          error: (error, stack) => Text(
-                            session?.user.email ?? 'Error loading user',
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        );
-                      },
-                      loading: () => const Text(
-                        'Loading...',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      error: (error, stack) => const Text(
-                        'Error loading user',
-                        style: TextStyle(color: Colors.red),
+                            loading: () => const Text(
+                              'Loading...',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            error: (error, stack) => Text(
+                              session?.user.email ?? 'Error loading user',
+                              style: const TextStyle(color: Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        },
+                        loading: () => const Text(
+                          'Loading...',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        error: (error, stack) => const Text(
+                          'Error loading user',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ),
                   ],
@@ -346,44 +361,85 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               // Navigation Items
               ListTile(
-                leading: const Icon(Icons.event_note, color: Colors.grey),
-                title: const Text(
+                leading: Icon(
+                  Icons.event_note,
+                  color: Theme.of(context).iconTheme.color,
+                ),
+                title: Text(
                   'Events',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AllEventsPage()),
+                  );
                 },
               ),
 
               ListTile(
-                leading: const Icon(Icons.settings, color: Colors.grey),
-                title: const Text(
+                leading: Icon(
+                  Icons.settings,
+                  color: Theme.of(context).iconTheme.color,
+                ),
+                title: Text(
                   'Settings',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(context);
+                  // Add your settings navigation here
                 },
               ),
 
-              const Divider(color: Colors.grey),
+              // Dark Mode Toggle
+              SwitchListTile(
+                title: Text(
+                  'Dark Mode',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
+                ),
+                value: themeMode == ThemeMode.dark,
+                onChanged: (value) {
+                  ref.read(themeNotifierProvider.notifier).toggleTheme(value);
+                },
+                secondary: Icon(
+                  themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                  color: Theme.of(context).iconTheme.color,
+                ),
+                activeColor: Theme.of(context).colorScheme.primary,
+              ),
+
+              Divider(color: Theme.of(context).dividerColor),
 
               // Sign Out
               ListTile(
                 leading: _isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                   width: 24,
                   height: 24,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).iconTheme.color ?? Colors.grey,
+                    ),
                   ),
                 )
-                    : const Icon(Icons.logout, color: Colors.grey),
+                    : Icon(
+                  Icons.logout,
+                  color: Theme.of(context).iconTheme.color,
+                ),
                 title: Text(
                   _isLoading ? 'Signing out...' : 'Sign Out',
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
                 ),
                 onTap: _isLoading ? null : _handleSignOut,
               ),
@@ -391,6 +447,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+
+
       body: authState.when(
         data: (session) {
           if (session == null) {

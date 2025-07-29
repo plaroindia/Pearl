@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
+import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'comment_card.dart';
 
 class ToastCard extends ConsumerWidget {
@@ -15,21 +16,12 @@ class ToastCard extends ConsumerWidget {
     this.onTap,
   }) : super(key: key);
 
-  //
-  // void _showCommentsSheet(BuildContext context, String toastId) {
-  //   showModalBottomSheet(
-  //     context: context,
-  //     isScrollControlled: true,
-  //     backgroundColor: Colors.transparent,
-  //     builder: (BuildContext context) {
-  //       return CommentsBottomSheet(toastId: toastId);
-  //     },
-  //   );
-  // }
-
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final themeMode = ref.watch(themeNotifierProvider);
+    final isDark = themeMode == ThemeMode.dark;
+
     final toastFeedState = ref.watch(toastFeedProvider);
     final toast = toastFeedState.posts.firstWhere((p) => p.toast_id == this.toast.toast_id, orElse: () => this.toast);
 
@@ -51,10 +43,6 @@ class ToastCard extends ConsumerWidget {
       }
     });
 
-
-
-
-
     void _showCommentsSheet(BuildContext context, String toastId) {
       showModalBottomSheet(
         context: context,
@@ -66,10 +54,9 @@ class ToastCard extends ConsumerWidget {
       );
     }
 
-
     Widget buildContent(BuildContext context, String content) {
-      const textStyle = TextStyle(
-        color: Colors.white70,
+      final textStyle = TextStyle(
+        color: theme.colorScheme.onSurface.withOpacity(0.8),
         fontSize: 14,
         height: 1.4,
       );
@@ -104,11 +91,14 @@ class ToastCard extends ConsumerWidget {
               child: IgnorePointer(
                 child: Container(
                   height: 2 * 14 * 1.4,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black54],
+                      colors: [
+                        Colors.transparent,
+                        theme.scaffoldBackgroundColor.withOpacity(0.8)
+                      ],
                     ),
                   ),
                 ),
@@ -119,161 +109,162 @@ class ToastCard extends ConsumerWidget {
       );
     }
 
-
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.black87,
+      color: theme.cardTheme.color,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
         onTap: onTap,
-        //borderRadius: BorderRadius.circular(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // User Info Header
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundImage: toast.profile_pic != null
-                      ? NetworkImage(toast.profile_pic!)
-                      : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                  radius: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        toast.username ?? 'Unknown User',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User Info Header
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundImage: toast.profile_pic != null
+                        ? NetworkImage(toast.profile_pic!)
+                        : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                    radius: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          toast.username ?? 'Unknown User',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      Text(
-                        _formatTimeAgo(toast.created_at),
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
+                        Text(
+                          _formatTimeAgo(toast.created_at),
+                          style: TextStyle(
+                            color: theme.dividerColor,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: theme.dividerColor),
+                    onPressed: () {
+                      _showMoreOptions(context);
+                    },
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Title
+              if (toast.title != null && toast.title!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    toast.title!,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  onPressed: () {
-                    _showMoreOptions(context);
-                  },
+
+              // Content
+              if (toast.content != null && toast.content!.isNotEmpty)
+                buildContent(context, toast.content!),
+
+              const SizedBox(height: 12),
+
+              // Tags
+              if (toast.tags != null && toast.tags!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: toast.tags!.map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.5)),
+                        ),
+                        child: Text(
+                          '#$tag',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ],
-            ),
 
-           // const SizedBox(height: 0),
-
-            // Title
-            if (toast.title != null && toast.title!.isNotEmpty)
-              Text(
-                toast.title!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-            const SizedBox(height: 8),
-
-            // Content
-            if (toast.content != null && toast.content!.isNotEmpty)
-              buildContent(context, toast.content!),
-
-
-            const SizedBox(height: 12),
-
-            // Tags
-            if (toast.tags != null && toast.tags!.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: toast.tags!.map((tag) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                    ),
-                    child: Text(
-                      '#$tag',
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-
-            const SizedBox(height: 16),
-
-            // Action Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // Like Button
-                _ActionButton(
+              // Action Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  // Like Button
+                  _ActionButton(
                     icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
-                  label: '${toast.like_count}',
-                  color: toast.isliked ? Colors.red : Colors.grey,
-                  isLoading: isLiking,
-                  onPressed: isLiking ? null : () {
-                    print('🔵 Like button pressed for toast: ${toast.toast_id}');
-                    if (toast.toast_id != null) {
-                      ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
-                    } else {
-                      print('🔴 Toast ID is null!');
-                    }
-                  },
-                ),
+                    label: '${toast.like_count}',
+                    color: toast.isliked ? Colors.red : theme.dividerColor!,
+                    isLoading: isLiking,
+                    onPressed: isLiking ? null : () {
+                      print('🔵 Like button pressed for toast: ${toast.toast_id}');
+                      if (toast.toast_id != null) {
+                        ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
+                      } else {
+                        print('🔴 Toast ID is null!');
+                      }
+                    },
+                  ),
 
-                // Comment Button
-                _ActionButton(
-                  icon: Icons.comment_outlined,
-                  label: '${toast.comment_count}',
-                  color: Colors.grey,
-                  onPressed: () {
-                    _showCommentsSheet(context, toast.toast_id!);
-                  },
-                ),
+                  // Comment Button
+                  _ActionButton(
+                    icon: Icons.comment_outlined,
+                    label: '${toast.comment_count}',
+                    color: theme.dividerColor!,
+                    onPressed: () {
+                      _showCommentsSheet(context, toast.toast_id!);
+                    },
+                  ),
 
-                // Share Button
-                _ActionButton(
-                  icon: Icons.share_outlined,
-                  label: '${toast.share_count}',
-                  color: Colors.grey,
-                  onPressed: () {
-                    _sharePost(context);
-                  },
-                ),
+                  // Share Button
+                  _ActionButton(
+                    icon: Icons.share_outlined,
+                    label: '${toast.share_count}',
+                    color: theme.dividerColor!,
+                    onPressed: () {
+                      _sharePost(context);
+                    },
+                  ),
 
-                // Bookmark Button
-                _ActionButton(
-                  icon: Icons.bookmark_border,
-                  label: '',
-                  color: Colors.grey,
-                  onPressed: () {
-                    _bookmarkPost(context);
-                  },
-                ),
-              ],
-            ),
-          ],
+                  // Bookmark Button
+                  _ActionButton(
+                    icon: Icons.bookmark_border,
+                    label: '',
+                    color: theme.dividerColor!,
+                    onPressed: () {
+                      _bookmarkPost(context);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -301,9 +292,11 @@ class ToastCard extends ConsumerWidget {
   }
 
   void _showMoreOptions(BuildContext context) {
+    final theme = Theme.of(context);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: theme.cardTheme.color,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -317,13 +310,13 @@ class ToastCard extends ConsumerWidget {
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.grey[600],
+                color: theme.dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.report_outlined, color: Colors.red),
-              title: const Text('Report', style: TextStyle(color: Colors.white)),
+              title: Text('Report', style: TextStyle(color: theme.colorScheme.onSurface)),
               onTap: () {
                 Navigator.pop(context);
                 // Handle report
@@ -331,15 +324,15 @@ class ToastCard extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.block_outlined, color: Colors.orange),
-              title: const Text('Block User', style: TextStyle(color: Colors.white)),
+              title: Text('Block User', style: TextStyle(color: theme.colorScheme.onSurface)),
               onTap: () {
                 Navigator.pop(context);
                 // Handle block user
               },
             ),
             ListTile(
-              leading: const Icon(Icons.link_outlined, color: Colors.blue),
-              title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
+              leading: Icon(Icons.link_outlined, color: theme.colorScheme.primary),
+              title: Text('Copy Link', style: TextStyle(color: theme.colorScheme.onSurface)),
               onTap: () {
                 Navigator.pop(context);
                 // Handle copy link
@@ -350,16 +343,6 @@ class ToastCard extends ConsumerWidget {
       ),
     );
   }
-
-
-  //
-  // void _showComments(BuildContext context) {
-  //   // Navigate to comments screen or show comments modal
-  //   ScaffoldMessenger.of(context).showSnackBar(
-  //    // const SnackBar(content: Text('Comments functionality coming soon')),
-  //       _showCommentsSheet(context),
-  //   );
-  // }
 
   void _sharePost(BuildContext context) {
     // Implement share functionality
@@ -402,8 +385,6 @@ class _ActionButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isLoading)
-              //Icon(icon, size: 20, color: color)
-
               SizedBox(
                 width: 20,
                 height: 20,
@@ -412,7 +393,6 @@ class _ActionButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(color),
                 ),
               )
-              //_ActionButton(icon: icon, label: label, color: color, onPressed: onPressed)
             else
               Icon(icon, size: 20, color: color),
             if (label.isNotEmpty) ...[
@@ -432,6 +412,7 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
 class CommentsBottomSheet extends ConsumerStatefulWidget {
   final String toastId;
 
@@ -482,6 +463,8 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
       minChildSize: 0.3,
@@ -490,7 +473,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       builder: (_, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.black87,
+            color: theme.cardTheme.color,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -502,44 +485,47 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   width: 40,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: theme.dividerColor?.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
 
               // Header
-              const Padding(
-                padding: EdgeInsets.all(12.0),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
                 child: Text(
                   'Comments',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold
+                  ),
                 ),
               ),
-
 
               // Comment input
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.transparent,
-                  border: Border(top: BorderSide(color: Colors.grey[700]!)),
+                  border: Border(top: BorderSide(color: theme.dividerColor!)),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _commentController,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Add a comment...',
-                          hintStyle: const TextStyle(color: Colors.white54),
+                          hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(25),
                             borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor: Colors.black87,
+                          fillColor: theme.scaffoldBackgroundColor,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                         maxLines: null,
@@ -549,20 +535,20 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                     const SizedBox(width: 8),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.black87,
+                        color: theme.scaffoldBackgroundColor,
                         borderRadius: BorderRadius.circular(25),
                       ),
                       child: IconButton(
                         icon: _isSubmitting
-                            ? const SizedBox(
+                            ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
                           ),
                         )
-                            : const Icon(Icons.send, color: Colors.blue),
+                            : Icon(Icons.send, color: theme.colorScheme.primary),
                         onPressed: _isSubmitting ? null : _submitComment,
                       ),
                     ),
@@ -573,12 +559,14 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
               // Comments list
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? Center(
+                    child: CircularProgressIndicator(color: theme.colorScheme.primary)
+                )
                     : _comments.isEmpty
-                    ? const Center(
+                    ? Center(
                   child: Text(
                     'No comments yet. Be the first to comment!',
-                    style: TextStyle(color: Colors.white54),
+                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
                   ),
                 )
                     : ListView.builder(

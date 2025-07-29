@@ -82,34 +82,36 @@ class FollowNotifier extends StateNotifier<FollowState> {
       final page = refresh ? 0 : state.followersPage;
       final offset = page * _pageSize;
 
+      // First, let's try a simpler query to avoid foreign key issues
       final response = await _supabase
           .from('user_follows')
-          .select('''
-            follower_id,
-            user_profiles!user_follows_follower_id_fkey(
-              user_id,
-              username,
-              email,
-              role,
-              profile_pic,
-              bio,
-              study,
-              location,
-              streak_count,
-              followers_count,
-              following_count,
-              created_at,
-              is_verified,
-              updated_at
-            )
-          ''')
+          .select('follower_id')
           .eq('followee_id', userId)
           .order('followed_at', ascending: false)
           .range(offset, offset + _pageSize - 1);
 
-      final List<UserProfile> newFollowers = (response as List)
-          .map((item) => UserProfile.fromJson(item['user_profiles']))
-          .toList();
+      // Get user profiles separately
+      final followerIds = (response as List).map((item) => item['follower_id'] as String).toList();
+
+      List<UserProfile> newFollowers = [];
+      if (followerIds.isNotEmpty) {
+        // Use individual queries or batch them differently
+        for (String followerId in followerIds) {
+          try {
+            final profileResponse = await _supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('user_id', followerId)
+                .maybeSingle();
+
+            if (profileResponse != null) {
+              newFollowers.add(UserProfile.fromJson(profileResponse));
+            }
+          } catch (e) {
+            print('Error fetching profile for $followerId: $e');
+          }
+        }
+      }
 
       // Update following status for current user
       Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
@@ -147,40 +149,42 @@ class FollowNotifier extends StateNotifier<FollowState> {
       final page = refresh ? 0 : state.followingPage;
       final offset = page * _pageSize;
 
+      // First, let's try a simpler query to avoid foreign key issues
       final response = await _supabase
           .from('user_follows')
-          .select('''
-            followee_id,
-            user_profiles!user_follows_followee_id_fkey(
-              user_id,
-              username,
-              email,
-              role,
-              profile_pic,
-              bio,
-              study,
-              location,
-              streak_count,
-              followers_count,
-              following_count,
-              created_at,
-              is_verified,
-              updated_at
-            )
-          ''')
+          .select('followee_id')
           .eq('follower_id', userId)
           .order('followed_at', ascending: false)
           .range(offset, offset + _pageSize - 1);
 
-      final List<UserProfile> newFollowing = (response as List)
-          .map((item) => UserProfile.fromJson(item['user_profiles']))
-          .toList();
+      // Get user profiles separately
+      final followeeIds = (response as List).map((item) => item['followee_id'] as String).toList();
+
+      List<UserProfile> newFollowing = [];
+      if (followeeIds.isNotEmpty) {
+        // Use individual queries or batch them differently
+        for (String followeeId in followeeIds) {
+          try {
+            final profileResponse = await _supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('user_id', followeeId)
+                .maybeSingle();
+
+            if (profileResponse != null) {
+              newFollowing.add(UserProfile.fromJson(profileResponse));
+            }
+          } catch (e) {
+            print('Error fetching profile for $followeeId: $e');
+          }
+        }
+      }
 
       // Update following status for current user
       Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
       if (_currentUserId != null) {
         for (var followedUser in newFollowing) {
-          updatedFollowingStatus[followedUser.user_id] = await _checkIfFollowing(followedUser.user_id);
+          updatedFollowingStatus[followedUser.user_id] = true; // We know we're following them
         }
       }
 
@@ -214,14 +218,6 @@ class FollowNotifier extends StateNotifier<FollowState> {
     try {
       final isCurrentlyFollowing = state.followingStatus[targetUserId] ?? false;
 
-      // Optimistic update
-      Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-      updatedFollowingStatus[targetUserId] = !isCurrentlyFollowing;
-
-      state = state.copyWith(
-        followingStatus: updatedFollowingStatus,
-      );
-
       if (isCurrentlyFollowing) {
         // Unfollow
         await _supabase
@@ -248,18 +244,22 @@ class FollowNotifier extends StateNotifier<FollowState> {
         await _updateFollowingCount(_currentUserId!, 1);
       }
 
+      // Update following status after successful operation
+      Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
+      updatedFollowingStatus[targetUserId] = !isCurrentlyFollowing;
+
+      state = state.copyWith(
+        followingStatus: updatedFollowingStatus,
+        error: null, // Clear any previous errors
+      );
+
       // Update followers/following lists with new counts
       _updateUserProfilesInLists(targetUserId, isCurrentlyFollowing ? -1 : 1);
 
     } catch (e) {
-      // Rollback optimistic update on error
-      Map<String, bool> revertedFollowingStatus = Map.from(state.followingStatus);
-      final isCurrentlyFollowing = state.followingStatus[targetUserId] ?? false;
-      revertedFollowingStatus[targetUserId] = !isCurrentlyFollowing;
-
+      // Don't do optimistic updates, just show error
       state = state.copyWith(
-        followingStatus: revertedFollowingStatus,
-        error: 'Failed to ${isCurrentlyFollowing ? 'unfollow' : 'follow'} user: ${e.toString()}',
+        error: 'Failed to ${state.followingStatus[targetUserId] == true ? 'unfollow' : 'follow'} user: ${e.toString()}',
       );
     } finally {
       // Remove from processing set
@@ -302,7 +302,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
 
   // Check if current user is following a specific user
   Future<bool> _checkIfFollowing(String targetUserId) async {
-    if (_currentUserId == null) return false;
+    if (_currentUserId == null || _currentUserId == targetUserId) return false;
 
     try {
       final response = await _supabase
@@ -314,6 +314,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
 
       return response != null;
     } catch (e) {
+      print('Error checking follow status: $e');
       return false;
     }
   }
@@ -321,58 +322,62 @@ class FollowNotifier extends StateNotifier<FollowState> {
   // Update follower count in user profile
   Future<void> _updateFollowerCount(String userId, int increment) async {
     try {
+      // Try using RPC first
       await _supabase.rpc('increment_followers_count', params: {
         'user_id': userId,
         'increment_by': increment,
       });
     } catch (e) {
-      // If RPC doesn't exist, fall back to manual update
-      try {
-        final currentProfile = await _supabase
-            .from('user_profiles')
-            .select('followers_count')
-            .eq('user_id', userId)
-            .single();
-
-        final newCount = ((currentProfile['followers_count'] ?? 0) + increment).clamp(0, double.infinity).toInt();
-
-        await _supabase
-            .from('user_profiles')
-            .update({'followers_count': newCount})
-            .eq('user_id', userId);
-      } catch (fallbackError) {
-        // Log error but don't throw - count updates are not critical
-        print('Failed to update follower count: $fallbackError');
-      }
+      // // If RPC doesn't exist, fall back to manual update
+      // try {
+      //   final currentProfile = await _supabase
+      //       .from('user_profiles')
+      //       .select('followers_count')
+      //       .eq('user_id', userId)
+      //       .single();
+      //
+      //   final currentCount = currentProfile['followers_count'] ?? 0;
+      //   final newCount = (currentCount + increment).clamp(0, double.infinity).toInt();
+      //
+      //   await _supabase
+      //       .from('user_profiles')
+      //       .update({'followers_count': newCount})
+      //       .eq('user_id', userId);
+      // } catch (fallbackError) {
+      //   // Log error but don't throw - count updates are not critical
+      //   print('Failed to update follower count: $fallbackError');
+      // }
     }
   }
 
   // Update following count in user profile
   Future<void> _updateFollowingCount(String userId, int increment) async {
     try {
+      // Try using RPC first
       await _supabase.rpc('increment_following_count', params: {
         'user_id': userId,
         'increment_by': increment,
       });
     } catch (e) {
-      // If RPC doesn't exist, fall back to manual update
-      try {
-        final currentProfile = await _supabase
-            .from('user_profiles')
-            .select('following_count')
-            .eq('user_id', userId)
-            .single();
-
-        final newCount = ((currentProfile['following_count'] ?? 0) + increment).clamp(0, double.infinity).toInt();
-
-        await _supabase
-            .from('user_profiles')
-            .update({'following_count': newCount})
-            .eq('user_id', userId);
-      } catch (fallbackError) {
-        // Log error but don't throw - count updates are not critical
-        print('Failed to update following count: $fallbackError');
-      }
+      // // If RPC doesn't exist, fall back to manual update
+      // try {
+      //   final currentProfile = await _supabase
+      //       .from('user_profiles')
+      //       .select('following_count')
+      //       .eq('user_id', userId)
+      //       .single();
+      //
+      //   final currentCount = currentProfile['following_count'] ?? 0;
+      //   final newCount = (currentCount + increment).clamp(0, double.infinity).toInt();
+      //
+      //   await _supabase
+      //       .from('user_profiles')
+      //       .update({'following_count': newCount})
+      //       .eq('user_id', userId);
+      // } catch (fallbackError) {
+      //   // Log error but don't throw - count updates are not critical
+      //   print('Failed to update following count: $fallbackError');
+      // }
     }
   }
 
@@ -388,12 +393,24 @@ class FollowNotifier extends StateNotifier<FollowState> {
     await loadFollowing(userId);
   }
 
-  // Refresh both lists
+  // Refresh both lists and following status
   Future<void> refresh(String userId) async {
     await Future.wait([
       loadFollowers(userId, refresh: true),
       loadFollowing(userId, refresh: true),
     ]);
+
+    // Refresh following status for all loaded users
+    if (_currentUserId != null) {
+      Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
+      final allUsers = [...state.followers, ...state.following];
+
+      for (var user in allUsers) {
+        updatedFollowingStatus[user.user_id] = await _checkIfFollowing(user.user_id);
+      }
+
+      state = state.copyWith(followingStatus: updatedFollowingStatus);
+    }
   }
 
   // Clear error
@@ -414,6 +431,17 @@ class FollowNotifier extends StateNotifier<FollowState> {
   // Clear all data (useful when switching between users)
   void clear() {
     state = const FollowState();
+  }
+
+  // Method to refresh following status for a specific user
+  Future<void> refreshFollowingStatus(String userId) async {
+    if (_currentUserId == null) return;
+
+    final isFollowingUser = await _checkIfFollowing(userId);
+    Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
+    updatedFollowingStatus[userId] = isFollowingUser;
+
+    state = state.copyWith(followingStatus: updatedFollowingStatus);
   }
 }
 

@@ -8,6 +8,7 @@ import 'View/followers_page.dart';
 import 'View/following_page.dart';
 import 'View/foll_page.dart';
 import 'package:plaro_3/View/foll_page.dart';
+import 'ViewModel/theme_provider.dart';
 
 
 void main() async{
@@ -15,11 +16,13 @@ void main() async{
   runApp(ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
 
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeNotifierProvider);
+
     return MaterialApp(
       routes: {
         '/login': (context) => LoginScreen(),
@@ -29,6 +32,9 @@ class MyApp extends StatelessWidget {
         // 'Followee_page': (context) => const FollowingPage(),
         //'/FollowPage': (context) => const FollowPage(userId: userId)
       },
+      theme: AppThemes.lightTheme,
+      darkTheme: AppThemes.darkTheme,
+      themeMode: themeMode,
       debugShowCheckedModeBanner: false,
       title: 'PLARO',
       home: IntroPage(),
