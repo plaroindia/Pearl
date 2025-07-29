@@ -602,7 +602,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('post')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user); // Ensure only owner can delete
+          .eq('user_id', user.id); // Ensure only owner can delete
 
       // Remove from local state
       final updatedPosts = state.posts.where((post) => post.post_id != postId).toList();
@@ -618,7 +618,8 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   // Delete user's toast
   Future<bool> deleteToast(String toastId) async {
     final user = _supabase.auth.currentUser;
-    if (user == null) return false;
+    if (user == null)
+      return false;
 
     try {
       // Delete from database
@@ -626,7 +627,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('toasts')
           .delete()
           .eq('toast_id', toastId)
-          .eq('user_id', user); // Ensure only owner can delete
+          .eq('user_id', user.id); // Ensure only owner can delete
 
       // Remove from local state
       final updatedToasts = state.toasts.where((toast) => toast.toast_id != toastId).toList();

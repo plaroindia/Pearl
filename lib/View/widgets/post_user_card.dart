@@ -5,7 +5,8 @@ import '../../Model/post.dart';
 import '../../ViewModel/post_feed_provider.dart';
 import 'dart:io';
 import '../../ViewModel/user_feed_provider.dart';
-
+import '../../ViewModel/user_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class PostProfileCard extends ConsumerWidget {
   final Post_feed post;
@@ -317,7 +318,13 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (context) {
+  builder: (context) => Consumer(
+  builder: (context, ref, child) {
+      final currentUserId = ref.watch(currentUserIdProvider);
+
+      // Check if toast belongs to current user
+      final isOwner = currentUserId != null && currentUserId == post.user_id;
+
       return Consumer(
         builder: (context, ref, child) {
           return SafeArea(
@@ -333,6 +340,7 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
+                if (isOwner)
                 ListTile(
                   leading: const Icon(Icons.edit_outlined, color: Colors.blue),
                   title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
@@ -342,27 +350,11 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
                     // Navigator.pushNamed(context, '/edit-post', arguments: post);
                   },
                 ),
+                if (isOwner)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: Colors.red),
                   title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
                   onTap: () async {
-
-
-                    // final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
-                    // if (success) {
-                    //   ScaffoldMessenger.of(context).showSnackBar(
-                    //     const SnackBar(content: Text('Post deleted successfully')),
-                    //   );
-                    // } else {
-                    //   ScaffoldMessenger.of(context).showSnackBar(
-                    //     const SnackBar(content: Text('Failed to delete post')),
-                    //   );
-                    // }
-
-
-                   // Navigator.pop(context);
-
-                    // Show confirmation dialog
                   showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -421,5 +413,6 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
         },
       );
     },
+  ),
   );
 }

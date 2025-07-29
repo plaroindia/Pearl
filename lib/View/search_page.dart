@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../Model/user_profile.dart';
 import 'widgets/Profile_card.dart';
 import '../ViewModel/search_provider.dart';
-import '../View/other_profile.dart';
+import '../View/profile.dart';
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 

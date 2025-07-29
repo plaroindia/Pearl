@@ -4,10 +4,6 @@ import 'View/intro_page.dart';
 import 'View/home_page.dart';
 import 'View/login_page.dart';
 import 'View/navipg.dart';
-import 'View/followers_page.dart';
-import 'View/following_page.dart';
-import 'View/foll_page.dart';
-import 'package:plaro_3/View/foll_page.dart';
 import 'ViewModel/theme_provider.dart';
 
 
@@ -28,9 +24,6 @@ class MyApp extends ConsumerWidget {
         '/login': (context) => LoginScreen(),
         '/home': (context) => HomeScreen(),
         '/navipg': (context) => navCard(),
-        // 'Followers_page': (context) => const FollowersPage(),
-        // 'Followee_page': (context) => const FollowingPage(),
-        //'/FollowPage': (context) => const FollowPage(userId: userId)
       },
       theme: AppThemes.lightTheme,
       darkTheme: AppThemes.darkTheme,

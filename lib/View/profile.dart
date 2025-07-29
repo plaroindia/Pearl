@@ -137,7 +137,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
   void _openChat() {
     if (!isOwnProfile) {
       // Navigate to chat screen - implement your chat navigation here
-      print('Opening chat with user: $targetUserId');
+      //print('Opening chat with user: $targetUserId');
       // Navigator.pushNamed(context, '/chat', arguments: {'userId': targetUserId});
     }
   }

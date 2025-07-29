@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/View/post_page.dart';
 import 'home_page.dart';
-import 'other_profile.dart';
+import 'profile.dart';
 import 'toast_page.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/user_feed_provider.dart';
