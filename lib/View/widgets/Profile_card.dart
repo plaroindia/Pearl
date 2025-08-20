@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../Model/user_profile.dart';
 import '../../ViewModel/follow_provider.dart';
 
+
 class ProfileCard extends ConsumerStatefulWidget {
   final UserProfile user;
   final VoidCallback? onTap;

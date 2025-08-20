@@ -8,7 +8,7 @@ import '../../ViewModel/post_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'post_comment_card.dart';
 import 'dart:io';
-
+import '../profile.dart';
 
 class _LocalVideoPlayer extends StatefulWidget {
   final File file;
@@ -58,12 +58,14 @@ bool _isVideoFile(String path) {
 class PostCard extends ConsumerStatefulWidget {
   final Post_feed post;
   final VoidCallback? onTap;
+  final VoidCallback? onUserInfo;
   final bool isPreview;
 
   const PostCard({
     Key? key,
     required this.post,
     this.onTap,
+    this.onUserInfo,
     this.isPreview = false,
   }) : super(key: key);
 
@@ -278,46 +280,49 @@ class _PostCardState extends ConsumerState<PostCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // User Info Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundImage: currentPost.profile_pic != null
-                        ? NetworkImage(currentPost.profile_pic!)
-                        : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                    radius: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          currentPost.username ?? 'Unknown User',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          _formatTimeAgo(currentPost.created_at),
-                          style: TextStyle(
-                            color: theme.dividerColor,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+            GestureDetector(
+              onTap: widget.onUserInfo,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8.0,8.0,8.0,0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundImage: currentPost.profile_pic != null
+                          ? NetworkImage(currentPost.profile_pic!)
+                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                      radius: 20,
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: theme.dividerColor),
-                    onPressed: () {
-                      _showMoreOptions(context, currentPost);
-                    },
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentPost.username ?? 'Unknown User',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            _formatTimeAgo(currentPost.created_at),
+                            style: TextStyle(
+                              color: theme.dividerColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.more_vert, color: theme.dividerColor),
+                      onPressed: () {
+                        _showMoreOptions(context, currentPost);
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
 

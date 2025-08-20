@@ -383,8 +383,6 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Failed to delete post')),
                                   );
-                                  // Navigator.pop(context);
-                                  // Navigator.pop(context);
                                 }
                             },// => Navigator.pop(context, true),
                             child: const Text('Delete', style: TextStyle(color: Colors.red)),

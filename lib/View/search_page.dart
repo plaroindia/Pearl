@@ -235,13 +235,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           );
 
 
-                          // // Handle profile tap - navigate to profile details
-                          // ScaffoldMessenger.of(context).showSnackBar(
-                          //   SnackBar(
-                          //     content: Text('Tapped on ${user.username}'),
-                          //     backgroundColor: Colors.grey[800],
-                          //   ),
-                          // );
                         },
                       );
                     },

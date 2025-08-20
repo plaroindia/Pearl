@@ -5,7 +5,9 @@ import 'View/home_page.dart';
 import 'View/login_page.dart';
 import 'View/navipg.dart';
 import 'ViewModel/theme_provider.dart';
-
+import 'View/chat_list.dart';
+import 'ViewModel/user_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +26,7 @@ class MyApp extends ConsumerWidget {
         '/login': (context) => LoginScreen(),
         '/home': (context) => HomeScreen(),
         '/navipg': (context) => navCard(),
+        '/chat_list': (context) =>ChatList(userId: Supabase.instance.client.auth.currentUser!.id),
       },
       theme: AppThemes.lightTheme,
       darkTheme: AppThemes.darkTheme,

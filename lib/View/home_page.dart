@@ -10,7 +10,7 @@ import 'widgets/post_card.dart';
 import 'search_page.dart';
 import '../ViewModel/theme_provider.dart';
 import 'allevents_page.dart';
-
+import 'profile.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -261,10 +261,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 IconButton(
                   onPressed: () {
-                    Navigator.pushNamed(context, '/create_post');
+                    Navigator.pushNamed(context, '/chat_list');
                   },
                   icon: Icon(
-                    Icons.add_box_outlined,
+                    Icons.message,
                     color: Theme.of(context).appBarTheme.iconTheme?.color,
                   ),
                 ),
@@ -564,14 +564,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     return ToastCard(
                       toast: data,
                       onTap: () {
-                        // Navigate to toast details if needed
+                      },
+                      onUserInfo: () {
+                        Navigator.push(context,
+                            MaterialPageRoute(builder: (context) => OtherProfileScreen(
+                              userId: data.user_id, // Pass the user ID
+                              //initialUserData: null, // Pass initial data to avoid loading delay
+                            ),
+                            )
+                        );
                       },
                     );
                   } else {
                     return PostCard(
                       post: data,
                       onTap: () {
-                        // Navigate to post details if needed
+                      },
+                      onUserInfo: () {
+                        Navigator.push(context,
+                            MaterialPageRoute(builder: (context) => OtherProfileScreen(
+                              userId: data.user_id, // Pass the user ID
+                              //initialUserData: null, // Pass initial data to avoid loading delay
+                            ),
+                            )
+                        );
                       },
                     );
                   }
