@@ -43,6 +43,7 @@ dependencies:
   share_plus: ^7.2.1
   video_player: ^2.8.1
   google_maps_flutter: ^2.12.3
+  uuid: ^4.0.0
 
 
 

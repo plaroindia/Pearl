@@ -11,6 +11,7 @@ import 'search_page.dart';
 import '../ViewModel/theme_provider.dart';
 import 'allevents_page.dart';
 import 'profile.dart';
+import '../ViewModel/user_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -280,11 +281,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // User Info Section
+              // User Info Section - UPDATED
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16.0),
-                margin: const EdgeInsets.only(bottom: 16.0, top: 32.0), // Added top margin for status bar
+                margin: const EdgeInsets.only(bottom: 16.0, top: 32.0),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,
                   borderRadius: BorderRadius.circular(8.0),
@@ -294,71 +295,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     const SizedBox(height: 10.0),
                     Center(
-                      child: profileState.when(
-                        data: (profile) => CircleAvatar(
-                          backgroundImage: profile?.profilePic != null
-                              ? NetworkImage(profile!.profilePic!)
-                              : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                          radius: 40.0, // Reduced size for better proportions
-                        ),
-                        loading: () => const CircleAvatar(
-                          radius: 40.0,
-                          backgroundColor: Colors.grey,
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final currentUserProfile = ref.watch(currentUserProfileProvider);
+                          return currentUserProfile.when(
+                            data: (profile) => CircleAvatar(
+                              backgroundImage: profile?.profilePic != null
+                                  ? NetworkImage(profile!.profilePic!)
+                                  : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                              radius: 40.0,
                             ),
-                          ),
-                        ),
-                        error: (error, stack) => const CircleAvatar(
-                          backgroundImage: AssetImage('assets/plaro_logo.png'),
-                          radius: 40.0,
-                        ),
+                            loading: () => const CircleAvatar(
+                              radius: 40.0,
+                              backgroundColor: Colors.grey,
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              ),
+                            ),
+                            error: (error, stack) => const CircleAvatar(
+                              backgroundImage: AssetImage('assets/plaro_logo.png'),
+                              radius: 40.0,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 12),
                     Center(
-                      child: authState.when(
-                        data: (session) {
-                          return profileState.when(
-                            data: (profile) => Text(
-                              profile?.username ?? session?.user.email ?? 'No user',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final authState = ref.watch(authStateProvider);
+                          final currentUserProfile = ref.watch(currentUserProfileProvider);
+
+                          return authState.when(
+                            data: (session) {
+                              return currentUserProfile.when(
+                                data: (profile) => Text(
+                                  profile?.username ?? session?.user.email ?? 'No user',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                                loading: () => const Text(
+                                  'Loading...',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                                error: (error, stack) => Text(
+                                  session?.user.email ?? 'Error loading user',
+                                  style: const TextStyle(color: Colors.white),
+                                  textAlign: TextAlign.center,
+                                ),
+                              );
+                            },
                             loading: () => const Text(
                               'Loading...',
                               style: TextStyle(color: Colors.white70),
                             ),
-                            error: (error, stack) => Text(
-                              session?.user.email ?? 'Error loading user',
-                              style: const TextStyle(color: Colors.white),
-                              textAlign: TextAlign.center,
+                            error: (error, stack) => const Text(
+                              'Error loading user',
+                              style: TextStyle(color: Colors.white),
                             ),
                           );
                         },
-                        loading: () => const Text(
-                          'Loading...',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                        error: (error, stack) => const Text(
-                          'Error loading user',
-                          style: TextStyle(color: Colors.white),
-                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-
               // Navigation Items
               ListTile(
                 leading: Icon(
