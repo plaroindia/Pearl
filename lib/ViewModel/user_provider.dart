@@ -21,6 +21,7 @@ final currentUserIdProvider = Provider<String?>((ref) {
   return user?.id;
 });
 
+
 // Provider for fetching UserProfile from database
 final userProfileProvider = FutureProvider.family<UserProfile?, String>((ref, userId) async {
   try {
@@ -102,6 +103,7 @@ class UserProfileRepository {
       rethrow;
     }
   }
+
 
   // Create user profile
   Future<UserProfile> createUserProfile(UserProfile profile) async {

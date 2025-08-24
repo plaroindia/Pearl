@@ -1,4 +1,4 @@
-// FIXED chat_page.dart - Proper scrolling behavior
+// FIXED chat_page.dart - WhatsApp-like behavior without typing refresh
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -37,12 +37,11 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
   String? _currentUserId;
   String? _editingMessageId;
 
-  // FIXED: Better scroll state management
+  // FIXED: Track UI states to prevent unwanted refreshes
   bool _hasInitiallyLoaded = false;
   bool _isUserScrolling = false;
   bool _shouldAutoScroll = true;
   int _lastMessageCount = 0;
-  bool _keyboardVisible = false;
 
   @override
   void initState() {
@@ -57,7 +56,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
 
     _messageController.addListener(_onMessageChanged);
     _scrollController.addListener(_onScroll);
-    _messageFocusNode.addListener(_onFocusChanged); // ADDED: Focus listener
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animated: false);
@@ -68,31 +66,11 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
   void dispose() {
     _messageController.removeListener(_onMessageChanged);
     _scrollController.removeListener(_onScroll);
-    _messageFocusNode.removeListener(_onFocusChanged); // ADDED: Remove focus listener
     _messageController.dispose();
     _scrollController.dispose();
     _messageFocusNode.dispose();
     _fadeController.dispose();
     super.dispose();
-  }
-
-  // ADDED: Handle focus changes for keyboard
-  void _onFocusChanged() {
-    if (_messageFocusNode.hasFocus) {
-      // Keyboard is opening - scroll to bottom after a short delay
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) {
-          _scrollToBottomForced();
-        }
-      });
-      setState(() {
-        _keyboardVisible = true;
-      });
-    } else {
-      setState(() {
-        _keyboardVisible = false;
-      });
-    }
   }
 
   // FIXED: Only update typing state, not message list
@@ -124,7 +102,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     // Check if user is at bottom
     if (_scrollController.hasClients) {
       final position = _scrollController.position;
-      _shouldAutoScroll = position.pixels >= position.maxScrollExtent - 100; // INCREASED threshold
+      _shouldAutoScroll = position.pixels >= position.maxScrollExtent - 50;
 
       // Load more messages when scrolling to top
       if (position.pixels <= 200 && _currentUserId != null) {
@@ -147,7 +125,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     });
   }
 
-  // FIXED: Better scroll to bottom logic
   void _scrollToBottom({bool animated = true}) {
     if (_scrollController.hasClients && _shouldAutoScroll && !_isUserScrolling) {
       if (animated) {
@@ -162,18 +139,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     }
   }
 
-  // ADDED: Force scroll to bottom (for keyboard opening)
-  void _scrollToBottomForced() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  // FIXED: Better message sending with immediate scroll
+  // FIXED: Clear input immediately for responsive feel
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isEmpty || _currentUserId == null) return;
@@ -189,19 +155,18 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
             .editMessage(_editingMessageId!, message);
         _cancelEdit();
       } else {
-        // FIXED: Clear input immediately and ensure scroll
+        // FIXED: Clear input immediately for WhatsApp-like feel
         _messageController.clear();
         setState(() {
           _isTyping = false;
         });
 
-        // Force scroll to bottom immediately after clearing input
-        _shouldAutoScroll = true;
-        _scrollToBottomForced();
-
         // Send message - real-time listener will handle UI update
         await ref.read(directMessageProvider(params).notifier)
             .sendMessage(content: message);
+
+        // Ensure auto-scroll after sending
+        _shouldAutoScroll = true;
       }
 
     } catch (error) {
@@ -226,11 +191,8 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
 
     try {
       final mediaContent = mediaItem.isImage
-          ? 'ðŸ"· Image: ${mediaItem.fileName}'
-          : 'ðŸ"„ File: ${mediaItem.fileName}';
-
-      // Ensure scroll after media send
-      _shouldAutoScroll = true;
+          ? '📷 Image: ${mediaItem.fileName}'
+          : '📄 File: ${mediaItem.fileName}';
 
       await ref.read(directMessageProvider(params).notifier).sendMessage(
         content: mediaContent,
@@ -245,7 +207,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
         },
       );
 
-      _scrollToBottomForced();
+      _shouldAutoScroll = true;
     } catch (error) {
       _showErrorSnackBar('Failed to send media: $error');
     }
@@ -335,11 +297,9 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: _buildAppBar(),
-      // ADDED: Proper keyboard handling
-      resizeToAvoidBottomInset: true,
       body: Column(
         children: [
-          // FIXED: Messages list with improved scroll handling
+          // FIXED: Messages list with proper refresh control
           Expanded(
             child: FadeTransition(
               opacity: _fadeController,
@@ -377,7 +337,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       ),
     );
   }
-
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
@@ -445,6 +404,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // FIXED: Simple status without causing refreshes
                   Text(
                     'Tap to view profile',
                     style: TextStyle(
@@ -518,7 +478,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     );
   }
 
-  // FIXED: Better message list scrolling
   Widget _buildMessagesList(ChatState chatState) {
     if (chatState.hasError && chatState.messages.isEmpty) {
       return _buildErrorWidget(chatState.error!);
@@ -532,15 +491,12 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       return _buildEmptyWidget();
     }
 
-    // FIXED: More precise auto-scroll logic
+    // FIXED: Auto-scroll only when new messages arrive AND user is at bottom
     final currentMessageCount = chatState.messages.length;
-    if (currentMessageCount > _lastMessageCount) {
-      // New message arrived - scroll if user is near bottom or if it's their own message
-      if (_shouldAutoScroll || !_isUserScrolling) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottomForced();
-        });
-      }
+    if (currentMessageCount > _lastMessageCount && _shouldAutoScroll && !_isUserScrolling) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
     }
     _lastMessageCount = currentMessageCount;
 
@@ -558,12 +514,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       color: Colors.blue,
       child: ListView.builder(
         controller: _scrollController,
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 8,
-          bottom: _keyboardVisible ? 8 : 80, // ADDED: Dynamic bottom padding
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: chatState.messages.length,
         itemBuilder: (context, index) {
           final message = chatState.messages[index];
@@ -587,9 +538,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       ),
     );
   }
-
-  // ... (Rest of the methods remain the same - _buildMessageBubble, _buildMediaContent, etc.)
-  // I'll include the essential remaining methods for completeness:
 
   Widget _buildMessageBubble({
     required DirectMessage message,
@@ -684,8 +632,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
     );
   }
 
-  // ... (Include other essential methods like _buildAvatar, _buildTimestamp, etc.)
-  // For brevity, I'll just show the signature of remaining key methods:
   Widget _buildMediaContent(Map<String, dynamic> mediaMetadata) {
     final mediaType = mediaMetadata['media_type'] as String?;
     final fileUrl = mediaMetadata['file_url'] as String?;
@@ -1463,6 +1409,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       ),
     );
   }
+
   void _showFeatureNotAvailable(String feature) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

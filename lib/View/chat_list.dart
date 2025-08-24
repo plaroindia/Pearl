@@ -1,12 +1,9 @@
-// FIXED NAVIGATION - Complete chat_list.dart with proper navigation
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../Model/user_profile.dart';
-import '../../View/widgets/profile_card.dart';
 import '../../ViewModel/chat_list_provider.dart';
-
-import 'chat_page.dart'; // Adjust this import path as needed
-
+import 'chat_page.dart';
 
 class ChatList extends ConsumerStatefulWidget {
   final String userId;
@@ -70,44 +67,56 @@ class _ChatListState extends ConsumerState<ChatList>
 
     final chatState = ref.watch(chatListProvider(widget.userId));
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await ref.read(chatListProvider(widget.userId).notifier).refresh();
-      },
-      backgroundColor: Colors.grey[900],
-      color: Colors.blue,
-      child: Column(
-        children: [
-          if (widget.showAppBar) _buildAppBar(),
-          Expanded(
-            child: _buildList(
-              users: chatState.users,
-              isLoading: chatState.isLoading,
-              error: chatState.error,
-              hasMore: chatState.hasMore,
+    return Container(
+      color: Colors.black,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(chatListProvider(widget.userId).notifier).refresh();
+        },
+        backgroundColor: Colors.grey[900],
+        color: Colors.blue,
+        child: Column(
+          children: [
+            if (widget.showAppBar) _buildAppBar(),
+            Expanded(
+              child: Container(
+                color: Colors.black,
+                child: _buildList(
+                  users: chatState.users,
+                  isLoading: chatState.isLoading,
+                  error: chatState.error,
+                  hasMore: chatState.hasMore,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAppBar() {
     return Container(
+      color: Colors.black,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Column(
         children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-          ),
-          const Text(
-            "Chats",
-            style: TextStyle(
-              fontSize: 20.0,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          SizedBox(height: 20.0,),
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+              const Text(
+                "Chats",
+                style: TextStyle(
+                  fontSize: 20.0,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -162,7 +171,6 @@ class _ChatListState extends ConsumerState<ChatList>
             if (widget.onUserTap != null) {
               widget.onUserTap!(user);
             } else {
-              // Fallback - navigate directly
               _navigateToChat(context, user);
             }
           },
@@ -211,9 +219,7 @@ class _ChatListState extends ConsumerState<ChatList>
     );
   }
 
-  // Direct navigation method
   void _navigateToChat(BuildContext context, UserProfile user) {
-
     try {
       Navigator.push(
         context,
@@ -227,7 +233,7 @@ class _ChatListState extends ConsumerState<ChatList>
         ),
       );
     } catch (e) {
-      print('Navigation error: $e'); // Debug log
+      print('Navigation error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error opening chat: $e'),
@@ -281,22 +287,25 @@ class _ChatListState extends ConsumerState<ChatList>
   }
 
   Widget _buildInitialLoadingWidget() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Loading chats...',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 16,
+    return Container(
+      color: Colors.black,
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
             ),
-          ),
-        ],
+            SizedBox(height: 16),
+            Text(
+              'Loading chats...',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -304,6 +313,7 @@ class _ChatListState extends ConsumerState<ChatList>
   Widget _buildLoadingItem() {
     return Container(
       padding: const EdgeInsets.all(16),
+      color: Colors.black,
       child: const Center(
         child: CircularProgressIndicator(
           valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
@@ -314,104 +324,109 @@ class _ChatListState extends ConsumerState<ChatList>
   }
 
   Widget _buildEmptyWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.grey[800],
-              shape: BoxShape.circle,
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.message_outlined,
+                size: 40,
+                color: Colors.grey[600],
+              ),
             ),
-            child: Icon(
-              Icons.message_outlined,
-              size: 40,
-              color: Colors.grey[600],
+            const SizedBox(height: 24),
+            const Text(
+              'No chats yet',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No chats yet',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+            const SizedBox(height: 8),
+            Text(
+              'Start following people to see them here\nand begin conversations',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start following people to see them here\nand begin conversations',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildErrorWidget(String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.red[900]?.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.error_outline,
-              size: 40,
-              color: Colors.red[400],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Something went wrong',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            error,
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _fetchInitialData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.red[900]?.withOpacity(0.2),
+                shape: BoxShape.circle,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              child: Icon(
+                Icons.error_outline,
+                size: 40,
+                color: Colors.red[400],
+              ),
             ),
-            child: const Text('Try again'),
-          ),
-        ],
+            const SizedBox(height: 24),
+            const Text(
+              'Something went wrong',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _fetchInitialData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              child: const Text('Try again'),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Main ChatPage with fixed navigation
 class ChatPage extends ConsumerWidget {
   final String userId;
 
@@ -425,7 +440,7 @@ class ChatPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Colors.black,
         elevation: 0,
         title: const Text(
           'Messages',
@@ -445,12 +460,16 @@ class ChatPage extends ConsumerWidget {
             onPressed: () => _showNewMessageBottomSheet(context),
           ),
         ],
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.black,
+          statusBarIconBrightness: Brightness.light,
+        ),
       ),
       body: ChatList(
         userId: userId,
         showAppBar: false,
         onUserTap: (user) {
-          print('ChatPage: User tapped - ${user.username}'); // Debug log
+          print('ChatPage: User tapped - ${user.username}');
           _handleUserTap(context, user);
         },
       ),
@@ -458,7 +477,7 @@ class ChatPage extends ConsumerWidget {
   }
 
   void _handleUserTap(BuildContext context, UserProfile user) {
-    print('_handleUserTap called for user: ${user.username}'); // Debug log
+    print('_handleUserTap called for user: ${user.username}');
 
     try {
       Navigator.push(
@@ -472,10 +491,10 @@ class ChatPage extends ConsumerWidget {
           ),
         ),
       ).then((value) {
-        print('Navigation completed'); // Debug log
+        print('Navigation completed');
       });
     } catch (e) {
-      print('Navigation error in _handleUserTap: $e'); // Debug log
+      print('Navigation error in _handleUserTap: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error opening chat: $e'),
@@ -508,6 +527,7 @@ class ChatPage extends ConsumerWidget {
               ),
             ),
             Container(
+              color: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
@@ -530,7 +550,7 @@ class ChatPage extends ConsumerWidget {
                 ],
               ),
             ),
-            const Divider(color: Colors.grey, height: 1),
+            Divider(color: Colors.grey[800], height: 1),
             Expanded(
               child: ChatList(
                 userId: userId,
