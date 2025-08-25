@@ -77,10 +77,10 @@ class _SetProfileState extends ConsumerState<SetProfile> {
   }
 
   // Pick image from gallery
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(ImageSource source) async {
     try {
       final pickedImage = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 512,
         maxHeight: 512,
         imageQuality: 70,
@@ -96,6 +96,83 @@ class _SetProfileState extends ConsumerState<SetProfile> {
       print('Error picking image: $e');
       _showSnackBar('Error selecting image: $e', isError: true);
     }
+  }
+
+  // Show image selection options
+  void _showImageOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSheetOption(
+              icon: Icons.delete,
+              label: 'Remove Photo',
+              onTap: () {
+                setState(() => _profileImage = null);
+                Navigator.pop(context);
+              },
+              iconColor: Colors.redAccent,
+              textColor: Colors.redAccent,
+            ),
+            _buildSheetOption(
+              icon: Icons.camera_alt,
+              label: 'Take Photo',
+              onTap: () => _pickImage(ImageSource.camera),
+            ),
+            _buildSheetOption(
+              icon: Icons.photo_library,
+              label: 'Choose from Gallery',
+              onTap: () => _pickImage(ImageSource.gallery),
+            ),
+            _buildSheetOption(
+              icon: Icons.close,
+              label: 'Cancel',
+              onTap: () => Navigator.pop(context),
+              textColor: Colors.grey,
+              iconColor: Colors.grey,
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSheetOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color textColor = Colors.white,
+    Color iconColor = Colors.white,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      splashColor: Colors.grey[800],
+      highlightColor: Colors.grey[700],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 20),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: textColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Upload profile image to Supabase Storage
@@ -229,9 +306,19 @@ class _SetProfileState extends ConsumerState<SetProfile> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Row(
+            children: [
+              Icon(isError ? Icons.error : Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Text(message),
+            ],
+          ),
           backgroundColor: isError ? Colors.red : Colors.green,
-          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.all(10),
         ),
       );
     }
@@ -243,6 +330,41 @@ class _SetProfileState extends ConsumerState<SetProfile> {
       return FileImage(_profileImage!);
     } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
       return NetworkImage(_profileImageUrl!);
+    }
+    return null;
+  }
+
+  Widget _buildLabeledField({
+    required String label,
+    required TextEditingController controller,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+    bool enabled = true,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      validator: validator,
+      enabled: enabled,
+      style: const TextStyle(color: Colors.white),
+      cursorColor: Colors.white70,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.grey),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+        ),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.blue.withOpacity(0.6), width: 1.3),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+      ),
+    );
+  }
+
+  String? _validateRequired(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Please enter your $fieldName';
     }
     return null;
   }
@@ -259,529 +381,365 @@ class _SetProfileState extends ConsumerState<SetProfile> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Set Profile', style: TextStyle(color: Colors.grey)),
         backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.grey),
+        elevation: 0,
+        title: const Text('Edit Profile', style: TextStyle(color: Colors.white)),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           // Add refresh button like in profile.dart
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.grey),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _refreshProfile,
           ),
         ],
       ),
-      backgroundColor: Colors.black,
-      body: RefreshIndicator(
-        onRefresh: _refreshProfile,
-        color: Colors.blue,
-        backgroundColor: Colors.black,
-        displacement: 40.0,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  // Show loading indicator if not initialized - same pattern as profile.dart
-                  if (!_isInitialized && profileState.isLoading)
-                    const Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Center(
+      body: SafeArea(
+        child: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: RefreshIndicator(
+            onRefresh: _refreshProfile,
+            color: Colors.blue,
+            backgroundColor: Colors.black,
+            displacement: 40.0,
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    // Show loading indicator if not initialized - same pattern as profile.dart
+                    if (!_isInitialized && profileState.isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                          ),
+                        ),
+                      ),
+
+                    // Profile image section with upload indicator
+                    GestureDetector(
+                      onTap: _isUploading ? null : _showImageOptions,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 110,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.blueAccent, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.withOpacity(0.4),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: _getDisplayImage() != null
+                                  ? Image(image: _getDisplayImage()!, fit: BoxFit.cover)
+                                  : const Icon(Icons.person, size: 55, color: Colors.grey),
+                            ),
+                          ),
+                          // Upload indicator overlay
+                          if (_isUploading)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.black.withOpacity(0.7),
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Camera icon overlay for better UX
+                          if (!_isUploading)
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.black, width: 2),
+                                ),
+                                child: const Icon(Icons.camera_alt, size: 20, color: Colors.white),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Image status text
+                    if (_profileImage != null)
+                      const Text(
+                        'New image selected',
+                        style: TextStyle(color: Colors.blue, fontSize: 12),
+                      )
+                    else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
+                      const Text(
+                        'Current profile image',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      )
+                    else
+                      const Text(
+                        'Tap to select profile image',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+
+                    const SizedBox(height: 30),
+
+                    // Username field
+                    profileState.when(
+                      data: (profile) => _buildLabeledField(
+                        label: 'Username',
+                        controller: _usernameController,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter a username';
+                          }
+                          if (value.trim().length < 3) {
+                            return 'Username must be at least 3 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      loading: () => _buildLabeledField(
+                        label: 'Loading...',
+                        controller: _usernameController,
+                        enabled: false,
+                      ),
+                      error: (error, stack) => _buildLabeledField(
+                        label: 'Username (Error loading data)',
+                        controller: _usernameController,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter a username';
+                          }
+                          if (value.trim().length < 3) {
+                            return 'Username must be at least 3 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Role field
+                    profileState.when(
+                      data: (profile) => _buildLabeledField(
+                        label: 'Role (Optional)',
+                        controller: _roleController,
+                      ),
+                      loading: () => _buildLabeledField(
+                        label: 'Loading...',
+                        controller: _roleController,
+                        enabled: false,
+                      ),
+                      error: (error, stack) => _buildLabeledField(
+                        label: 'Role (Optional) - Error loading data',
+                        controller: _roleController,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // School field
+                    profileState.when(
+                      data: (profile) => _buildLabeledField(
+                        label: 'School/College',
+                        controller: _schoolController,
+                        validator: (value) => _validateRequired(value, 'school/college'),
+                      ),
+                      loading: () => _buildLabeledField(
+                        label: 'Loading...',
+                        controller: _schoolController,
+                        enabled: false,
+                      ),
+                      error: (error, stack) => _buildLabeledField(
+                        label: 'School/College - Error loading data',
+                        controller: _schoolController,
+                        validator: (value) => _validateRequired(value, 'school/college'),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Location field
+                    profileState.when(
+                      data: (profile) => _buildLabeledField(
+                        label: 'Location (Optional)',
+                        controller: _locationController,
+                      ),
+                      loading: () => _buildLabeledField(
+                        label: 'Loading...',
+                        controller: _locationController,
+                        enabled: false,
+                      ),
+                      error: (error, stack) => _buildLabeledField(
+                        label: 'Location (Optional) - Error loading data',
+                        controller: _locationController,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Bio field
+                    profileState.when(
+                      data: (profile) => _buildLabeledField(
+                        label: 'Bio',
+                        controller: _bioController,
+                        maxLines: 3,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter a short bio';
+                          }
+                          if (value.trim().length > 200) {
+                            return 'Bio must be less than 200 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      loading: () => _buildLabeledField(
+                        label: 'Loading...',
+                        controller: _bioController,
+                        maxLines: 3,
+                        enabled: false,
+                      ),
+                      error: (error, stack) => _buildLabeledField(
+                        label: 'Bio - Error loading data',
+                        controller: _bioController,
+                        maxLines: 3,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter a short bio';
+                          }
+                          if (value.trim().length > 200) {
+                            return 'Bio must be less than 200 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Save button
+                    profileState.when(
+                      data: (profile) => Align(
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: 160,
+                          child: ElevatedButton(
+                            onPressed: _isUploading ? null : _saveProfile,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: _isUploading
+                                ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2,
+                              ),
+                            )
+                                : const Text(
+                              'Save Profile',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      loading: () => const Center(
                         child: CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                         ),
                       ),
-                    ),
-
-                  // Profile image section with upload indicator
-                  Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: _isUploading ? null : _pickImage,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: _profileImage != null ? Colors.blue : Colors.grey,
-                              width: 2,
-                            ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 50,
-                            backgroundColor: Colors.black,
-                            backgroundImage: _getDisplayImage(),
-                            child: _getDisplayImage() == null
-                                ? const Icon(Icons.camera_alt, size: 50, color: Colors.grey)
-                                : null,
-                          ),
-                        ),
-                      ),
-                      // Upload indicator overlay
-                      if (_isUploading)
-                        Positioned.fill(
-                          child: Container(
+                      error: (error, stack) => Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.black.withOpacity(0.7),
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red),
                             ),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Camera icon overlay for better UX
-                      if (!_isUploading)
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 16,
-                              color: Colors.white,
+                            child: const Row(
+                              children: [
+                                Icon(Icons.error, color: Colors.red),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Error loading profile data',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Image status text
-                  if (_profileImage != null)
-                    const Text(
-                      'New image selected',
-                      style: TextStyle(color: Colors.blue, fontSize: 12),
-                    )
-                  else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
-                    const Text(
-                      'Current profile image',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    )
-                  else
-                    const Text(
-                      'Tap to select profile image',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-
-                  const SizedBox(height: 20),
-
-                  // Username field
-                  profileState.when(
-                    data: (profile) => TextFormField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a username';
-                        }
-                        if (value.trim().length < 3) {
-                          return 'Username must be at least 3 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    loading: () => TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Loading...',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: TextStyle(color: Colors.blue),
-                      enabled: false,
-                    ),
-                    error: (error, stack) => TextFormField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username (Error loading data)',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.red),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a username';
-                        }
-                        if (value.trim().length < 3) {
-                          return 'Username must be at least 3 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Role field
-                  profileState.when(
-                    data: (profile) => TextFormField(
-                      controller: _roleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Role (Optional)',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                    ),
-                    loading: () =>  TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Loading...',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: TextStyle(color: Colors.blue),
-                      enabled: false,
-                    ),
-                    error: (error, stack) => TextFormField(
-                      controller: _roleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Role (Optional) - Error loading data',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.red),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // School field
-                  profileState.when(
-                    data: (profile) => TextFormField(
-                      controller: _schoolController,
-                      decoration: const InputDecoration(
-                        labelText: 'School/College',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter your school or college';
-                        }
-                        return null;
-                      },
-                    ),
-                    loading: () =>  TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Loading...',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: TextStyle(color: Colors.blue),
-                      enabled: false,
-                    ),
-                    error: (error, stack) => TextFormField(
-                      controller: _schoolController,
-                      decoration: const InputDecoration(
-                        labelText: 'School/College - Error loading data',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.red),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter your school or college';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Location field
-                  profileState.when(
-                    data: (profile) => TextFormField(
-                      controller: _locationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Location (Optional)',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                    ),
-                    loading: () => TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Loading...',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: TextStyle(color: Colors.blue),
-                      enabled: false,
-                    ),
-                    error: (error, stack) => TextFormField(
-                      controller: _locationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Location (Optional) - Error loading data',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.red),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Bio field
-                  profileState.when(
-                    data: (profile) => TextFormField(
-                      controller: _bioController,
-                      decoration: const InputDecoration(
-                        labelText: 'Bio',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      maxLines: 3,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a short bio';
-                        }
-                        if (value.trim().length > 200) {
-                          return 'Bio must be less than 200 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    loading: () => TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Loading...',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                      style: TextStyle(color: Colors.blue),
-                      maxLines: 3,
-                      enabled: false,
-                    ),
-                    error: (error, stack) => TextFormField(
-                      controller: _bioController,
-                      decoration: const InputDecoration(
-                        labelText: 'Bio - Error loading data',
-                        border: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.blue),
-                        ),
-                        labelStyle: TextStyle(color: Colors.red),
-                      ),
-                      style: const TextStyle(color: Colors.blue),
-                      maxLines: 3,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter a short bio';
-                        }
-                        if (value.trim().length > 200) {
-                          return 'Bio must be less than 200 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // Save button
-                  profileState.when(
-                    data: (profile) => ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.blue,
-                        side: const BorderSide(width: 3.0, color: Colors.blue),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30.0),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                      ),
-                      onPressed: _isUploading ? null : _saveProfile,
-                      child: _isUploading
-                          ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          strokeWidth: 2,
-                        ),
-                      )
-                          : const Text(
-                        'Save Profile',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      ),
-                    ),
-                    error: (error, stack) => Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.error, color: Colors.red),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Error loading profile data',
-                                  style: TextStyle(color: Colors.red),
+                          const SizedBox(height: 15),
+                          Align(
+                            alignment: Alignment.center,
+                            child: SizedBox(
+                              width: 160,
+                              child: ElevatedButton(
+                                onPressed: _isUploading ? null : _saveProfile,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: _isUploading
+                                    ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                    : const Text(
+                                  'Save Profile',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 15),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: Colors.blue,
-                            side: const BorderSide(width: 3.0, color: Colors.blue),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30.0),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                           ),
-                          onPressed: _isUploading ? null : _saveProfile,
-                          child: _isUploading
-                              ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : const Text(
-                            'Save Profile',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
           ),

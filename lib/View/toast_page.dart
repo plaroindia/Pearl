@@ -1,4 +1,4 @@
-// Updated toast_page.dart
+// Updated toast_page.dart - Clean, minimalist UI
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ViewModel/textpost_provider.dart';
@@ -28,7 +28,6 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
     _contentController.addListener(() {
       ref.read(textPostProvider.notifier).updateContent(_contentController.text);
     });
-
   }
 
   @override
@@ -118,7 +117,6 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
   @override
   Widget build(BuildContext context) {
     final textPostState = ref.watch(textPostProvider);
-    final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
 
@@ -132,7 +130,6 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
         });
       }
     });
-
 
     return PopScope(
       canPop: !textPostState.hasUnsavedChanges,
@@ -165,6 +162,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
             ),
           ),
           actions: [
+            // Draft button (only show if there are unsaved changes)
             if (textPostState.hasUnsavedChanges)
               TextButton(
                 onPressed: textPostState.isLoading
@@ -178,6 +176,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                   ),
                 ),
               ),
+            // Post button (always visible in app bar)
             TextButton(
               onPressed: textPostState.isLoading
                   ? null
@@ -218,7 +217,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                 ),
               ),
 
-            // Shows Success Message
+            // Success message
             if (textPostState.successMessage != null)
               Container(
                 width: double.infinity,
@@ -242,8 +241,6 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                 ),
               ),
 
-
-
             // Loading indicator
             if (textPostState.isLoading)
               const LinearProgressIndicator(
@@ -259,7 +256,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title field
+                    // Title field - clean, no borders
                     TextField(
                       controller: _titleController,
                       style: TextStyle(
@@ -281,14 +278,14 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                       textInputAction: TextInputAction.next,
                     ),
 
-                    // Divider
+                    // Subtle divider
                     Container(
                       height: 1,
                       color: Colors.grey[800],
                       margin: const EdgeInsets.symmetric(vertical: 8),
                     ),
 
-                    // Content field
+                    // Content field - clean, spacious
                     TextField(
                       controller: _contentController,
                       style: TextStyle(
@@ -311,7 +308,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                       textInputAction: TextInputAction.newline,
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
                     // Tags section
                     Row(
@@ -403,9 +400,9 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                         ),
                       ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-                    // Formatting tips
+                    // Writing tips section
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -451,7 +448,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
                       ),
                     ),
 
-                    // Add some bottom padding
+                    // Bottom padding for scroll
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -464,7 +461,7 @@ class _TextPostPageState extends ConsumerState<ToastPage> {
   }
 }
 
-// Post preview widget (optional)
+// Optional: Post preview widget for future use
 class PostPreviewWidget extends ConsumerWidget {
   const PostPreviewWidget({super.key});
 

@@ -534,6 +534,7 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
 
     // FIXED: More precise auto-scroll logic
     final currentMessageCount = chatState.messages.length;
+
     if (currentMessageCount > _lastMessageCount) {
       // New message arrived - scroll if user is near bottom or if it's their own message
       if (_shouldAutoScroll || !_isUserScrolling) {
@@ -587,9 +588,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       ),
     );
   }
-
-  // ... (Rest of the methods remain the same - _buildMessageBubble, _buildMediaContent, etc.)
-  // I'll include the essential remaining methods for completeness:
 
   Widget _buildMessageBubble({
     required DirectMessage message,
@@ -683,9 +681,6 @@ class _IndividualChatPageState extends ConsumerState<IndividualChatPage>
       ),
     );
   }
-
-  // ... (Include other essential methods like _buildAvatar, _buildTimestamp, etc.)
-  // For brevity, I'll just show the signature of remaining key methods:
   Widget _buildMediaContent(Map<String, dynamic> mediaMetadata) {
     final mediaType = mediaMetadata['media_type'] as String?;
     final fileUrl = mediaMetadata['file_url'] as String?;

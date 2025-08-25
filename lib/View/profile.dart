@@ -12,6 +12,7 @@ import '../Model/toast.dart';
 import '../Model/post.dart';
 import '../Model/user_profile.dart';
 import '../View/foll_page.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class OtherProfileScreen extends ConsumerStatefulWidget {
   final String? userId; // null = current user, otherwise other user
@@ -136,8 +137,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
 
   void _openChat() {
     if (!isOwnProfile) {
-      // Navigate to chat screen - implement your chat navigation here
-      //print('Opening chat with user: $targetUserId');
+      // Navigate to chat screen
       // Navigator.pushNamed(context, '/chat', arguments: {'userId': targetUserId});
     }
   }
@@ -163,175 +163,98 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
         color: Colors.blue,
         backgroundColor: Colors.black,
         displacement: 40.0,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10.0, 5.0, 10.0, 0.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header container - Different for own vs other profile
-                    _buildHeader(profileState, authState),
+        child: NestedScrollView(
+          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+            return [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10.0, 5.0, 10.0, 0.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header container - Now shows back button and username for all profiles
+                      _buildHeader(profileState, authState),
 
-                    // Show loading indicator if not initialized
-                    if (!_isInitialized && profileState.isLoading)
-                      const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      // Show loading indicator if not initialized
+                      if (!_isInitialized && profileState.isLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                            ),
                           ),
                         ),
-                      ),
 
-                    // Profile information section - Same for both
-                    _buildProfileInfo(profileState),
+                      // Profile information section - Same for both
+                      _buildProfileInfo(profileState),
 
-                    // Action buttons - DIFFERENT for own vs other profile
-                    _buildActionButtons(followState),
+                      // Action buttons - DIFFERENT for own vs other profile
+                      _buildActionButtons(followState),
 
-                    const SizedBox(height: 6.0),
-
-                    // Tab Bar for Posts and Toasts - Same for both
-                    _buildTabBar(feedState),
-                  ],
+                      const SizedBox(height: 6.0),
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-            // Tab Bar View Content - Same for both but different permissions
-            SliverFillRemaining(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPostsTab(feedState),
-                  _buildToastsTab(feedState),
-                ],
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _SliverAppBarDelegate(
+                  minHeight: 50.0,
+                  maxHeight: 50.0,
+                  child: _buildTabBar(feedState),
+                ),
               ),
-            ),
-          ],
+            ];
+          },
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPostsTab(feedState),
+              _buildToastsTab(feedState),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader(AsyncValue profileState, AsyncValue authState) {
-    if (!isOwnProfile) {
-      // Other user's profile header
-      return Column(
-        children: [
-          SizedBox(height: 30),
-          Row(
-            children: [
-              // Back button
+    return Column(
+      children: [
+        Row(
+          children: [
+            // Back button - only show for other profiles
+            if (!isOwnProfile)
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: Icon(
-                  Icons.arrow_back_ios,
-                  color: Colors.grey[400],
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
                   size: 20,
                 ),
               ),
-              // Profile picture
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: profileState.when(
-                  data: (profile) => CircleAvatar(
-                    backgroundImage: profile?.profilePic != null
-                        ? NetworkImage(profile!.profilePic!)
-                        : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                    radius: 15.0,
-                  ),
-                  loading: () => const CircleAvatar(
-                    radius: 15.0,
-                    backgroundColor: Colors.grey,
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      ),
-                    ),
-                  ),
-                  error: (error, stack) => const CircleAvatar(
-                    backgroundImage: AssetImage('assets/plaro_logo.png'),
-                    radius: 15.0,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Username
-              Expanded(
-                child: profileState.when(
-                  data: (profile) => Text(
-                    profile?.username ?? widget.initialUserData?.username ?? 'Unknown User',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  loading: () => const Text(
-                    'Loading...',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  error: (error, stack) => Text(
-                    widget.initialUserData?.username ?? 'Error loading user',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
-    }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: profileState.when(
-            data: (profile) => CircleAvatar(
-              backgroundImage: profile?.profilePic != null
-                  ? NetworkImage(profile!.profilePic!)
-                  : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-              radius: 15.0,
-            ),
-            loading: () => const CircleAvatar(
-              radius: 15.0,
-              backgroundColor: Colors.grey,
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                ),
-              ),
-            ),
-            error: (error, stack) => const CircleAvatar(
-              backgroundImage: AssetImage('assets/plaro_logo.png'),
-              radius: 15.0,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: authState.when(
-            data: (session) {
-              return profileState.when(
+            // Add spacing only when back button is present
+            if (!isOwnProfile) const SizedBox(width: 10),
+
+            // Username for all profiles
+            Expanded(
+              child: profileState.when(
                 data: (profile) => Text(
-                  profile?.username ?? session?.user.email ?? 'No user',
-                  style: const TextStyle(
+                  profile?.username ?? widget.initialUserData?.username ?? 'Unknown User',
+                  style: GoogleFonts.playwriteFrModerne(
                     color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    shadows: const [
+                      Shadow(
+                        blurRadius: 8,
+                        color: Colors.blue,
+                        offset: Offset(2, 2),
+                      ),
+                    ],
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -340,20 +263,26 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
                   style: TextStyle(color: Colors.grey),
                 ),
                 error: (error, stack) => Text(
-                  session?.user.email ?? 'Error loading user',
+                  widget.initialUserData?.username ?? 'Error loading user',
                   style: const TextStyle(color: Colors.red),
                 ),
-              );
-            },
-            loading: () => const Text(
-              'Loading...',
-              style: TextStyle(color: Colors.grey),
+              ),
             ),
-            error: (error, stack) => const Text(
-              'Error loading user',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
+
+            // Optional: Add action buttons for own profile
+            if (isOwnProfile)
+              IconButton(
+                onPressed: () {
+                  // Add edit profile functionality here
+                  // For example: _showEditProfileDialog();
+                },
+                icon: const Icon(
+                  Icons.edit,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+          ],
         ),
       ],
     );
@@ -371,7 +300,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
               backgroundImage: profile?.profilePic != null
                   ? NetworkImage(profile!.profilePic!)
                   : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-              radius: 45.0,
+              radius: 68.0,
             ),
             loading: () => const CircleAvatar(
               radius: 45.0,
@@ -472,52 +401,74 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           ),
         ),
 
-        // Role (if exists)
+        // Role and Location in horizontal layout
         profileState.when(
-          data: (profile) => profile?.role != null
-              ? Padding(
-            padding: const EdgeInsets.only(top: 5.0),
-            child: Text(
-              profile!.role!,
-              style: const TextStyle(
-                color: Colors.green,
-                fontSize: 12.0,
-                letterSpacing: 1.0,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          )
-              : const SizedBox.shrink(),
-          loading: () => const SizedBox.shrink(),
-          error: (error, stack) => const SizedBox.shrink(),
-        ),
+          data: (profile) {
+            final hasRole = profile?.role != null;
+            final hasLocation = profile?.location != null;
 
-        // Location (if exists)
-        profileState.when(
-          data: (profile) => profile?.location != null
-              ? Padding(
-            padding: const EdgeInsets.only(top: 5.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.location_on,
-                  color: Colors.grey,
-                  size: 16,
+            if (hasRole || hasLocation) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 5.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (hasRole)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.work_history_outlined,
+                            color: Colors.lightBlue,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              profile!.role!,
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontSize: 12.0,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (hasLocation && hasRole)
+                      const SizedBox(width: 20),
+                    if (hasLocation)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: Colors.lightBlue, size: 16),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              profile!.location!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 12.0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  profile!.location!,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12.0,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          )
-              : const SizedBox.shrink(),
+              );
+            }
+            return const SizedBox.shrink();
+          },
           loading: () => const SizedBox.shrink(),
           error: (error, stack) => const SizedBox.shrink(),
         ),
@@ -527,25 +478,51 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           data: (profile) => profile != null
               ? Padding(
             padding: const EdgeInsets.only(top: 10.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatItem(
-                  'Followers',
-                  profile.followersCount?.toString() ?? '0',
-                  profile,
-                ),
-                _buildStatItem(
-                  'Following',
-                  profile.followingCount?.toString() ?? '0',
-                  profile,
-                ),
-                _buildStatItem(
-                  'Streak',
-                  profile.streakCount?.toString() ?? '0',
-                  profile,
-                ),
-              ],
+            child: Container(
+              height: 60,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: _buildStatItem(
+                      'Followers',
+                      profile.followersCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: VerticalDivider(
+                      color: Colors.grey[600],
+                      thickness: 1,
+                      width: 1,
+                    ),
+                  ),
+                  Flexible(
+                    child: _buildStatItem(
+                      'Following',
+                      profile.followingCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: VerticalDivider(
+                      color: Colors.grey[600],
+                      thickness: 1,
+                      width: 1,
+                    ),
+                  ),
+                  Flexible(
+                    child: _buildStatItem(
+                      'Streak',
+                      profile.streakCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
+                ],
+              ),
             ),
           )
               : const SizedBox.shrink(),
@@ -613,8 +590,8 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
               backgroundColor: isFollowing ? Colors.grey[800] : Colors.blue,
               foregroundColor: Colors.white,
               side: BorderSide(
-                  width: 2.0,
-                  color: isFollowing ? Colors.grey : Colors.blue
+                width: 2.0,
+                color: isFollowing ? Colors.grey : Colors.blue,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10.0),
@@ -651,45 +628,44 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
   }
 
   Widget _buildTabBar(ProfileFeedState feedState) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.transparent,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black,
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(
+            width: 1.5,
+            color: Colors.blue[400]!,
           ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelColor: Colors.blue,
-          unselectedLabelColor: Colors.grey,
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.view_array_outlined, size: 16),
-                  const SizedBox(width: 4),
-                  Text('Posts (${feedState.posts.length})'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.campaign_outlined, size: 16),
-                  const SizedBox(width: 4),
-                  Text('Toasts (${feedState.toasts.length})'),
-                ],
-              ),
-            ),
-          ],
+          insets: const EdgeInsets.symmetric(horizontal: 90.0),
         ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: Colors.blue,
+        unselectedLabelColor: Colors.grey,
+        tabs: [
+          Tab(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.view_array_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('Posts (${feedState.posts.length})'),
+              ],
+            ),
+          ),
+          Tab(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.campaign_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('Toasts (${feedState.toasts.length})'),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -735,55 +711,22 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
       );
     }
 
-    return Column(
-      children: [
-        if (feedState.error != null)
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    feedState.error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
-                  icon: const Icon(Icons.close, color: Colors.red, size: 16),
-                ),
-              ],
-            ),
-          ),
-
-        Expanded(
-          child: ProfilePostsGrid(
-            posts: feedState.posts,
-            scrollController: _postsScrollController,
-            onPostTap: (post) {
-              print('Tapped post: ${post.post_id}');
-            },
-            onLike: (postId) {
-              ref.read(profileFeedProvider.notifier).togglePostLike(postId);
-            },
-            onDelete: isOwnProfile ? (postId) {
-              _showDeleteConfirmation('post', () {
-                ref.read(profileFeedProvider.notifier).deletePost(postId);
-              });
-            } : null,
-            isLoadingMore: feedState.isLoadingMorePosts,
-            hasMore: feedState.hasMorePosts,
-          ),
-        ),
-      ],
+    return ProfilePostsGrid(
+      posts: feedState.posts,
+      scrollController: _postsScrollController,
+      onPostTap: (post) {
+        print('Tapped post: ${post.post_id}');
+      },
+      onLike: (postId) {
+        ref.read(profileFeedProvider.notifier).togglePostLike(postId);
+      },
+      onDelete: isOwnProfile ? (postId) {
+        _showDeleteConfirmation('post', () {
+          ref.read(profileFeedProvider.notifier).deletePost(postId);
+        });
+      } : null,
+      isLoadingMore: feedState.isLoadingMorePosts,
+      hasMore: feedState.hasMorePosts,
     );
   }
 
@@ -828,55 +771,22 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
       );
     }
 
-    return Column(
-      children: [
-        if (feedState.error != null)
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    feedState.error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
-                  icon: const Icon(Icons.close, color: Colors.red, size: 16),
-                ),
-              ],
-            ),
-          ),
-
-        Expanded(
-          child: ProfileToastsGrid(
-            toasts: feedState.toasts,
-            scrollController: _toastsScrollController,
-            onToastTap: (toast) {
-              print('Tapped toast: ${toast.toast_id}');
-            },
-            onLike: (toastId) {
-              ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
-            },
-            onDelete: isOwnProfile ? (toastId) {
-              _showDeleteConfirmation('toast', () {
-                ref.read(profileFeedProvider.notifier).deleteToast(toastId);
-              });
-            } : null,
-            isLoadingMore: feedState.isLoadingMoreToasts,
-            hasMore: feedState.hasMoreToasts,
-          ),
-        ),
-      ],
+    return ProfileToastsGrid(
+      toasts: feedState.toasts,
+      scrollController: _toastsScrollController,
+      onToastTap: (toast) {
+        print('Tapped toast: ${toast.toast_id}');
+      },
+      onLike: (toastId) {
+        ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
+      },
+      onDelete: isOwnProfile ? (toastId) {
+        _showDeleteConfirmation('toast', () {
+          ref.read(profileFeedProvider.notifier).deleteToast(toastId);
+        });
+      } : null,
+      isLoadingMore: feedState.isLoadingMoreToasts,
+      hasMore: feedState.hasMoreToasts,
     );
   }
 
@@ -926,7 +836,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           MaterialPageRoute(
             builder: (context) => FollowPage(
               userId: targetUserId,
-              initialTab: label == 'Following' ? 1 : 0, // 0 for followers, 1 for following
+              initialTab: label == 'Following' ? 1 : 0,
             ),
           ),
         );
@@ -954,13 +864,43 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
   }
 }
 
-// Updated grids to handle optional delete functionality
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  _SliverAppBarDelegate({
+    required this.minHeight,
+    required this.maxHeight,
+    required this.child,
+  });
+
+  final double minHeight;
+  final double maxHeight;
+  final Widget child;
+
+  @override
+  double get minExtent => minHeight;
+
+  @override
+  double get maxExtent => maxHeight;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return maxHeight != oldDelegate.maxHeight ||
+        minHeight != oldDelegate.minHeight ||
+        child != oldDelegate.child;
+  }
+}
+
 class ProfilePostsGrid extends ConsumerWidget {
   final List<Post_feed> posts;
   final ScrollController scrollController;
   final Function(Post_feed) onPostTap;
   final Function(String) onLike;
-  final Function(String)? onDelete; // Now optional
+  final Function(String)? onDelete;
   final bool isLoadingMore;
   final bool hasMore;
 
@@ -970,65 +910,95 @@ class ProfilePostsGrid extends ConsumerWidget {
     required this.scrollController,
     required this.onPostTap,
     required this.onLike,
-    this.onDelete, // Optional
+    this.onDelete,
     required this.isLoadingMore,
     required this.hasMore,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final feedState = ref.watch(profileFeedProvider);
+
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.60,
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
-            ),
-            delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                final post = posts[index];
-                return PostProfileCard(
-                  post: post,
-                  onTap: () => onPostTap(post),
-                );
-              },
-              childCount: posts.length,
-            ),
-          ),
-          if (isLoadingMore)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+        padding: const EdgeInsets.all(8.0),
+        child: CustomScrollView(
+          controller: scrollController,
+          slivers: [
+            if (feedState.error != null)
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          feedState.error!,
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
+                        icon: const Icon(Icons.close, color: Colors.red, size: 16),
+                      ),
+                    ],
                   ),
                 ),
               ),
+
+            SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.60,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                  final post = posts[index];
+                  return PostProfileCard(
+                    post: post,
+                    onTap: () => onPostTap(post),
+                  );
+                },
+                childCount: posts.length,
+              ),
             ),
-          if (!hasMore && posts.isNotEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: Text(
-                    'No more posts',
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
+            if (isLoadingMore)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
-    );
+            if (!hasMore && posts.isNotEmpty)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: Text(
+                      'No more posts',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ));
   }
 }
 
@@ -1037,7 +1007,7 @@ class ProfileToastsGrid extends ConsumerWidget {
   final ScrollController scrollController;
   final Function(Toast_feed) onToastTap;
   final Function(String) onLike;
-  final Function(String)? onDelete; // Now optional
+  final Function(String)? onDelete;
   final bool isLoadingMore;
   final bool hasMore;
 
@@ -1047,18 +1017,48 @@ class ProfileToastsGrid extends ConsumerWidget {
     required this.scrollController,
     required this.onToastTap,
     required this.onLike,
-    this.onDelete, // Optional
+    this.onDelete,
     required this.isLoadingMore,
     required this.hasMore,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final feedState = ref.watch(profileFeedProvider);
+
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.fromLTRB(8, 56, 8, 8),
       child: CustomScrollView(
         controller: scrollController,
         slivers: [
+          if (feedState.error != null)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        feedState.error!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
+                      icon: const Icon(Icons.close, color: Colors.red, size: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
