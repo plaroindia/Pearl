@@ -9,6 +9,9 @@ import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/follow_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/user_profile.dart';
+import 'byte_page.dart';
+import 'byte_viewer.dart';
+
 
 void main() => runApp(MaterialApp(
   home: navCard(),
@@ -40,8 +43,10 @@ class _navCardState extends ConsumerState<navCard> {
       case 1:
         return Container(); // Placeholder for create (won't be used due to modal)
       case 2:
-        return NotificationsScreen();
+        return ByteViewerPage();
       case 3:
+        return NotificationsScreen();
+      case 4:
         return _buildProfileScreen();
       default:
         return HomeScreen();
@@ -169,6 +174,10 @@ class _navCardState extends ConsumerState<navCard> {
               label: 'Create'
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.play_circle_outline),
+            label: 'Bytes',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.notifications),
             label: 'Notifications',
           ),
@@ -214,10 +223,12 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
             MaterialPageRoute(builder:  (context) =>  PostCreateScreen()));
         break;
       case 2: // Byte
-        _showComingSoon('Byte Creation');
+        Navigator.push(context,
+            MaterialPageRoute(builder:  (context) =>  ByteCreateScreen()));
+        break;
         break;
       case 3: // Course
-        _showComingSoon('Course Creation');
+             _showComingSoon('Course Creation');
         break;
     }
   }
