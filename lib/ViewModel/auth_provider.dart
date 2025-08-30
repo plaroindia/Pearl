@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-//import 'river_prov.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 final supAuthProv = Provider((ref) => Supabase.instance.client.auth);
 
@@ -40,7 +40,7 @@ class AuthController {
       }
     } catch (e) {
       debugPrint('Login error: $e');
-      return false; // Make sure to return false on error
+      return false;
     }
   }
 
@@ -57,8 +57,6 @@ class AuthController {
       );
 
       debugPrint('SignUp response: ${response.user?.email}');
-
-
 
       // Check if user was created (even without session due to email confirmation)
       if (response.user != null) {
@@ -79,9 +77,58 @@ class AuthController {
     }
   }
 
+  // Fixed: Moved Google Sign-In inside AuthController class
+  Future<bool> googleSignIn() async {
+    try {
+      final googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+        // IMPORTANT → use Web Client ID from Google Cloud
+        serverClientId:
+        "381063348704-crl2r9amlaer6v747t0hsurj89g076pi.apps.googleusercontent.com",
+      );
 
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        debugPrint("Google Sign-In cancelled");
+        return false;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+
+      if (idToken == null) {
+        debugPrint("Google ID Token is null");
+        return false;
+      }
+
+      final response = await ref
+          .read(supAuthProv)
+          .signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      if (response.session != null) {
+        debugPrint('Google Sign-In successful');
+        return true;
+      } else {
+        debugPrint('Google Sign-In failed: No session created');
+        return false;
+      }
+    } catch (e) {
+      debugPrint("Google Sign-In error: $e");
+      return false;
+    }
+  }
 
   Future<void> logout() async {
-    await ref.read(supAuthProv).signOut();
+    try {
+      await ref.read(supAuthProv).signOut();
+      debugPrint('User logged out successfully');
+    } catch (e) {
+      debugPrint('Logout error: $e');
+    }
   }
 }

@@ -48,7 +48,7 @@ dependencies:
   intl: ^0.18.1
   google_fonts: ^6.3.0
   cached_network_image: ^3.4.1
-
+  package_info_plus: ^4.2.0
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +64,7 @@ dev_dependencies:
   build_runner: ^2.5.4
   custom_lint: ^0.7.5
   riverpod_lint: ^2.6.5
+  google_sign_in: ^6.2.1
 
 
 

@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isGoogleLoading = false;  // Added separate loading state for Google
   bool _obscurePassword = true;
   bool _rememberMe = false;
   late AnimationController _animationController;
@@ -98,6 +99,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
       if (mounted) {
         setState(() => _isLoading = false);
         _showFeedback('Error: ${e.toString()}', Colors.red, Icons.error);
+      }
+    }
+  }
+
+  // Fixed: Google Sign-In method that properly calls AuthController
+  Future<void> _googleSignIn() async {
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      final success = await ref.read(authControllerProvider).googleSignIn();
+
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+        if (success) {
+          _showFeedback('Google Sign-In Successful!', Colors.green, Icons.check_circle);
+          Future.delayed(const Duration(seconds: 1), () {
+            Navigator.pushReplacementNamed(context, '/navipg'); // Changed to navipg to match your login flow
+          });
+        } else {
+          _showFeedback('Google Sign-In failed', Colors.red, Icons.error);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+        _showFeedback('Google Sign-In error: ${e.toString()}', Colors.red, Icons.error);
       }
     }
   }
@@ -195,7 +222,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                   scale: _animation,
                   child: CircleAvatar(
                     radius: 60,
-                    backgroundColor: Colors.transparent, // or any fallback color
+                    backgroundColor: Colors.transparent,
                     child: ClipOval(
                       child: Image.asset(
                         'assets/plaro_logo.png',
@@ -204,7 +231,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                       ),
                     ),
                   ),
-
                 ),
 
                 const SizedBox(height: 16),
@@ -378,14 +404,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 24),
 
-                /// Google Button
+                /// Google Button - Fixed implementation
                 Center(
                   child: SizedBox(
                     width: 200,
                     child: OutlinedButton(
-                      onPressed: () {
-                        _showFeedback('Google Sign-In Coming Soon!', Colors.blue, Icons.info);
-                      },
+                      onPressed: _isGoogleLoading ? null : _googleSignIn, // Fixed: Now calls the proper method
                       style: OutlinedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: Theme.of(context).colorScheme.onBackground,
@@ -398,7 +422,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                         ),
                         elevation: 0,
                       ),
-                      child: Row(
+                      child: _isGoogleLoading
+                          ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
@@ -444,7 +474,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                     ),
                     const SizedBox(width: 4),
                     TextButton(
-                      onPressed: _isLoading
+                      onPressed: (_isLoading || _isGoogleLoading)
                           ? null
                           : () {
                         Navigator.push(
