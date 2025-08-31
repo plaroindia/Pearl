@@ -11,7 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/user_profile.dart';
 import 'byte_page.dart';
 import 'byte_viewer.dart';
-
+import '../View/course_page.dart';
 
 void main() => runApp(MaterialApp(
   home: navCard(),
@@ -226,10 +226,10 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
         Navigator.push(context,
             MaterialPageRoute(builder:  (context) =>  ByteCreateScreen()));
         break;
-        break;
       case 3: // Course
-             _showComingSoon('Course Creation');
-        break;
+        Navigator.push(context,
+            MaterialPageRoute(builder:  (context) =>  CourseCreateScreen()));
+        break;;
     }
   }
 

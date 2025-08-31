@@ -14,7 +14,7 @@ class PlaroAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final controller = TextEditingController();
     return AppBar(
-      title: const Text("Discover Events"),
+      title: const Text("Discover"),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Padding(
@@ -25,7 +25,7 @@ class PlaroAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: TextField(
                   controller: controller,
                   decoration: InputDecoration(
-                    hintText: "Search events...",
+                    hintText: "Search...",
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: controller.text.isNotEmpty
                         ? IconButton(

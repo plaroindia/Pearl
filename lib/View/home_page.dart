@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:plaro_3/View/allcourses_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
@@ -165,9 +166,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _feedsInitialized = true;
       });
 
-      print('🟢 Feeds refreshed successfully');
+      print('Feeds refreshed successfully');
     } catch (e) {
-      print('🔴 Error refreshing feeds: $e');
+      print('Error refreshing feeds: $e');
     }
   }
 
@@ -388,6 +389,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const AllEventsPage()),
+                  );
+                },
+              ),
+
+              ListTile(
+                leading: Icon(
+                  Icons.library_books,
+                  color: Theme.of(context).iconTheme.color,
+                ),
+                title: Text(
+                  'Courses',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CoursesPage()),
                   );
                 },
               ),
