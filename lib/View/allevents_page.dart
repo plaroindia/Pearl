@@ -6,6 +6,7 @@ import 'widgets/filter_bottom_sheet.dart';
 import 'package:plaro_3/ViewModel/event_provider.dart';
 import 'widgets/plaro_app_bar.dart';
 import 'dart:async';
+import 'create_events_page.dart';
 
 class AllEventsPage extends HookConsumerWidget {
   const AllEventsPage({super.key});
@@ -67,6 +68,20 @@ class AllEventsPage extends HookConsumerWidget {
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateEventScreen(),
+            ),
+          );
+        },
+        backgroundColor: Colors.blueAccent,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
     );
   }
 }
@@ -138,5 +153,6 @@ class _AnimatedCategoryListState extends State<_AnimatedCategoryList> with Ticke
         );
       },
     );
+
   }
 }
