@@ -12,6 +12,7 @@
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
 
+        <!-- Supabase Deep Link Activity -->
         <activity
             android:name="com.supabase.flutter.SupabaseDeepLinkingActivity"
             android:exported="true"
@@ -23,6 +24,7 @@
                 <data
                     android:scheme="io.supabase.flutter"
                     android:host=   "login-callback" />
+                android:host="login-callback" />
             </intent-filter>
         </activity>
 
@@ -40,21 +42,47 @@
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
+
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"
+                />
+            android:resource="@style/NormalTheme" />
+
+            <!-- Main launcher intent -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Custom scheme for password reset -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="plaro"/>
+            </intent-filter>
+
+            <!-- HTTPS deep links (if you have a domain) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                    android:host="plaro.app"
+                    android:pathPrefix="/reset-password"/>
+            </intent-filter>
+
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
         <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCbmzeNx21EYYwuZNEV2l7stvQALHtDP68" />
         android:name="com.google.android.geo.API_KEY"
         android:value="AIzaSyCbmzeNx21EYYwuZNEV2l7stvQALHtDP68" />
 
@@ -64,6 +92,7 @@
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
