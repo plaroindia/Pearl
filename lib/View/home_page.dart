@@ -393,25 +393,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               ),
 
-              ListTile(
-                leading: Icon(
-                  Icons.library_books,
-                  color: Theme.of(context).iconTheme.color,
-                ),
-                title: Text(
-                  'Courses',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onBackground,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const CoursesPage()),
-                  );
-                },
-              ),
+              // ListTile(
+              //   leading: Icon(
+              //     Icons.library_books,
+              //     color: Theme.of(context).iconTheme.color,
+              //   ),
+              //   title: Text(
+              //     'Courses',
+              //     style: TextStyle(
+              //       color: Theme.of(context).colorScheme.onBackground,
+              //     ),
+              //   ),
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     Navigator.push(
+              //       context,
+              //       MaterialPageRoute(builder: (context) => const CoursesPage()),
+              //     );
+              //   },
+              // ),
 
               ListTile(
                 leading: Icon(
@@ -498,9 +498,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (toastFeedState.posts.isEmpty && !toastFeedState.isLoading) {
               ref.read(toastFeedProvider.notifier).loadTosts();
             }
-            // if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
-            //   ref.read(postFeedProvider.notifier).loadPosts();
-            // }
+            if (postFeedState.posts.isEmpty && !postFeedState.isLoading) {
+              ref.read(postFeedProvider.notifier).loadPosts();
+            }
           });
 
           return _buildCombinedFeed(toastFeedState, postFeedState);

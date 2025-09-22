@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_player/video_player.dart';
 import '../../Model/post.dart';
-import '../../ViewModel/post_feed_provider.dart';
 import 'dart:io';
 import '../../ViewModel/user_feed_provider.dart';
 import '../../ViewModel/user_provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'zoomable_image.dart';
+
 
 class PostProfileCard extends ConsumerWidget {
   final Post_feed post;
@@ -115,7 +114,7 @@ class PostProfileCard extends ConsumerWidget {
                           icon:Icon(Icons.more_vert),
                           onPressed: (){
                             _showMoreOptions(context,post);
-                            },
+                          },
                         ),
                       ],
                     ),
@@ -139,10 +138,15 @@ class PostProfileCard extends ConsumerWidget {
       final file = post.localMediaFiles!.first;
       return _isVideoFile(file.path)
           ? _buildVideoThumbnail(File(file.path))
-          : Image.file(
-        File(file.path),
-        fit: BoxFit.cover,
-        width: double.infinity,
+          : ResettingInteractiveViewer(
+        boundaryMargin: const EdgeInsets.all(20),
+        minScale: 1.0,
+        maxScale: 4.0,
+        child: Image.file(
+          File(file.path),
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
       );
     } else if (post.media_urls != null && post.media_urls!.isNotEmpty) {
       final mediaUrl = post.media_urls!.first;
@@ -150,35 +154,40 @@ class PostProfileCard extends ConsumerWidget {
         children: [
           _isVideoUrl(mediaUrl)
               ? _buildNetworkVideoThumbnail(mediaUrl)
-              : Image.network(
-            mediaUrl,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(
-                color: Colors.grey[800],
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.blue,
-                    strokeWidth: 2,
+              : ResettingInteractiveViewer(
+            boundaryMargin: const EdgeInsets.all(20),
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Image.network(
+              mediaUrl,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey[800],
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.blue,
+                      strokeWidth: 2,
+                    ),
                   ),
-                ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: Colors.grey[800],
-                child: const Center(
-                  child: Icon(
-                    Icons.image_not_supported,
-                    color: Colors.grey,
-                    size: 30,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[800],
+                  child: const Center(
+                    child: Icon(
+                      Icons.image_not_supported,
+                      color: Colors.grey,
+                      size: 30,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
 
           // Media count indicator for multiple media
@@ -318,99 +327,99 @@ void _showMoreOptions(BuildContext context, Post_feed post) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-  builder: (context) => Consumer(
-  builder: (context, ref, child) {
-      final currentUserId = ref.watch(currentUserIdProvider);
+    builder: (context) => Consumer(
+      builder: (context, ref, child) {
+        final currentUserId = ref.watch(currentUserIdProvider);
 
-      // Check if toast belongs to current user
-      final isOwner = currentUserId != null && currentUserId == post.user_id;
+        // Check if toast belongs to current user
+        final isOwner = currentUserId != null && currentUserId == post.user_id;
 
-      return Consumer(
-        builder: (context, ref, child) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(2),
+        return Consumer(
+          builder: (context, ref, child) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[600],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                if (isOwner)
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined, color: Colors.blue),
-                  title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to edit post screen
-                    // Navigator.pushNamed(context, '/edit-post', arguments: post);
-                  },
-                ),
-                if (isOwner)
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.red),
-                  title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
-                  onTap: () async {
-                  showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: Colors.grey[900],
-                        title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
-                        content: const Text('Are you sure you want to delete this post?',
-                            style: TextStyle(color: Colors.white70)),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  if (isOwner)
+                    ListTile(
+                      leading: const Icon(Icons.edit_outlined, color: Colors.blue),
+                      title: const Text('Edit Post', style: TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        // Navigate to edit post screen
+                        // Navigator.pushNamed(context, '/edit-post', arguments: post);
+                      },
+                    ),
+                  if (isOwner)
+                    ListTile(
+                      leading: const Icon(Icons.delete_outline, color: Colors.red),
+                      title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
+                      onTap: () async {
+                        showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: Colors.grey[900],
+                            title: const Text('Delete Post', style: TextStyle(color: Colors.white)),
+                            content: const Text('Are you sure you want to delete this post?',
+                                style: TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                              ),
+                              TextButton(
+                                onPressed: () async{
+                                  final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
+
+                                  Navigator.pop(context);
+                                  Navigator.pop(context);
+
+                                  if (success) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Post deleted successfully')),
+                                    );
+
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Failed to delete post')),
+                                    );
+                                  }
+                                },// => Navigator.pop(context, true),
+                                child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
                           ),
-                          TextButton(
-                            onPressed: () async{
-                                final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
-
-                                Navigator.pop(context);
-                                Navigator.pop(context);
-
-                                if (success) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Post deleted successfully')),
-                                  );
-
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Failed to delete post')),
-                                  );
-                                }
-                            },// => Navigator.pop(context, true),
-                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                  //Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.visibility_off_outlined, color: Colors.orange),
-                  title: const Text('Hide Post', style: TextStyle(color: Colors.white)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Implement hide post functionality
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Post hidden')),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  ),
+                        );
+                        //Navigator.pop(context);
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.visibility_off_outlined, color: Colors.orange),
+                    title: const Text('Hide Post', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      // Implement hide post functionality
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Post hidden')),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ),
   );
 }

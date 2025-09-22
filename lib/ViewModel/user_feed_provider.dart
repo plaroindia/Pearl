@@ -2,68 +2,93 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/post.dart';
 import '../Model/toast.dart';
+import '../Model/byte.dart';
 
 // State class for profile feed
 class ProfileFeedState {
   final List<Post_feed> posts;
   final List<Toast_feed> toasts;
+  final List<Byte> bytes;
   final bool isLoadingPosts;
   final bool isLoadingToasts;
+  final bool isLoadingBytes;
   final bool isLoadingMorePosts;
   final bool isLoadingMoreToasts;
+  final bool isLoadingMoreBytes;
   final String? error;
   final Set<String> likingPosts;
   final Set<String> likingToasts;
+  final Set<String> likingBytes;
   final bool hasMorePosts;
   final bool hasMoreToasts;
+  final bool hasMoreBytes;
   final int currentPostPage;
   final int currentToastPage;
+  final int currentBytePage;
 
   const ProfileFeedState({
     this.posts = const [],
     this.toasts = const [],
+    this.bytes = const [],
     this.isLoadingPosts = false,
     this.isLoadingToasts = false,
+    this.isLoadingBytes = false,
     this.isLoadingMorePosts = false,
     this.isLoadingMoreToasts = false,
+    this.isLoadingMoreBytes = false,
     this.error,
     this.likingPosts = const {},
     this.likingToasts = const {},
+    this.likingBytes = const {},
     this.hasMorePosts = true,
     this.hasMoreToasts = true,
+    this.hasMoreBytes = true,
     this.currentPostPage = 0,
     this.currentToastPage = 0,
+    this.currentBytePage = 0,
   });
 
   ProfileFeedState copyWith({
     List<Post_feed>? posts,
     List<Toast_feed>? toasts,
+    List<Byte>? bytes,
     bool? isLoadingPosts,
     bool? isLoadingToasts,
+    bool? isLoadingBytes,
     bool? isLoadingMorePosts,
     bool? isLoadingMoreToasts,
+    bool? isLoadingMoreBytes,
     String? error,
     Set<String>? likingPosts,
     Set<String>? likingToasts,
+    Set<String>? likingBytes,
     bool? hasMorePosts,
     bool? hasMoreToasts,
+    bool? hasMoreBytes,
     int? currentPostPage,
     int? currentToastPage,
+    int? currentBytePage,
   }) {
     return ProfileFeedState(
       posts: posts ?? this.posts,
       toasts: toasts ?? this.toasts,
+      bytes: bytes ?? this.bytes,
       isLoadingPosts: isLoadingPosts ?? this.isLoadingPosts,
       isLoadingToasts: isLoadingToasts ?? this.isLoadingToasts,
+      isLoadingBytes: isLoadingBytes ?? this.isLoadingBytes,
       isLoadingMorePosts: isLoadingMorePosts ?? this.isLoadingMorePosts,
       isLoadingMoreToasts: isLoadingMoreToasts ?? this.isLoadingMoreToasts,
+      isLoadingMoreBytes: isLoadingMoreBytes ?? this.isLoadingMoreBytes,
       error: error,
       likingPosts: likingPosts ?? this.likingPosts,
       likingToasts: likingToasts ?? this.likingToasts,
+      likingBytes: likingBytes ?? this.likingBytes,
       hasMorePosts: hasMorePosts ?? this.hasMorePosts,
       hasMoreToasts: hasMoreToasts ?? this.hasMoreToasts,
+      hasMoreBytes: hasMoreBytes ?? this.hasMoreBytes,
       currentPostPage: currentPostPage ?? this.currentPostPage,
       currentToastPage: currentToastPage ?? this.currentToastPage,
+      currentBytePage: currentBytePage ?? this.currentBytePage,
     );
   }
 }
@@ -79,7 +104,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
   final SupabaseClient _supabase = Supabase.instance.client;
 
- // _supabase.auth.currentUser;
+  // _supabase.auth.currentUser;
 
   static const int _pageSize = 12; // Increased for grid layout
 
@@ -442,12 +467,146 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     }
   }
 
+  // Load user's bytes
+  Future<void> loadUserBytes(final UserId) async {
+    if (state.isLoadingBytes) return;
+
+    state = state.copyWith(isLoadingBytes: true, error: null);
+
+    try {
+      final user = UserId;
+      if (user == null) {
+        state = state.copyWith(
+          isLoadingBytes: false,
+          error: 'User not authenticated',
+        );
+        return;
+      }
+
+      final response = await _supabase
+          .from('bytes')
+          .select('''
+            *,
+            user_profiles!bytes_user_id_fkey (username, profile_pic)
+          ''')
+          .eq('user_id', user)
+          .order('created_at', ascending: false)
+          .range(0, _pageSize - 1);
+
+      final List<Byte> newBytes = [];
+
+      for (var byteData in response) {
+        final String byteId = byteData['byte_id'].toString();
+        final userProfile = byteData['user_profiles'];
+
+        bool isLiked = false;
+        final likeResponse = await _supabase
+            .from('byte_likes')
+            .select('byte_like_id')
+            .eq('byte_id', byteId)
+            .eq('user_id', user)
+            .maybeSingle();
+        isLiked = likeResponse != null;
+
+        final byte = Byte.fromJson({
+          ...byteData,
+          'byte_id': byteId,
+          'username': userProfile?['username'],
+          'profile_pic': userProfile?['profile_pic'],
+          'isliked': isLiked,
+        });
+
+        newBytes.add(byte);
+      }
+
+      state = state.copyWith(
+        bytes: newBytes,
+        isLoadingBytes: false,
+        hasMoreBytes: newBytes.length == _pageSize,
+        currentBytePage: 1,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoadingBytes: false,
+        error: 'Failed to load bytes: $e',
+      );
+    }
+  }
+
+  // Load more user's bytes (pagination)
+  Future<void> loadMoreUserBytes(final UserId) async {
+    if (state.isLoadingMoreBytes || !state.hasMoreBytes) return;
+
+    final user = UserId;
+    if (user == null) return;
+
+    state = state.copyWith(isLoadingMoreBytes: true, error: null);
+
+    try {
+      final startRange = state.currentBytePage * _pageSize;
+      final endRange = startRange + _pageSize - 1;
+
+      final response = await _supabase
+          .from('bytes')
+          .select('''
+            *,
+            user_profiles!bytes_user_id_fkey (username, profile_pic)
+          ''')
+          .eq('user_id', user)
+          .order('created_at', ascending: false)
+          .range(startRange, endRange);
+
+      final List<Byte> newBytes = [];
+
+      for (var byteData in response) {
+        final String byteId = byteData['byte_id'].toString();
+        final userProfile = byteData['user_profiles'];
+
+        // Avoid duplicates
+        final alreadyExists = state.bytes.any((b) => b.byteId == byteId);
+        if (alreadyExists) continue;
+
+        bool isLiked = false;
+        final likeResponse = await _supabase
+            .from('byte_likes')
+            .select('byte_like_id')
+            .eq('byte_id', byteId)
+            .eq('user_id', user)
+            .maybeSingle();
+        isLiked = likeResponse != null;
+
+        final byte = Byte.fromJson({
+          ...byteData,
+          'byte_id': byteId,
+          'username': userProfile?['username'],
+          'profile_pic': userProfile?['profile_pic'],
+          'isliked': isLiked,
+        });
+
+        newBytes.add(byte);
+      }
+
+      state = state.copyWith(
+        bytes: [...state.bytes, ...newBytes],
+        isLoadingMoreBytes: false,
+        hasMoreBytes: newBytes.length == _pageSize,
+        currentBytePage: state.currentBytePage + 1,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoadingMoreBytes: false,
+        error: 'Failed to load more bytes: $e',
+      );
+    }
+  }
+
   // Refresh user's posts and toasts
   Future<void> refreshUserContent(final UserId) async {
     state = const ProfileFeedState();
     await Future.wait([
       loadUserPosts(UserId),
       loadUserToasts(UserId),
+      loadUserBytes(UserId),
     ]);
   }
 

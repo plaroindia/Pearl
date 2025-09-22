@@ -182,7 +182,7 @@ class CreateModalSheet extends StatefulWidget {
 
 class _CreateModalSheetState extends State<CreateModalSheet> {
   int _selectedIndex = 0;
-  final List<String> _options = ['Text', 'Post', 'Byte', 'Course'];
+  final List<String> _options = ['Text', 'Post', 'Byte'];
 
   void _onOptionSelected(int index) {
     setState(() {
@@ -215,13 +215,12 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
           MaterialPageRoute(builder: (context) => ByteCreateScreen()),
         );
         break;
-      case 3: // Course
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => CourseCreateScreen()),
-        );
-        break;
-        ;
+      // case 3: // Course
+      //   Navigator.push(
+      //     context,
+      //     MaterialPageRoute(builder: (context) => CourseCreateScreen()),
+      //   );
+      //   break;
     }
   }
 

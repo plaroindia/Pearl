@@ -24,7 +24,7 @@
                 <data
                     android:scheme="io.supabase.flutter"
                     android:host=   "login-callback" />
-                android:host="login-callback" />
+
             </intent-filter>
         </activity>
 

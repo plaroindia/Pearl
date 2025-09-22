@@ -21,8 +21,7 @@ class ToastCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final themeMode = ref.watch(themeNotifierProvider);
-    final isDark = themeMode == ThemeMode.dark;
+    ref.watch(themeNotifierProvider);
 
     final toastFeedState = ref.watch(toastFeedProvider);
     final toast = toastFeedState.posts.firstWhere((p) => p.toast_id == this.toast.toast_id, orElse: () => this.toast);
@@ -117,8 +116,13 @@ class ToastCard extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      child: InkWell(
+      child: GestureDetector(
         onTap: onTap,
+        onDoubleTap: () {
+          if (toast.toast_id != null) {
+            ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -225,7 +229,7 @@ class ToastCard extends ConsumerWidget {
                   _ActionButton(
                     icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
                     label: '${toast.like_count}',
-                    color: toast.isliked ? Colors.red : theme.dividerColor!,
+                    color: toast.isliked ? Colors.red : theme.dividerColor,
                     isLoading: isLiking,
                     onPressed: isLiking ? null : () {
                       print('🔵 Like button pressed for toast: ${toast.toast_id}');
@@ -241,7 +245,7 @@ class ToastCard extends ConsumerWidget {
                   _ActionButton(
                     icon: Icons.comment_outlined,
                     label: '${toast.comment_count}',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: () {
                       _showCommentsSheet(context, toast.toast_id!);
                     },
@@ -251,7 +255,7 @@ class ToastCard extends ConsumerWidget {
                   _ActionButton(
                     icon: Icons.share_outlined,
                     label: '${toast.share_count}',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: () {
                       _sharePost(context);
                     },
@@ -261,7 +265,7 @@ class ToastCard extends ConsumerWidget {
                   _ActionButton(
                     icon: Icons.bookmark_border,
                     label: '',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: () {
                       _bookmarkPost(context);
                     },
@@ -490,7 +494,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   width: 40,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: theme.dividerColor?.withOpacity(0.5),
+                    color: theme.dividerColor.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -514,7 +518,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.transparent,
-                  border: Border(top: BorderSide(color: theme.dividerColor!)),
+                  border: Border(top: BorderSide(color: theme.dividerColor)),
                 ),
                 child: Row(
                   children: [

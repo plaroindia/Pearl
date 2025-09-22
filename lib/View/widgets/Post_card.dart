@@ -8,7 +8,8 @@ import '../../ViewModel/post_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'post_comment_card.dart';
 import 'dart:io';
-import '../profile.dart';
+// import '../profile.dart';
+import 'zoomable_image.dart';
 
 class _LocalVideoPlayer extends StatefulWidget {
   final File file;
@@ -79,8 +80,7 @@ class _PostCardState extends ConsumerState<PostCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final themeMode = ref.watch(themeNotifierProvider);
-    final isDark = themeMode == ThemeMode.dark;
+    ref.watch(themeNotifierProvider);
 
     // For preview posts, use the widget.post directly and don't access postFeedState
     if (widget.isPreview) {
@@ -155,7 +155,14 @@ class _PostCardState extends ConsumerState<PostCard> {
               // Media Section
               if ((widget.post.media_urls != null && widget.post.media_urls!.isNotEmpty) ||
                   (widget.post.localMediaFiles != null && widget.post.localMediaFiles!.isNotEmpty))
-                _buildMediaSection(widget.post.media_urls ?? [], widget.post.localMediaFiles),
+                GestureDetector(
+                  onDoubleTap: () {
+                    if (widget.post.post_id != null) {
+                      ref.read(postFeedProvider.notifier).toggleLike(widget.post.post_id!);
+                    }
+                  },
+                  child: _buildMediaSection(widget.post.media_urls ?? [], widget.post.localMediaFiles),
+                ),
 
               // Content
               if (widget.post.content != null && widget.post.content!.isNotEmpty)
@@ -208,7 +215,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.favorite_border,
                     label: '0',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -216,7 +223,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.comment_outlined,
                     label: '0',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -224,7 +231,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.share_outlined,
                     label: '0',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: null, // Disabled for preview
                   ),
 
@@ -232,7 +239,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   _ActionButton(
                     icon: Icons.bookmark_border,
                     label: '',
-                    color: theme.dividerColor!,
+                    color: theme.dividerColor,
                     onPressed: null, // Disabled for preview
                   ),
                 ],
@@ -343,7 +350,14 @@ class _PostCardState extends ConsumerState<PostCard> {
             // Media Section
             if ((currentPost.media_urls != null && currentPost.media_urls!.isNotEmpty) ||
                 (currentPost.localMediaFiles != null && currentPost.localMediaFiles!.isNotEmpty))
-              _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
+              GestureDetector(
+                onDoubleTap: () {
+                  if (currentPost.post_id != null) {
+                    ref.read(postFeedProvider.notifier).toggleLike(currentPost.post_id!);
+                  }
+                },
+                child: _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
+              ),
 
             // Content
             if (currentPost.content != null && currentPost.content!.isNotEmpty)
@@ -396,7 +410,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: currentPost.isliked ? Icons.favorite : Icons.favorite_border,
                   label: '${currentPost.like_count}',
-                  color: currentPost.isliked ? Colors.red : theme.dividerColor!,
+                  color: currentPost.isliked ? Colors.red : theme.dividerColor,
                   isLoading: isLiking,
                   onPressed: isLiking ? null : () {
                     if (currentPost.post_id != null) {
@@ -409,7 +423,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: Icons.comment_outlined,
                   label: '${currentPost.comment_count}',
-                  color: theme.dividerColor!,
+                  color: theme.dividerColor,
                   onPressed: () {
                     _showCommentsSheet(context, currentPost.post_id!);
                   },
@@ -419,7 +433,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: Icons.share_outlined,
                   label: '${currentPost.share_count ?? 0}',
-                  color: theme.dividerColor!,
+                  color: theme.dividerColor,
                   onPressed: () {
                     _sharePost(context, currentPost);
                   },
@@ -429,7 +443,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                 _ActionButton(
                   icon: _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
                   label: '',
-                  color: _isBookmarked ? theme.colorScheme.primary : theme.dividerColor!,
+                  color: _isBookmarked ? theme.colorScheme.primary : theme.dividerColor,
                   onPressed: () {
                     _toggleBookmark();
                   },
@@ -463,7 +477,15 @@ class _PostCardState extends ConsumerState<PostCard> {
           final file = files[index];
           return _isVideoFile(file.path)
               ? _LocalVideoPlayer(file: File(file.path))
-              : Image.file(File(file.path), fit: BoxFit.cover);
+              : ResettingInteractiveViewer(
+            boundaryMargin: const EdgeInsets.all(20),
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Image.file(
+              File(file.path),
+              fit: BoxFit.cover,
+            ),
+          );
         },
       ),
     );
@@ -478,37 +500,42 @@ class _PostCardState extends ConsumerState<PostCard> {
         borderRadius: BorderRadius.circular(3),
         child: _isVideoUrl(mediaUrl)
             ? VideoPlayerWidget(videoUrl: mediaUrl)
-            : Image.network(
-          mediaUrl,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              color: theme.cardTheme.color,
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                      : null,
-                  color: theme.colorScheme.primary,
+            : ResettingInteractiveViewer(
+          boundaryMargin: const EdgeInsets.all(20),
+          minScale: 1.0,
+          maxScale: 4.0,
+          child: Image.network(
+            mediaUrl,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                color: theme.cardTheme.color,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: theme.cardTheme.color,
-              child: Center(
-                child: Icon(
-                  Icons.image_not_supported,
-                  color: theme.dividerColor,
-                  size: 50,
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: theme.cardTheme.color,
+                child: Center(
+                  child: Icon(
+                    Icons.image_not_supported,
+                    color: theme.dividerColor,
+                    size: 50,
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -540,22 +567,27 @@ class _PostCardState extends ConsumerState<PostCard> {
                     borderRadius: BorderRadius.circular(3),
                     child: _isVideoUrl(mediaUrl)
                         ? VideoPlayerWidget(videoUrl: mediaUrl)
-                        : Image.network(
-                      mediaUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: theme.cardTheme.color,
-                          child: Center(
-                            child: Icon(
-                              Icons.image_not_supported,
-                              color: theme.dividerColor,
-                              size: 50,
+                        : ResettingInteractiveViewer(
+                      boundaryMargin: const EdgeInsets.all(20),
+                      minScale: 1.0,
+                      maxScale: 4.0,
+                      child: Image.network(
+                        mediaUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: theme.cardTheme.color,
+                            child: Center(
+                              child: Icon(
+                                Icons.image_not_supported,
+                                color: theme.dividerColor,
+                                size: 50,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   );
                 },
@@ -769,8 +801,6 @@ Shared from MyApp
   }
 
   void _copyPostLink(BuildContext context, Post_feed post) {
-    final link = 'https://myapp.com/post/${post.post_id}';
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Link copied to clipboard'),
@@ -999,7 +1029,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
                   width: 40,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: theme.dividerColor?.withOpacity(0.5),
+                    color: theme.dividerColor.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -1023,7 +1053,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.transparent,
-                  border: Border(top: BorderSide(color: theme.dividerColor!)),
+                  border: Border(top: BorderSide(color: theme.dividerColor)),
                 ),
                 child: Row(
                   children: [
