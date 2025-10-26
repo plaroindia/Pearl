@@ -31,7 +31,7 @@ class _ChatListState extends ConsumerState<ChatList>
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  List<UserProfile> _filteredUsers = [];
+  List<ChatUserProfile> _filteredUsers = [];
   final Set<String> _selectedUsersForGroup = {};
 
   @override
@@ -59,21 +59,22 @@ class _ChatListState extends ConsumerState<ChatList>
   }
 
   void _fetchInitialData() {
-    final notifier = ref.read(chatListProvider(widget.userId).notifier);
-    notifier.fetchChatUsers(refresh: true);
+    final notifier = ref.read(enhancedChatListProvider(widget.userId).notifier);
+    notifier.fetchChatUsersWithMessages(refresh: true);
   }
 
   void _onScroll() {
     if (_scrollController.hasClients) {
       final position = _scrollController.position;
       if (position.pixels >= position.maxScrollExtent - 200) {
-        ref.read(chatListProvider(widget.userId).notifier).fetchChatUsers();
+        ref.read(enhancedChatListProvider(widget.userId).notifier)
+            .fetchChatUsersWithMessages();
       }
     }
   }
 
   void _onSearchChanged() {
-    final chatState = ref.read(chatListProvider(widget.userId));
+    final chatState = ref.read(enhancedChatListProvider(widget.userId));
     final query = _searchController.text.toLowerCase();
 
     if (query.isEmpty) {
@@ -84,6 +85,7 @@ class _ChatListState extends ConsumerState<ChatList>
       setState(() {
         _filteredUsers = chatState.users.where((user) {
           return user.username.toLowerCase().contains(query) ||
+              (user.lastMessage?.toLowerCase().contains(query) ?? false) ||
               (user.bio?.toLowerCase().contains(query) ?? false);
         }).toList();
       });
@@ -156,7 +158,7 @@ class _ChatListState extends ConsumerState<ChatList>
   Widget build(BuildContext context) {
     super.build(context);
 
-    final chatState = ref.watch(chatListProvider(widget.userId));
+    final chatState = ref.watch(enhancedChatListProvider(widget.userId));
     final users = _isSearching ? _filteredUsers : chatState.users;
 
     return Container(
@@ -170,7 +172,7 @@ class _ChatListState extends ConsumerState<ChatList>
             child: RefreshIndicator(
               onRefresh: () async {
                 await ref
-                    .read(chatListProvider(widget.userId).notifier)
+                    .read(enhancedChatListProvider(widget.userId).notifier)
                     .refresh();
               },
               backgroundColor: Colors.grey[900],
@@ -229,7 +231,6 @@ class _ChatListState extends ConsumerState<ChatList>
       backgroundColor: Colors.black,
       elevation: 0,
       toolbarHeight: 56,
-      // Reduced toolbar height
       leading: IconButton(
         onPressed: () {
           setState(() {
@@ -271,7 +272,6 @@ class _ChatListState extends ConsumerState<ChatList>
       backgroundColor: Colors.grey[900],
       elevation: 0,
       toolbarHeight: 56,
-      // Reduced toolbar height
       leading: IconButton(
         onPressed: _clearSelection,
         icon: const Icon(Icons.close, color: Colors.white),
@@ -309,7 +309,7 @@ class _ChatListState extends ConsumerState<ChatList>
   }
 
   Widget _buildList({
-    required List<UserProfile> users,
+    required List<ChatUserProfile> users,
     required bool isLoading,
     required String? error,
     required bool hasMore,
@@ -330,7 +330,6 @@ class _ChatListState extends ConsumerState<ChatList>
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      // Remove default list padding
       itemCount: users.length + (hasMore && isLoading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= users.length) {
@@ -352,7 +351,7 @@ class _ChatListState extends ConsumerState<ChatList>
     );
   }
 
-  Widget _buildChatListItem(UserProfile user) {
+  Widget _buildChatListItem(ChatUserProfile user) {
     final isSelected = _selectedChats.contains(user.user_id);
 
     return Material(
@@ -362,6 +361,12 @@ class _ChatListState extends ConsumerState<ChatList>
           if (_isSelectionMode) {
             _toggleSelection(user.user_id);
           } else {
+            // Mark messages as read when opening chat
+            if (user.unreadCount > 0) {
+              ref.read(enhancedChatListProvider(widget.userId).notifier)
+                  .markMessagesAsRead(user.user_id);
+            }
+
             if (widget.onUserTap != null) {
               widget.onUserTap!(user);
             } else {
@@ -397,6 +402,20 @@ class _ChatListState extends ConsumerState<ChatList>
                             : null,
                       ),
                     ),
+                  // Online status indicator (green dot)
+                  if (user.unreadCount > 0 && !_isSelectionMode)
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(width: 16),
@@ -404,38 +423,100 @@ class _ChatListState extends ConsumerState<ChatList>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      user.username,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            user.username,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: user.unreadCount > 0
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (!_isSelectionMode && user.lastMessageTime != null)
+                          Text(
+                            _formatMessageTime(user.lastMessageTime!),
+                            style: TextStyle(
+                              color: user.unreadCount > 0
+                                  ? Colors.green
+                                  : Colors.grey[500],
+                              fontSize: 12,
+                              fontWeight: user.unreadCount > 0
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
-                    if (user.bio?.isNotEmpty == true)
-                      Text(
-                        user.bio!,
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
+                    Row(
+                      children: [
+                        // Message status indicator for sent messages
+                        if (user.isLastMessageFromMe && user.lastMessage != null) ...[
+                          Icon(
+                            Icons.done,
+                            size: 16,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            user.lastMessage ?? (user.bio?.isNotEmpty == true
+                                ? user.bio!
+                                : 'No messages yet'),
+                            style: TextStyle(
+                              color: user.lastMessage != null
+                                  ? (user.unreadCount > 0
+                                  ? Colors.white
+                                  : Colors.grey[400])
+                                  : Colors.grey[500],
+                              fontSize: 14,
+                              fontWeight: user.unreadCount > 0
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        // Unread count badge
+                        if (user.unreadCount > 0 && !_isSelectionMode)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.all(Radius.circular(12)),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 20,
+                              minHeight: 20,
+                            ),
+                            child: Text(
+                              user.unreadCount > 99 ? '99+' : '${user.unreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              if (!_isSelectionMode)
-                Text(
-                  '2:30 PM',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                  ),
-                ),
             ],
           ),
         ),
@@ -443,18 +524,38 @@ class _ChatListState extends ConsumerState<ChatList>
     );
   }
 
-  void _navigateToChat(BuildContext context, UserProfile user) {
+  String _formatMessageTime(DateTime messageTime) {
+    final now = DateTime.now();
+    final difference = now.difference(messageTime);
+
+    if (difference.inDays > 0) {
+      if (difference.inDays == 1) {
+        return 'Yesterday';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d';
+      } else {
+        return '${messageTime.day}/${messageTime.month}/${messageTime.year}';
+      }
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m';
+    } else {
+      return 'now';
+    }
+  }
+
+  void _navigateToChat(BuildContext context, ChatUserProfile user) {
     try {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              IndividualChatPage(
-                receiver: user,
-                receiverId: user.user_id,
-                receiverName: user.username,
-                receiverProfilePic: user.profilePic,
-              ),
+          builder: (context) => IndividualChatPage(
+            receiver: user,
+            receiverId: user.user_id,
+            receiverName: user.username,
+            receiverProfilePic: user.profilePic,
+          ),
         ),
       );
     } catch (e) {
@@ -467,7 +568,7 @@ class _ChatListState extends ConsumerState<ChatList>
     }
   }
 
-  Widget _buildProfileImage(UserProfile user) {
+  Widget _buildProfileImage(ChatUserProfile user) {
     return Container(
       width: 56,
       height: 56,
@@ -641,24 +742,24 @@ class _ChatListState extends ConsumerState<ChatList>
   }
 
   void _showCreateGroupDialog(BuildContext context) {
-    final chatState = ref.read(chatListProvider(widget.userId));
-    final TextEditingController _groupSearchController = TextEditingController();
-    final TextEditingController _groupNameController = TextEditingController();
-    List<UserProfile> _filteredGroupUsers = chatState.users;
+    final chatState = ref.read(enhancedChatListProvider(widget.userId));
+    final TextEditingController groupSearchController = TextEditingController();
+    final TextEditingController groupNameController = TextEditingController();
+    List<ChatUserProfile> filteredGroupUsers = chatState.users;
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            void _filterGroupUsers(String query) {
+            void filterGroupUsers(String query) {
               if (query.isEmpty) {
                 setState(() {
-                  _filteredGroupUsers = chatState.users;
+                  filteredGroupUsers = chatState.users;
                 });
               } else {
                 setState(() {
-                  _filteredGroupUsers = chatState.users.where((user) {
+                  filteredGroupUsers = chatState.users.where((user) {
                     return user.username.toLowerCase().contains(
                         query.toLowerCase());
                   }).toList();
@@ -666,11 +767,9 @@ class _ChatListState extends ConsumerState<ChatList>
               }
             }
 
-            bool _canCreateGroup() {
+            bool canCreateGroup() {
               return _selectedUsersForGroup.isNotEmpty &&
-                  _groupNameController.text
-                      .trim()
-                      .isNotEmpty;
+                  groupNameController.text.trim().isNotEmpty;
             }
 
             return Dialog(
@@ -678,10 +777,7 @@ class _ChatListState extends ConsumerState<ChatList>
               insetPadding: const EdgeInsets.all(20),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery
-                      .of(context)
-                      .size
-                      .height * 0.8,
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -706,7 +802,7 @@ class _ChatListState extends ConsumerState<ChatList>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               TextField(
-                                controller: _groupNameController,
+                                controller: groupNameController,
                                 style: const TextStyle(color: Colors.white),
                                 decoration: InputDecoration(
                                   hintText: 'Group name',
@@ -724,44 +820,36 @@ class _ChatListState extends ConsumerState<ChatList>
                                 },
                               ),
                               const SizedBox(height: 16),
-
                               Container(
                                 decoration: BoxDecoration(
                                   color: Colors.grey[800],
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.search, color: Colors.grey[500],
-                                        size: 20),
+                                    Icon(Icons.search, color: Colors.grey[500], size: 20),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: TextField(
-                                        controller: _groupSearchController,
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 14),
+                                        controller: groupSearchController,
+                                        style: const TextStyle(color: Colors.white, fontSize: 14),
                                         decoration: InputDecoration(
                                           hintText: 'Search participants...',
-                                          hintStyle: TextStyle(
-                                              color: Colors.grey[500],
-                                              fontSize: 14),
+                                          hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
                                           border: InputBorder.none,
                                           isDense: true,
-                                          contentPadding: const EdgeInsets
-                                              .symmetric(vertical: 12),
+                                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                         ),
-                                        onChanged: _filterGroupUsers,
+                                        onChanged: filterGroupUsers,
                                       ),
                                     ),
-                                    if (_groupSearchController.text.isNotEmpty)
+                                    if (groupSearchController.text.isNotEmpty)
                                       IconButton(
-                                        icon: Icon(Icons.clear,
-                                            color: Colors.grey[500], size: 18),
+                                        icon: Icon(Icons.clear, color: Colors.grey[500], size: 18),
                                         onPressed: () {
-                                          _groupSearchController.clear();
-                                          _filterGroupUsers('');
+                                          groupSearchController.clear();
+                                          filterGroupUsers('');
                                         },
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
@@ -769,30 +857,23 @@ class _ChatListState extends ConsumerState<ChatList>
                                   ],
                                 ),
                               ),
-
                               const SizedBox(height: 12),
                               const Text(
                                 'Select participants:',
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 16),
+                                style: TextStyle(color: Colors.white, fontSize: 16),
                               ),
                               const SizedBox(height: 8),
-
-                              if (_filteredGroupUsers.isNotEmpty)
+                              if (filteredGroupUsers.isNotEmpty)
                                 ConstrainedBox(
                                   constraints: BoxConstraints(
-                                    maxHeight: MediaQuery
-                                        .of(context)
-                                        .size
-                                        .height * 0.3,
+                                    maxHeight: MediaQuery.of(context).size.height * 0.3,
                                   ),
                                   child: ListView.builder(
                                     shrinkWrap: true,
-                                    itemCount: _filteredGroupUsers.length,
+                                    itemCount: filteredGroupUsers.length,
                                     itemBuilder: (context, index) {
-                                      final user = _filteredGroupUsers[index];
-                                      final isSelected = _selectedUsersForGroup
-                                          .contains(user.user_id);
+                                      final user = filteredGroupUsers[index];
+                                      final isSelected = _selectedUsersForGroup.contains(user.user_id);
 
                                       return ListTile(
                                         leading: _buildProfileImage(user),
@@ -800,16 +881,12 @@ class _ChatListState extends ConsumerState<ChatList>
                                           user.username,
                                           style: TextStyle(
                                             color: Colors.white,
-                                            fontWeight: isSelected ? FontWeight
-                                                .bold : FontWeight.normal,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                           ),
                                         ),
                                         trailing: isSelected
-                                            ? const Icon(Icons.check_circle,
-                                            color: Colors.blue)
-                                            : const Icon(
-                                            Icons.radio_button_unchecked,
-                                            color: Colors.grey),
+                                            ? const Icon(Icons.check_circle, color: Colors.blue)
+                                            : const Icon(Icons.radio_button_unchecked, color: Colors.grey),
                                         onTap: () {
                                           setState(() {
                                             _toggleUserForGroup(user.user_id);
@@ -827,12 +904,10 @@ class _ChatListState extends ConsumerState<ChatList>
                                     style: TextStyle(color: Colors.grey),
                                   ),
                                 ),
-
                               const SizedBox(height: 8),
                               if (_selectedUsersForGroup.isNotEmpty)
                                 Text(
-                                  'Selected: ${_selectedUsersForGroup
-                                      .length} users',
+                                  'Selected: ${_selectedUsersForGroup.length} users',
                                   style: const TextStyle(color: Colors.blue),
                                 ),
                             ],
@@ -858,13 +933,12 @@ class _ChatListState extends ConsumerState<ChatList>
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed: _canCreateGroup()
+                            onPressed: canCreateGroup()
                                 ? () {
                               Navigator.of(context).pop();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Group "${_groupNameController
-                                      .text}" created successfully'),
+                                  content: Text('Group "${groupNameController.text}" created successfully'),
                                   backgroundColor: Colors.green,
                                 ),
                               );
@@ -872,9 +946,7 @@ class _ChatListState extends ConsumerState<ChatList>
                             }
                                 : null,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _canCreateGroup()
-                                  ? Colors.blue
-                                  : Colors.grey,
+                              backgroundColor: canCreateGroup() ? Colors.blue : Colors.grey,
                               foregroundColor: Colors.white,
                             ),
                             child: const Text('Create Group'),

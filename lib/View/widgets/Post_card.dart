@@ -1,3 +1,4 @@
+
 // widgets/post_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'post_comment_card.dart';
 import 'dart:io';
 // import '../profile.dart';
 import 'zoomable_image.dart';
+import 'double_tap_like.dart';
 
 class _LocalVideoPlayer extends StatefulWidget {
   final File file;
@@ -103,7 +105,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     CircleAvatar(
                       backgroundImage: widget.post.profile_pic != null
                           ? NetworkImage(widget.post.profile_pic!)
-                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
                       radius: 20,
                     ),
                     const SizedBox(width: 12),
@@ -155,14 +157,7 @@ class _PostCardState extends ConsumerState<PostCard> {
               // Media Section
               if ((widget.post.media_urls != null && widget.post.media_urls!.isNotEmpty) ||
                   (widget.post.localMediaFiles != null && widget.post.localMediaFiles!.isNotEmpty))
-                GestureDetector(
-                  onDoubleTap: () {
-                    if (widget.post.post_id != null) {
-                      ref.read(postFeedProvider.notifier).toggleLike(widget.post.post_id!);
-                    }
-                  },
-                  child: _buildMediaSection(widget.post.media_urls ?? [], widget.post.localMediaFiles),
-                ),
+                _buildMediaSection(widget.post.media_urls ?? [], widget.post.localMediaFiles),
 
               // Content
               if (widget.post.content != null && widget.post.content!.isNotEmpty)
@@ -296,7 +291,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     CircleAvatar(
                       backgroundImage: currentPost.profile_pic != null
                           ? NetworkImage(currentPost.profile_pic!)
-                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
                       radius: 20,
                     ),
                     const SizedBox(width: 12),
@@ -350,14 +345,7 @@ class _PostCardState extends ConsumerState<PostCard> {
             // Media Section
             if ((currentPost.media_urls != null && currentPost.media_urls!.isNotEmpty) ||
                 (currentPost.localMediaFiles != null && currentPost.localMediaFiles!.isNotEmpty))
-              GestureDetector(
-                onDoubleTap: () {
-                  if (currentPost.post_id != null) {
-                    ref.read(postFeedProvider.notifier).toggleLike(currentPost.post_id!);
-                  }
-                },
-                child: _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
-              ),
+              _buildMediaSection(currentPost.media_urls ?? [], currentPost.localMediaFiles),
 
             // Content
             if (currentPost.content != null && currentPost.content!.isNotEmpty)
@@ -498,43 +486,47 @@ class _PostCardState extends ConsumerState<PostCard> {
       aspectRatio: 5/6 ,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(3),
-        child: _isVideoUrl(mediaUrl)
-            ? VideoPlayerWidget(videoUrl: mediaUrl)
-            : ResettingInteractiveViewer(
-          boundaryMargin: const EdgeInsets.all(20),
-          minScale: 1.0,
-          maxScale: 4.0,
-          child: Image.network(
-            mediaUrl,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(
-                color: theme.cardTheme.color,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                        : null,
-                    color: theme.colorScheme.primary,
+        child: PostDoubleTapLike(
+          postId: widget.post.post_id ?? '',
+          isliked: widget.post.isliked,
+          child: _isVideoUrl(mediaUrl)
+              ? VideoPlayerWidget(videoUrl: mediaUrl)
+              : ResettingInteractiveViewer(
+            boundaryMargin: const EdgeInsets.all(20),
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Image.network(
+              mediaUrl,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: theme.cardTheme.color,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                          : null,
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: theme.cardTheme.color,
-                child: Center(
-                  child: Icon(
-                    Icons.image_not_supported,
-                    color: theme.dividerColor,
-                    size: 50,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: theme.cardTheme.color,
+                  child: Center(
+                    child: Icon(
+                      Icons.image_not_supported,
+                      color: theme.dividerColor,
+                      size: 50,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -565,28 +557,32 @@ class _PostCardState extends ConsumerState<PostCard> {
 
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(3),
-                    child: _isVideoUrl(mediaUrl)
-                        ? VideoPlayerWidget(videoUrl: mediaUrl)
-                        : ResettingInteractiveViewer(
-                      boundaryMargin: const EdgeInsets.all(20),
-                      minScale: 1.0,
-                      maxScale: 4.0,
-                      child: Image.network(
-                        mediaUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: theme.cardTheme.color,
-                            child: Center(
-                              child: Icon(
-                                Icons.image_not_supported,
-                                color: theme.dividerColor,
-                                size: 50,
+                    child: PostDoubleTapLike(
+                      postId: widget.post.post_id ?? '',
+                      isliked: widget.post.isliked,
+                      child: _isVideoUrl(mediaUrl)
+                          ? VideoPlayerWidget(videoUrl: mediaUrl)
+                          : ResettingInteractiveViewer(
+                        boundaryMargin: const EdgeInsets.all(20),
+                        minScale: 1.0,
+                        maxScale: 4.0,
+                        child: Image.network(
+                          mediaUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: theme.cardTheme.color,
+                              child: Center(
+                                child: Icon(
+                                  Icons.image_not_supported,
+                                  color: theme.dividerColor,
+                                  size: 50,
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
                     ),
                   );
@@ -1120,6 +1116,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
                     final comment = _comments[index];
                     return CommentCard(
                       comment: comment,
+                      postId: widget.postId,
                       onTap: () async {
                         await ref.read(postFeedProvider.notifier).toggleCommentLike(comment.commentId);
                         await _loadComments(); // Refresh comments

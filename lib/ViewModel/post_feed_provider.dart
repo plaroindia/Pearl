@@ -1,8 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'dart:typed_data';
 import '../Model/post.dart';
 
 // State class for post feed
@@ -12,6 +9,7 @@ class PostFeedState {
   final bool isLoadingMore;
   final String? error;
   final Set<String> likingPosts;
+  final Set<String> likingComments;
   final bool hasMore;
   final int currentPage;
 
@@ -21,6 +19,7 @@ class PostFeedState {
     this.isLoadingMore = false,
     this.error,
     this.likingPosts = const {},
+    this.likingComments = const {},
     this.hasMore = true,
     this.currentPage = 0,
   });
@@ -31,6 +30,7 @@ class PostFeedState {
     bool? isLoadingMore,
     String? error,
     Set<String>? likingPosts,
+    Set<String>? likingComments,
     bool? hasMore,
     int? currentPage,
   }) {
@@ -40,6 +40,7 @@ class PostFeedState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: error,
       likingPosts: likingPosts ?? this.likingPosts,
+      likingComments: likingComments ?? this.likingComments,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
     );
@@ -455,9 +456,116 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
+  // Load replies for a given parent comment within a post
+  Future<List<Comment>> loadReplies(String postId, int parentCommentId) async {
+    try {
+      final repliesResponse = await _supabase
+          .from('post_comments')
+          .select('''
+            *,
+            user_profiles!inner(username, profile_pic)
+          ''')
+          .eq('post_id', postId)
+          .eq('parent_comment_id', parentCommentId)
+          .order('created_at', ascending: false);
+
+      final List<Comment> replies = repliesResponse.map((commentData) {
+        return Comment.fromMap({
+          ...commentData,
+          'username': commentData['user_profiles']['username'],
+          'profile_pic': commentData['user_profiles']['profile_pic'],
+        });
+      }).toList();
+
+      return replies;
+    } catch (e) {
+      // If parent_comment_id column doesn't exist yet, fail gracefully with actionable message
+      final msg = e.toString();
+      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id' column") || msg.contains('schema cache')) {
+        state = state.copyWith(error: 'Replies are not enabled yet. Add parent_comment_id to post_comments and reload API schema. Details: $e');
+      } else {
+        state = state.copyWith(error: 'Failed to load replies: $e');
+      }
+      return [];
+    }
+  }
+
+  // Get replies count for a comment. This is used to show "View replies (n)"
+  Future<int> getRepliesCount(int parentCommentId) async {
+    try {
+      final countResponse = await _supabase
+          .from('post_comments')
+          .select('comment_id')
+          .eq('parent_comment_id', parentCommentId);
+      return countResponse.length;
+    } catch (e) {
+      // If the column does not exist, return 0
+      return 0;
+    }
+  }
+
+  // Add a reply to a specific parent comment
+  Future<bool> addReply(String postId, int parentCommentId, String content) async {
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId == null) return false;
+
+    try {
+      await _supabase.from('post_comments').insert({
+        'post_id': postId,
+        'user_id': currentUserId,
+        'content': content,
+        'parent_comment_id': parentCommentId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      // Increment comment_count for the post
+      final currentPost = state.posts.firstWhere(
+            (post) => post.post_id == postId,
+        orElse: () => Post_feed(post_id: postId, user_id: '', username: '', commentsList: []),
+      );
+
+      await _supabase
+          .from('post')
+          .update({'comment_count': currentPost.comment_count + 1})
+          .eq('post_id', postId);
+
+      // Update local state comment count
+      final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
+      if (postIndex != -1) {
+        final updatedPosts = [...state.posts];
+        updatedPosts[postIndex] = state.posts[postIndex].copyWith(
+          comment_count: state.posts[postIndex].comment_count + 1,
+        );
+        state = state.copyWith(posts: updatedPosts);
+      }
+
+      return true;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id' column") || msg.contains('schema cache')) {
+        state = state.copyWith(error: 'Failed to add reply: parent_comment_id missing in post_comments. Run migration and reload API schema. Details: $e');
+      } else {
+        state = state.copyWith(error: 'Failed to add reply: $e');
+      }
+      return false;
+    }
+  }
+
   Future<void> toggleCommentLike(int commentId) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
+
+    final commentIdStr = commentId.toString();
+
+    // Prevent multiple simultaneous like operations on the same comment
+    if (state.likingComments.contains(commentIdStr)) {
+      return;
+    }
+
+    // Add to likingComments set
+    state = state.copyWith(
+      likingComments: {...state.likingComments, commentIdStr},
+    );
 
     try {
       final existingLike = await _supabase
@@ -509,8 +617,16 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
             .update({'like_count': newCount})
             .eq('comment_id', commentId);
       }
+
+      // Remove from likingComments
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentIdStr),
+      );
     } catch (e) {
-      state = state.copyWith(error: 'Failed to toggle comment like: $e');
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentIdStr),
+        error: 'Failed to toggle comment like: $e',
+      );
     }
   }
 

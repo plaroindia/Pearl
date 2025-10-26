@@ -22,7 +22,7 @@ class CommentCard extends ConsumerWidget {
       leading: CircleAvatar(
         backgroundImage: comment.profileImage != null
             ? NetworkImage(comment.profileImage)
-            : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+            : const AssetImage('assets/plaro new logo.png') as ImageProvider,
       ),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -77,6 +77,3 @@ class CommentCard extends ConsumerWidget {
     );
   }
 }
-
-
-

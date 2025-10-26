@@ -1,3 +1,4 @@
+
 // widgets/comment_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,12 +7,14 @@ import '../../ViewModel/post_feed_provider.dart';
 
 class CommentCard extends ConsumerStatefulWidget {
   final Comment comment;
+  final String postId;
   final VoidCallback? onTap;
   final bool showReplies;
 
   const CommentCard({
     Key? key,
     required this.comment,
+    required this.postId,
     this.onTap,
     this.showReplies = true,
   }) : super(key: key);
@@ -23,18 +26,26 @@ class CommentCard extends ConsumerStatefulWidget {
 class _CommentCardState extends ConsumerState<CommentCard> {
   bool _showReplyField = false;
   final TextEditingController _replyController = TextEditingController();
+  final FocusNode _replyFocusNode = FocusNode();
+  bool _isSubmittingReply = false; // Track reply submission state
+  bool _repliesExpanded = false;
+  bool _isLoadingReplies = false;
+  List<Comment> _replies = [];
+  int _replyCount = 0;
 
   @override
   void dispose() {
     _replyController.dispose();
+    _replyFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch provider to rebuild on state changes
     final postFeedState = ref.watch(postFeedProvider);
-    // For now, we'll use a simple loading state - you can add likingComments to your state later
-    final isLiking = false; // TODO: Add likingComments Set<int> to your PostFeedState
+    // Use provider's likingComments to show per-comment loading state if needed
+    final isLiking = postFeedState.likingComments.contains(widget.comment.commentId.toString());
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -54,7 +65,7 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                   CircleAvatar(
                     backgroundImage: widget.comment.profileImage.isNotEmpty
                         ? NetworkImage(widget.comment.profileImage)
-                        : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                        : const AssetImage('assets/plaro new logo.png') as ImageProvider,
                     radius: 16,
                   ),
                   const SizedBox(width: 12),
@@ -113,13 +124,12 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                                   ? Colors.red
                                   : Colors.grey,
                               isLoading: isLiking,
-                              onPressed: () {
-                                // Toggle like locally for now
+                              onPressed: () async {
+                                // Optimistic toggle
                                 setState(() {
                                   widget.comment.toggleLike();
                                 });
-                                // TODO: Implement server-side comment like toggle
-                                // ref.read(postFeedProvider.notifier).toggleCommentLike(widget.comment.commentId);
+                                await ref.read(postFeedProvider.notifier).toggleCommentLike(widget.comment.commentId);
                               },
                             ),
                             const SizedBox(width: 16),
@@ -133,6 +143,16 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                                 setState(() {
                                   _showReplyField = !_showReplyField;
                                 });
+                                if (_showReplyField) {
+                                  // Prefill mention like Instagram and focus
+                                  if (!_replyController.text.startsWith('@${widget.comment.username}')) {
+                                    _replyController.text = '@${widget.comment.username} ';
+                                  }
+                                  _replyController.selection = TextSelection.fromPosition(
+                                    TextPosition(offset: _replyController.text.length),
+                                  );
+                                  FocusScope.of(context).requestFocus(_replyFocusNode);
+                                }
                               },
                             ),
                             const SizedBox(width: 16),
@@ -149,6 +169,32 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                           ],
                         ),
 
+                        // View replies / Hide replies toggle, Instagram-style
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0, left: 0),
+                          child: Row(
+                            children: [
+                              FutureBuilder<int>(
+                                future: ref.read(postFeedProvider.notifier).getRepliesCount(widget.comment.commentId),
+                                builder: (context, snapshot) {
+                                  final count = snapshot.data ?? _replyCount;
+                                  _replyCount = count;
+                                  if (count <= 0) return const SizedBox.shrink();
+
+                                  return TextButton(
+                                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                                    onPressed: _repliesExpanded ? _hideReplies : _loadReplies,
+                                    child: Text(
+                                      _repliesExpanded ? 'Hide replies' : 'View replies ($count)',
+                                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
                         // Reply field
                         if (_showReplyField)
                           Container(
@@ -163,6 +209,7 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                                 Expanded(
                                   child: TextField(
                                     controller: _replyController,
+                                    focusNode: _replyFocusNode,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
                                       hintText: 'Reply to ${widget.comment.username}...',
@@ -175,10 +222,14 @@ class _CommentCardState extends ConsumerState<CommentCard> {
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
-                                  onPressed: () {
-                                    _submitReply();
-                                  },
-                                  icon: const Icon(Icons.send, color: Colors.blue, size: 20),
+                                  onPressed: _isSubmittingReply ? null : () { _submitReply(); },
+                                  icon: _isSubmittingReply
+                                      ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                                  )
+                                      : const Icon(Icons.send, color: Colors.blue, size: 20),
                                 ),
                               ],
                             ),
@@ -200,28 +251,165 @@ class _CommentCardState extends ConsumerState<CommentCard> {
   }
 
   Widget _buildRepliesSection() {
-    // This is a placeholder for replies - you can implement nested comments here
-    return Container();
+    if (!_repliesExpanded) return const SizedBox.shrink();
+
+    if (_isLoadingReplies) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 52.0, top: 8),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_replies.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 52.0, top: 8), // indent under avatar, Instagram style
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _replies.map((reply) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundImage: reply.profileImage.isNotEmpty
+                      ? NetworkImage(reply.profileImage)
+                      : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                  radius: 12, // smaller avatar for replies
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            reply.username,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            reply.timeAgo,
+                            style: const TextStyle(color: Colors.grey, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        reply.content,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _CommentActionButton(
+                            icon: reply.isliked ? Icons.favorite : Icons.favorite_border,
+                            label: reply.likes > 0 ? '${reply.likes}' : '',
+                            color: reply.isliked ? Colors.red : Colors.grey,
+                            onPressed: () async {
+                              await ref.read(postFeedProvider.notifier).toggleCommentLike(reply.commentId);
+                              // Optimistic UI update
+                              setState(() {
+                                reply.toggleLike();
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 12),
+                          _CommentActionButton(
+                            icon: Icons.reply_outlined,
+                            label: 'Reply',
+                            color: Colors.grey,
+                            onPressed: () {
+                              // Set replying to this reply's author
+                              setState(() {
+                                _showReplyField = true;
+                              });
+                              _replyController.text = '@${reply.username} ';
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   void _submitReply() {
     if (_replyController.text.trim().isEmpty) return;
 
-    // TODO: Implement reply submission
     final replyText = _replyController.text.trim();
 
-    // For now, just show a snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Reply submitted: $replyText'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-
-    _replyController.clear();
+    // Set loading state
     setState(() {
-      _showReplyField = false;
+      _isSubmittingReply = true;
+    });
+
+    // Add the reply tagged to the parent comment, Instagram-style threads
+    final replyContent = "@${widget.comment.username} $replyText";
+
+    ref.read(postFeedProvider.notifier).addReply(widget.postId, widget.comment.commentId, replyContent).then((success) {
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reply submitted successfully'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        // Reload replies
+        _loadReplies();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit reply'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _isSubmittingReply = false;
+          _showReplyField = false;
+          _replyController.clear();
+        });
+      }
+    });
+  }
+
+  void _loadReplies() async {
+    setState(() {
+      _isLoadingReplies = true;
+      _repliesExpanded = true;
+    });
+    final replies = await ref.read(postFeedProvider.notifier).loadReplies(widget.postId, widget.comment.commentId);
+    if (!mounted) return;
+    setState(() {
+      _replies = replies;
+      _isLoadingReplies = false;
+    });
+  }
+
+  void _hideReplies() {
+    setState(() {
+      _repliesExpanded = false;
     });
   }
 

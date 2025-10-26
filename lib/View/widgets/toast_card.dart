@@ -5,6 +5,7 @@ import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'comment_card.dart';
+import 'double_tap_like.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -62,51 +63,12 @@ class ToastCard extends ConsumerWidget {
         height: 1.4,
       );
 
-      final textSpan = TextSpan(text: content, style: textStyle);
-
-      final tp = TextPainter(
-        text: textSpan,
+      // Simplified approach - just return the text without complex layout calculations
+      return Text(
+        content,
+        style: textStyle,
         maxLines: 10,
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: MediaQuery.of(context).size.width);
-
-      final isOverflowing = tp.didExceedMaxLines;
-
-      if (!isOverflowing) {
-        return Text(content, style: textStyle);
-      }
-
-      return SizedBox(
-        height: 10 * 14 * 1.4, // limit height to 10 lines
-        child: Stack(
-          children: [
-            Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Text(content, style: textStyle),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: IgnorePointer(
-                child: Container(
-                  height: 2 * 14 * 1.4,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        theme.scaffoldBackgroundColor.withOpacity(0.8)
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        overflow: TextOverflow.ellipsis,
       );
     }
 
@@ -118,11 +80,6 @@ class ToastCard extends ConsumerWidget {
       ),
       child: GestureDetector(
         onTap: onTap,
-        onDoubleTap: () {
-          if (toast.toast_id != null) {
-            ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
-          }
-        },
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -136,7 +93,7 @@ class ToastCard extends ConsumerWidget {
                     CircleAvatar(
                       backgroundImage: toast.profile_pic != null
                           ? NetworkImage(toast.profile_pic!)
-                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
                       radius: 20,
                     ),
                     const SizedBox(width: 12),
@@ -190,7 +147,11 @@ class ToastCard extends ConsumerWidget {
 
               // Content
               if (toast.content != null && toast.content!.isNotEmpty)
-                buildContent(context, toast.content!),
+                ToastDoubleTapLike(
+                  toastId: toast.toast_id ?? '',
+                  isliked: toast.isliked,
+                  child: buildContent(context, toast.content!),
+                ),
 
               const SizedBox(height: 12),
 
@@ -433,9 +394,15 @@ class CommentsBottomSheet extends ConsumerStatefulWidget {
 
 class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   final TextEditingController _commentController = TextEditingController();
+  final TextEditingController _replyController = TextEditingController();
+  final FocusNode _replyFocusNode = FocusNode();
   List<Comment> _comments = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
+  bool _isSubmittingReply = false;
+  final Map<int, List<Comment>> _repliesByParent = {};
+  final Set<int> _loadingReplies = {};
+  int? _activeReplyParentId;
 
   @override
   void initState() {
@@ -450,6 +417,27 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       _comments = comments;
       _isLoading = false;
     });
+  }
+
+  Future<void> _loadReplies(int parentCommentId) async {
+    setState(() { _loadingReplies.add(parentCommentId); });
+    final replies = await ref.read(toastFeedProvider.notifier).loadReplies(widget.toastId, parentCommentId);
+    if (!mounted) return;
+    setState(() {
+      _repliesByParent[parentCommentId] = replies;
+      _loadingReplies.remove(parentCommentId);
+    });
+  }
+
+  void _toggleReplies(int parentCommentId) {
+    final hasReplies = _repliesByParent[parentCommentId]?.isNotEmpty == true;
+    if (hasReplies) {
+      setState(() {
+        _repliesByParent.remove(parentCommentId);
+      });
+    } else {
+      _loadReplies(parentCommentId);
+    }
   }
 
   Future<void> _submitComment() async {
@@ -468,6 +456,29 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     }
 
     setState(() => _isSubmitting = false);
+  }
+
+  Future<void> _submitReply(int parentCommentId, String parentUsername) async {
+    if (_replyController.text.trim().isEmpty) return;
+
+    setState(() => _isSubmittingReply = true);
+
+    final content = _replyController.text.trim().startsWith('@')
+        ? _replyController.text.trim()
+        : '@$parentUsername ${_replyController.text.trim()}';
+
+    final ok = await ref.read(toastFeedProvider.notifier).addReply(
+      widget.toastId,
+      parentCommentId,
+      content,
+    );
+
+    if (ok) {
+      _replyController.clear();
+      await _loadReplies(parentCommentId);
+    }
+
+    if (mounted) setState(() => _isSubmittingReply = false);
   }
 
   @override
@@ -513,7 +524,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                 ),
               ),
 
-              // Comment input
+              // Comment / Reply input
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -524,10 +535,11 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: _commentController,
+                        controller: _activeReplyParentId != null ? _replyController : _commentController,
+                        focusNode: _activeReplyParentId != null ? _replyFocusNode : null,
                         style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
-                          hintText: 'Add a comment...',
+                          hintText: _activeReplyParentId != null ? 'Reply…' : 'Add a comment...',
                           hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(25),
@@ -548,7 +560,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                         borderRadius: BorderRadius.circular(25),
                       ),
                       child: IconButton(
-                        icon: _isSubmitting
+                        icon: (_activeReplyParentId != null ? _isSubmittingReply : _isSubmitting)
                             ? SizedBox(
                           width: 20,
                           height: 20,
@@ -558,7 +570,12 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                           ),
                         )
                             : Icon(Icons.send, color: theme.colorScheme.primary),
-                        onPressed: _isSubmitting ? null : _submitComment,
+                        onPressed: (_activeReplyParentId != null)
+                            ? (_isSubmittingReply ? null : () {
+                          final parent = _comments.firstWhere((c) => c.commentId == _activeReplyParentId);
+                          _submitReply(_activeReplyParentId!, parent.username);
+                        })
+                            : (_isSubmitting ? null : _submitComment),
                       ),
                     ),
                   ],
@@ -583,12 +600,90 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   itemCount: _comments.length,
                   itemBuilder: (context, index) {
                     final comment = _comments[index];
-                    return CommentCard(
-                      comment: comment,
-                      onLike: () async {
-                        await ref.read(toastFeedProvider.notifier).toggleCommentLike(comment.commentId);
-                        await _loadComments(); // Refresh comments
-                      },
+                    final isLoadingReplies = _loadingReplies.contains(comment.commentId);
+                    final replies = _repliesByParent[comment.commentId] ?? const <Comment>[];
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CommentCard(
+                            comment: comment,
+                            onLike: () async {
+                              await ref.read(toastFeedProvider.notifier).toggleCommentLike(comment.commentId);
+                              await _loadComments();
+                            },
+                            onReply: () {
+                              setState(() {
+                                _activeReplyParentId = comment.commentId;
+                                _replyController.text = '@${comment.username} ';
+                                _replyController.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: _replyController.text.length),
+                                );
+                              });
+                              FocusScope.of(context).requestFocus(_replyFocusNode);
+                            },
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 56.0),
+                            child: FutureBuilder<int>(
+                              future: ref.read(toastFeedProvider.notifier).getRepliesCount(comment.commentId),
+                              builder: (context, snapshot) {
+                                final count = snapshot.data ?? 0;
+                                final hasRepliesLoaded = (_repliesByParent[comment.commentId] ?? const <Comment>[]).isNotEmpty;
+                                if (count <= 0) return const SizedBox.shrink();
+                                return TextButton(
+                                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                                  onPressed: () => _toggleReplies(comment.commentId),
+                                  child: Text(
+                                    hasRepliesLoaded ? 'Hide replies' : 'View replies ($count)',
+                                    style: TextStyle(color: theme.dividerColor, fontSize: 13),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          if (isLoadingReplies)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 56.0, top: 4),
+                              child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                            ),
+                          if (replies.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 56.0, top: 4),
+                              child: Column(
+                                children: replies.map((r) {
+                                  return ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: CircleAvatar(
+                                      radius: 12,
+                                      backgroundImage: r.profileImage.isNotEmpty
+                                          ? NetworkImage(r.profileImage)
+                                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Text(r.username, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                                        const SizedBox(width: 6),
+                                        Text(r.timeAgo, style: TextStyle(color: theme.dividerColor, fontSize: 11)),
+                                      ],
+                                    ),
+                                    subtitle: Text(r.content, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                    trailing: IconButton(
+                                      icon: Icon(r.uliked ? Icons.favorite : Icons.favorite_border, size: 16, color: r.uliked ? Colors.red : theme.dividerColor),
+                                      onPressed: () async {
+                                        await ref.read(toastFeedProvider.notifier).toggleCommentLike(r.commentId);
+                                        await _loadReplies(comment.commentId);
+                                      },
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -603,6 +698,8 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   @override
   void dispose() {
     _commentController.dispose();
+    _replyController.dispose();
+    _replyFocusNode.dispose();
     super.dispose();
   }
 }

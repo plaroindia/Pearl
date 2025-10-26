@@ -5,6 +5,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../Model/byte.dart';
 import '../ViewModel/byte_provider.dart';
 import '../ViewModel/auth_provider.dart';
+import 'widgets/double_tap_like.dart';
+import 'widgets/byte_comments.dart';
+import 'byte_page.dart';
 
 class ByteViewerPage extends ConsumerStatefulWidget {
   const ByteViewerPage({super.key});
@@ -21,7 +24,6 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
   @override
   void initState() {
     super.initState();
-    // Load bytes when the page is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(bytesFeedProvider.notifier).loadBytes();
     });
@@ -50,13 +52,14 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
             _controllers[index]!.play();
             _controllers[index]!.setLooping(true);
           }
+        }).catchError((error) {
+          debugPrint('Error initializing video: $error');
         });
     }
     return _controllers[index]!;
   }
 
   void _onPageChanged(int index) {
-    // Stop and reset previous video to beginning
     if (_controllers[_currentIndex] != null) {
       _controllers[_currentIndex]!.pause();
       _controllers[_currentIndex]!.seekTo(Duration.zero);
@@ -66,10 +69,15 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
       _currentIndex = index;
     });
 
-    // Play current video from beginning
     if (_controllers[index] != null && _controllers[index]!.value.isInitialized) {
       _controllers[index]!.seekTo(Duration.zero);
       _controllers[index]!.play();
+    }
+
+    // Load more bytes when approaching the end
+    final bytesState = ref.read(bytesFeedProvider);
+    if (index >= bytesState.bytes.length - 3 && bytesState.hasMore && !bytesState.isLoadingMore) {
+      ref.read(bytesFeedProvider.notifier).loadMoreBytes();
     }
   }
 
@@ -96,50 +104,150 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
           ? const Center(
         child: CircularProgressIndicator(color: Colors.white),
       )
-          : bytesState.error != null
+          : bytesState.bytes.isEmpty
           ? Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 64,
+            Icon(
+              Icons.video_library_outlined,
+              color: Colors.grey[600],
+              size: 80,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
+            Text(
+              'No bytes yet',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Be the first to create a byte!',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: () {
-                Navigator.pushNamed(context, '/create-byte');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ByteCreateScreen()),
+                );
               },
               icon: const Icon(Icons.add),
               label: const Text('Create Byte'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
+            if (bytesState.error != null) ...[
+              const SizedBox(height: 24),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        bytesState.error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () {
+                  ref.read(bytesFeedProvider.notifier).refreshBytes();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                ),
+              ),
+            ],
           ],
         ),
       )
-          : PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        onPageChanged: _onPageChanged,
-        itemCount: bytesState.bytes.length,
-        itemBuilder: (context, index) {
-          final byte = bytesState.bytes[index];
-          return ByteVideoPlayer(
-            byte: byte,
-            controller: _getController(index, byte.byte),
-            isCurrentVideo: index == _currentIndex,
-            onTogglePlayPause: () => _togglePlayPause(index),
-            onLike: () async {
-              await ref.read(bytesFeedProvider.notifier).toggleLike(byte.byteId);
+          : Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.horizontal,
+            onPageChanged: _onPageChanged,
+            itemCount: bytesState.bytes.length,
+            itemBuilder: (context, index) {
+              final byte = bytesState.bytes[index];
+              return ByteVideoPlayer(
+                byte: byte,
+                controller: _getController(index, byte.byte),
+                isCurrentVideo: index == _currentIndex,
+                onTogglePlayPause: () => _togglePlayPause(index),
+                onLike: () async {
+                  await ref.read(bytesFeedProvider.notifier).toggleLike(byte.byteId);
+                },
+                onSwipeUp: () => _showCommentsModal(byte),
+                onShare: () => _showShareModal(byte),
+              );
             },
-            onComment: () => _showCommentsModal(byte),
-            onShare: () => _showShareModal(byte),
-          );
-        },
+          ),
+          // Loading more indicator
+          if (bytesState.isLoadingMore)
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Loading more...',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -165,14 +273,15 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
   }
 }
 
-class ByteVideoPlayer extends ConsumerWidget {
+class ByteVideoPlayer extends ConsumerStatefulWidget {
   final Byte byte;
   final VideoPlayerController controller;
   final bool isCurrentVideo;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onLike;
-  final VoidCallback onComment;
+  final VoidCallback onSwipeUp;
   final VoidCallback onShare;
+  final bool showSwipeIndicator; // Optional parameter for showing swipe up indicator
 
   const ByteVideoPlayer({
     super.key,
@@ -181,213 +290,291 @@ class ByteVideoPlayer extends ConsumerWidget {
     required this.isCurrentVideo,
     required this.onTogglePlayPause,
     required this.onLike,
-    required this.onComment,
+    required this.onSwipeUp,
     required this.onShare,
+    this.showSwipeIndicator = true, // Default to true
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ByteVideoPlayer> createState() => _ByteVideoPlayerState();
+}
+
+class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final isLiking = ref.watch(bytesFeedProvider).likingBytes.contains(byte.byteId);
+    final bytesState = ref.watch(bytesFeedProvider);
+    final isLiking = bytesState.likingBytes.contains(widget.byte.byteId);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Video Player
-        GestureDetector(
-          onTap: onTogglePlayPause,
-          child: Container(
-            color: Colors.black,
-            child: controller.value.isInitialized
-                ? Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
-            )
-                : const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-          ),
-        ),
-
-        // Play/Pause Overlay
-        if (controller.value.isInitialized && !controller.value.isPlaying)
-          Center(
+    return GestureDetector(
+      onVerticalDragEnd: (details) {
+        // Swipe up to show comments
+        if (details.primaryVelocity != null && details.primaryVelocity! < -500) {
+          widget.onSwipeUp();
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ByteDoubleTapLike(
+            byteId: widget.byte.byteId,
+            isliked: widget.byte.isliked ?? false,
+            onSingleTap: widget.onTogglePlayPause,
+            onDoubleTapLike: () {
+              ref.read(bytesFeedProvider.notifier).toggleLike(widget.byte.byteId);
+            },
             child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.play_arrow,
-                color: Colors.white,
-                size: 48,
+              color: Colors.black,
+              child: widget.controller.value.isInitialized
+                  ? Center(
+                child: AspectRatio(
+                  aspectRatio: widget.controller.value.aspectRatio,
+                  child: VideoPlayer(widget.controller),
+                ),
+              )
+                  : const Center(
+                child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
           ),
 
-        // Bottom Gradient
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            height: 200,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black54,
-                  Colors.black87,
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // User Info and Caption
-        Positioned(
-          bottom: 3,
-          left: 16,
-          right: 80,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // User Info
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.grey[600],
-                    backgroundImage: byte.profilePic != null
-                        ? CachedNetworkImageProvider(byte.profilePic!)
-                        : null,
-                    child: byte.profilePic == null
-                        ? Text(
-                      (byte.username?.isNotEmpty ?? false)
-                          ? byte.username!.substring(0, 1).toUpperCase()
-                          : 'U',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                        : null,
+          if (widget.controller.value.isInitialized && !widget.controller.value.isPlaying)
+            IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '@${byte.username ?? "unknown"}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
+
+          // Bottom gradient
+          IgnorePointer(
+            child: Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 200,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black54,
+                      Colors.black87,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom content area
+          Positioned(
+            bottom: 3,
+            left: 16,
+            right: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Profile row with follow, like, share, more buttons
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.grey[600],
+                      backgroundImage: widget.byte.profilePic != null
+                          ? CachedNetworkImageProvider(widget.byte.profilePic!)
+                          : null,
+                      child: widget.byte.profilePic == null
+                          ? Text(
+                        (widget.byte.username?.isNotEmpty ?? false)
+                            ? widget.byte.username!.substring(0, 1).toUpperCase()
+                            : 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '@${widget.byte.username ?? "unknown"}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                  // Follow Button (if not own video)
-                  if (authState.value?.user?.id != byte.userId)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white, width: 1.5),
-                        borderRadius: BorderRadius.circular(4),
+                    const SizedBox(width: 8),
+
+                    // Follow button (if not own profile)
+                    if (authState.value?.user != null && authState.value!.user.id != widget.byte.userId)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Follow',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      child: const Text(
-                        'Follow',
-                        style: TextStyle(
+
+                    const SizedBox(width: 10),
+
+                    // Like icon with count (non-functional, just display)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          widget.byte.isliked == true ? Icons.favorite : Icons.favorite_border,
+                          color: widget.byte.isliked == true ? Colors.red : Colors.white,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatCount(widget.byte.likeCount),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Share button
+                    GestureDetector(
+                      onTap: widget.onShare,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.share,
                           color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          size: 20,
                         ),
                       ),
                     ),
-                ],
-              ),
 
-              // Caption
-              if (byte.caption != null && byte.caption!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    byte.caption!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      height: 1.3,
+                    const SizedBox(width: 10),
+
+                    // More options button
+                    GestureDetector(
+                      onTap: () => _showMoreOptions(context, widget.byte),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.more_vert,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
                     ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
                 ),
 
-              // Video Progress Indicator
-              if (controller.value.isInitialized)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: VideoProgressIndicator(
-                    controller,
-                    allowScrubbing: true,
-                    colors: const VideoProgressColors(
-                      playedColor: Colors.white,
-                      bufferedColor: Colors.grey,
-                      backgroundColor: Colors.white24,
+                // Caption
+                if (widget.byte.caption != null && widget.byte.caption!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      widget.byte.caption!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        height: 1.3,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    padding: EdgeInsets.zero,
+                  ),
+
+                // Video progress indicator
+                if (widget.controller.value.isInitialized)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: VideoProgressIndicator(
+                      widget.controller,
+                      allowScrubbing: true,
+                      colors: const VideoProgressColors(
+                        playedColor: Colors.white,
+                        bufferedColor: Colors.grey,
+                        backgroundColor: Colors.white24,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // Swipe up indicator (only show if enabled)
+          if (widget.showSwipeIndicator)
+            Positioned(
+              bottom: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.keyboard_arrow_up,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Swipe up for comments (${widget.byte.commentCount})',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
-          ),
-        ),
-
-        // Action Buttons (Right Side)
-        Positioned(
-          bottom: 20,
-          right: 16,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Like Button
-              _ActionButton(
-                icon: Icons.favorite,
-                count: byte.likeCount,
-                onTap: onLike,
-                isActive: byte.isLiked ?? false,
-                isLoading: isLiking,
               ),
-              const SizedBox(height: 24),
-
-              // Comment Button
-              _ActionButton(
-                icon: Icons.comment,
-                count: byte.commentCount,
-                onTap: onComment,
-                isDisabled: false,
-              ),
-              const SizedBox(height: 24),
-
-              // Share Button
-              _ActionButton(
-                icon: Icons.share,
-                count: byte.shareCount,
-                onTap: onShare,
-              ),
-              const SizedBox(height: 24),
-
-              // More Options
-              _ActionButton(
-                icon: Icons.more_vert,
-                onTap: () => _showMoreOptions(context, byte),
-              ),
-            ],
-          ),
-        ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -401,73 +588,6 @@ class ByteVideoPlayer extends ConsumerWidget {
       builder: (context) => MoreOptionsModal(byte: byte),
     );
   }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final int? count;
-  final VoidCallback onTap;
-  final bool isActive;
-  final bool isDisabled;
-  final bool isLoading;
-
-  const _ActionButton({
-    required this.icon,
-    this.count,
-    required this.onTap,
-    this.isActive = false,
-    this.isDisabled = false,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: isDisabled ? null : onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              shape: BoxShape.circle,
-            ),
-            child: isLoading
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-                : Icon(
-              icon,
-              color: isDisabled
-                  ? Colors.grey
-                  : isActive
-                  ? Colors.red
-                  : Colors.white,
-              size: 28,
-            ),
-          ),
-          if (count != null && count! > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                _formatCount(count!),
-                style: TextStyle(
-                  color: isDisabled ? Colors.grey : Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 
   String _formatCount(int count) {
     if (count >= 1000000) {
@@ -479,334 +599,6 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// New Byte Comments Bottom Sheet (inspired by toast_card)
-class ByteCommentsBottomSheet extends ConsumerStatefulWidget {
-  final String byteId;
-
-  const ByteCommentsBottomSheet({Key? key, required this.byteId}) : super(key: key);
-
-  @override
-  ConsumerState<ByteCommentsBottomSheet> createState() => _ByteCommentsBottomSheetState();
-}
-
-class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomSheet> {
-  final TextEditingController _commentController = TextEditingController();
-  List<ByteComment> _comments = [];
-  bool _isLoading = true;
-  bool _isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadComments();
-  }
-
-  Future<void> _loadComments() async {
-    setState(() => _isLoading = true);
-    final comments = await ref.read(bytesFeedProvider.notifier).loadComments(widget.byteId);
-    setState(() {
-      _comments = comments;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _submitComment() async {
-    if (_commentController.text.trim().isEmpty) return;
-
-    setState(() => _isSubmitting = true);
-
-    final success = await ref.read(bytesFeedProvider.notifier).addComment(
-      widget.byteId,
-      _commentController.text.trim(),
-    );
-
-    if (success) {
-      _commentController.clear();
-      await _loadComments(); // Reload comments
-    }
-
-    setState(() => _isSubmitting = false);
-  }
-
-  String _formatTimeAgo(DateTime createdAt) {
-    final Duration difference = DateTime.now().difference(createdAt);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Comments',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${_comments.length}',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(color: Colors.grey, height: 1),
-
-              // Comment input
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[800],
-                  border: Border(top: BorderSide(color: Colors.grey[700]!)),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.grey[600],
-                      child: const Text(
-                        'U',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Add a comment...',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          border: InputBorder.none,
-                        ),
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: _isSubmitting ? null : _submitComment,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : const Text(
-                          'Post',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Comments list
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white)
-                )
-                    : _comments.isEmpty
-                    ? const Center(
-                  child: Text(
-                    'No comments yet. Be the first to comment!',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                )
-                    : ListView.builder(
-                  controller: scrollController,
-                  itemCount: _comments.length,
-                  itemBuilder: (context, index) {
-                    final comment = _comments[index];
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: Colors.grey[600],
-                            backgroundImage: comment.profilePic != null
-                                ? CachedNetworkImageProvider(comment.profilePic!)
-                                : null,
-                            child: comment.profilePic == null
-                                ? Text(
-                              comment.username.isNotEmpty
-                                  ? comment.username[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      comment.username,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      _formatTimeAgo(comment.createdAt),
-                                      style: TextStyle(
-                                        color: Colors.grey[400],
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  comment.content,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () async {
-                                        await ref.read(bytesFeedProvider.notifier)
-                                            .toggleCommentLike(comment.commentId);
-                                        await _loadComments();
-                                      },
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            comment.isLiked ? Icons.favorite : Icons.favorite_border,
-                                            size: 16,
-                                            color: comment.isLiked ? Colors.red : Colors.grey,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${comment.likeCount}',
-                                            style: TextStyle(
-                                              color: Colors.grey[400],
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    GestureDetector(
-                                      onTap: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Reply functionality coming soon')),
-                                        );
-                                      },
-                                      child: Text(
-                                        'Reply',
-                                        style: TextStyle(
-                                          color: Colors.grey[400],
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
-}
-
-// Share Modal
 class ShareModal extends StatelessWidget {
   final Byte byte;
 
@@ -819,6 +611,15 @@ class ShareModal extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const Text(
             'Share',
             style: TextStyle(
@@ -827,10 +628,30 @@ class ShareModal extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Share options coming soon...',
-            style: TextStyle(color: Colors.grey),
+          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.link, color: Colors.white),
+            title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Link copied to clipboard!'),
+                  backgroundColor: Colors.blue,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.message, color: Colors.white),
+            title: const Text('Share via Message', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.pop(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.more_horiz, color: Colors.white),
+            title: const Text('More Options', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.pop(context),
           ),
           const SizedBox(height: 16),
         ],
@@ -839,8 +660,6 @@ class ShareModal extends StatelessWidget {
   }
 }
 
-
-// More Options Modal
 class MoreOptionsModal extends StatelessWidget {
   final Byte byte;
 
@@ -853,6 +672,15 @@ class MoreOptionsModal extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const Text(
             'More Options',
             style: TextStyle(
@@ -863,7 +691,12 @@ class MoreOptionsModal extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           ListTile(
-            leading: const Icon(Icons.report, color: Colors.red),
+            leading: const Icon(Icons.bookmark_outline, color: Colors.white),
+            title: const Text('Save', style: TextStyle(color: Colors.white)),
+            onTap: () => Navigator.pop(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.report_outlined, color: Colors.red),
             title: const Text('Report', style: TextStyle(color: Colors.white)),
             onTap: () => Navigator.pop(context),
           ),

@@ -10,6 +10,7 @@ class ToastFeedState {
   final String? error;
   final int currentPage;
   final Set<String> likingPosts; // Track posts being liked/unliked
+  final Set<String> likingComments; // Track comments being liked/unliked
 
   const ToastFeedState({
     this.posts = const [],
@@ -18,6 +19,7 @@ class ToastFeedState {
     this.error,
     this.currentPage = 0,
     this.likingPosts = const {},
+    this.likingComments = const {},
   });
 
   ToastFeedState copyWith({
@@ -27,6 +29,7 @@ class ToastFeedState {
     String? error,
     int? currentPage,
     Set<String>? likingPosts,
+    Set<String>? likingComments,
   }) {
     return ToastFeedState(
       posts: posts ?? this.posts,
@@ -35,6 +38,7 @@ class ToastFeedState {
       error: error ?? this.error,
       currentPage: currentPage ?? this.currentPage,
       likingPosts: likingPosts ?? this.likingPosts,
+      likingComments: likingComments ?? this.likingComments,
     );
   }
 }
@@ -291,7 +295,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         print('🔵 Update response: $updateResponse');
 
       }
-     // await refreshSinglePost(toastId);
+      // await refreshSinglePost(toastId);
 
       print('🟢 Like operation completed successfully');
 
@@ -426,6 +430,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
             user_profiles!inner(username, profile_pic)
           ''')
           .eq('toast_id', toastId)
+          .filter('parent_comment_id', 'is', null)
           .order('created_at', ascending: false);
 
       // Get liked comments for current user
@@ -449,6 +454,92 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     } catch (error) {
       print('Error loading comments: $error');
       return [];
+    }
+  }
+
+  // Load replies for a given parent comment within a toast
+  Future<List<Comment>> loadReplies(String toastId, int parentCommentId) async {
+    try {
+      final response = await _supabase
+          .from('toast_comments')
+          .select('''
+            comment_id,
+            toast_id,
+            user_id,
+            content,
+            like_count,
+            created_at,
+            parent_comment_id,
+            user_profiles!inner(username, profile_pic)
+          ''')
+          .eq('toast_id', toastId)
+          .eq('parent_comment_id', parentCommentId)
+          .order('created_at', ascending: false);
+
+      return (response as List)
+          .map((json) => Comment.fromMap({
+        ...json,
+        'username': json['user_profiles']['username'],
+        'profile_pic': json['user_profiles']['profile_pic'],
+      }))
+          .toList();
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'")) {
+        state = state.copyWith(error: 'Replies not enabled yet: add parent_comment_id to toast_comments.');
+      } else {
+        state = state.copyWith(error: 'Failed to load replies: $e');
+      }
+      return [];
+    }
+  }
+
+  // Get replies count for a toast comment
+  Future<int> getRepliesCount(int parentCommentId) async {
+    try {
+      final countResponse = await _supabase
+          .from('toast_comments')
+          .select('comment_id')
+          .eq('parent_comment_id', parentCommentId);
+      return (countResponse as List).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // Add a reply to a toast comment
+  Future<bool> addReply(String toastId, int parentCommentId, String content) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return false;
+
+    try {
+      await _supabase.from('toast_comments').insert({
+        'toast_id': toastId,
+        'user_id': user.id,
+        'content': content,
+        'parent_comment_id': parentCommentId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      // Increment toast comment_count
+      final idx = state.posts.indexWhere((p) => p.toast_id == toastId);
+      if (idx != -1) {
+        final updated = [...state.posts];
+        updated[idx] = updated[idx].copyWith(
+          comment_count: updated[idx].comment_count + 1,
+        );
+        state = state.copyWith(posts: updated);
+      }
+
+      return true;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'")) {
+        state = state.copyWith(error: 'Failed to add reply: parent_comment_id missing in toast_comments.');
+      } else {
+        state = state.copyWith(error: 'Failed to add reply: $e');
+      }
+      return false;
     }
   }
 
@@ -497,6 +588,18 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   Future<void> toggleCommentLike(int commentId) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
+
+    final commentIdStr = commentId.toString();
+
+    // Prevent multiple simultaneous like operations on the same comment
+    if (state.likingComments.contains(commentIdStr)) {
+      return;
+    }
+
+    // Add to likingComments set
+    state = state.copyWith(
+      likingComments: {...state.likingComments, commentIdStr},
+    );
 
     try {
       // Check if already liked
@@ -549,8 +652,16 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
             .update({'like_count': newCount})
             .eq('comment_id', commentId);
       }
+
+      // Remove from likingComments
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentIdStr),
+      );
     } catch (error) {
-      print('Error toggling comment like: $error');
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentIdStr),
+        error: 'Failed to toggle comment like: $error',
+      );
     }
   }
 

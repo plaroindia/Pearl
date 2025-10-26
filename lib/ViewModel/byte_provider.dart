@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
@@ -13,8 +15,10 @@ class ByteComment {
   final String username;
   final String? profilePic;
   final int likeCount;
-  final bool isLiked;
+  final bool isliked;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? parentCommentId;
 
   ByteComment({
     required this.commentId,
@@ -24,8 +28,10 @@ class ByteComment {
     required this.username,
     this.profilePic,
     required this.likeCount,
-    required this.isLiked,
+    required this.isliked,
     required this.createdAt,
+    required this.updatedAt,
+    this.parentCommentId,
   });
 
   factory ByteComment.fromJson(Map<String, dynamic> json) {
@@ -33,18 +39,21 @@ class ByteComment {
       commentId: json['comment_id'].toString(),
       byteId: json['byte_id'].toString(),
       userId: json['user_id'].toString(),
-      content: json['content'] ?? '',
-      username: json['username'] ?? 'Unknown',
-      profilePic: json['profile_pic'],
-      likeCount: json['like_count'] ?? 0,
-      isLiked: json['isLiked'] ?? false,
-      createdAt: DateTime.parse(json['created_at']),
+      content: json['content']?.toString() ?? '',
+      username: json['username']?.toString() ?? 'Unknown',
+      profilePic: json['profile_pic']?.toString(),
+      likeCount: json['like_count'] is int ? json['like_count'] : int.tryParse(json['like_count']?.toString() ?? '0') ?? 0,
+      isliked: json['isliked'] == true || json['isliked'] == 1,
+      createdAt: DateTime.parse(json['created_at']?.toString() ?? DateTime.now().toIso8601String()),
+      updatedAt: DateTime.parse(json['updated_at']?.toString() ?? DateTime.now().toIso8601String()),
+      parentCommentId: json['parent_comment_id']?.toString(),
     );
   }
 
   ByteComment copyWith({
     int? likeCount,
-    bool? isLiked,
+    bool? isliked,
+    DateTime? updatedAt,
   }) {
     return ByteComment(
       commentId: commentId,
@@ -54,8 +63,10 @@ class ByteComment {
       username: username,
       profilePic: profilePic,
       likeCount: likeCount ?? this.likeCount,
-      isLiked: isLiked ?? this.isLiked,
+      isliked: isliked ?? this.isliked,
       createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      parentCommentId: parentCommentId,
     );
   }
 }
@@ -104,6 +115,7 @@ class BytesFeedState {
   final bool isLoadingMore;
   final String? error;
   final Set<String> likingBytes;
+  final Set<String> likingComments;
   final bool hasMore;
   final int currentPage;
   final Map<String, List<ByteComment>> commentsByByteId;
@@ -115,6 +127,7 @@ class BytesFeedState {
     this.isLoadingMore = false,
     this.error,
     this.likingBytes = const {},
+    this.likingComments = const {},
     this.hasMore = true,
     this.currentPage = 0,
     this.commentsByByteId = const {},
@@ -127,6 +140,7 @@ class BytesFeedState {
     bool? isLoadingMore,
     String? error,
     Set<String>? likingBytes,
+    Set<String>? likingComments,
     bool? hasMore,
     int? currentPage,
     Map<String, List<ByteComment>>? commentsByByteId,
@@ -138,6 +152,7 @@ class BytesFeedState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: error,
       likingBytes: likingBytes ?? this.likingBytes,
+      likingComments: likingComments ?? this.likingComments,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
       commentsByByteId: commentsByByteId ?? this.commentsByByteId,
@@ -169,12 +184,11 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
     try {
       final XFile? video = await _picker.pickVideo(
         source: fromCamera ? ImageSource.camera : ImageSource.gallery,
-        maxDuration: const Duration(minutes: 1), // 1 minute max for bytes
+        maxDuration: const Duration(minutes: 1),
         preferredCameraDevice: CameraDevice.rear,
       );
 
       if (video != null) {
-        // Check video file size (max 50MB for bytes)
         final File videoFile = File(video.path);
         final int fileSizeInBytes = await videoFile.length();
         final double fileSizeInMB = fileSizeInBytes / (1024 * 1024);
@@ -198,7 +212,6 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
 
       state = state.copyWith(isUploading: true, uploadProgress: 0.0);
 
-      // Upload to Supabase Storage
       await _supabase.storage.from('bytes').uploadBinary(
         fileName,
         await videoFile.readAsBytes(),
@@ -208,7 +221,6 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
         ),
       );
 
-      // Get public URL
       final String publicUrl = _supabase.storage.from('bytes').getPublicUrl(fileName);
 
       state = state.copyWith(uploadProgress: 1.0);
@@ -236,13 +248,17 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // Upload video
+      debugPrint('Starting byte creation...');
+
       final String? videoUrl = await _uploadVideo(state.selectedVideo!);
       if (videoUrl == null) {
+        debugPrint('Video upload failed');
         return false;
       }
 
-      // Create byte record
+      debugPrint('Video uploaded: $videoUrl');
+      debugPrint('Inserting into database...');
+
       final response = await _supabase.from('bytes').insert({
         'user_id': user.id,
         'byte': videoUrl,
@@ -254,15 +270,19 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
         'updated_at': DateTime.now().toIso8601String(),
       }).select();
 
+      debugPrint('Database response: $response');
+
       if (response.isEmpty) {
-        state = state.copyWith(error: 'Failed to create byte');
+        state = state.copyWith(error: 'Failed to create byte - no response from database');
         return false;
       }
 
-      // Reset state after successful creation
+      debugPrint('Byte created successfully with ID: ${response[0]['byte_id']}');
       state = ByteCreateState();
       return true;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error creating byte: $e');
+      debugPrint('Stack trace: $stackTrace');
       state = state.copyWith(error: 'Failed to create byte: ${e.toString()}');
       return false;
     } finally {
@@ -275,7 +295,6 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
       final user = _supabase.auth.currentUser;
       if (user == null) return false;
 
-      // Get byte to check ownership and get video URL for deletion
       final byteResponse = await _supabase
           .from('bytes')
           .select('user_id, byte')
@@ -286,12 +305,10 @@ class ByteCreateNotifier extends StateNotifier<ByteCreateState> {
         throw Exception('You can only delete your own bytes');
       }
 
-      // Delete video from storage
       final String videoUrl = byteResponse['byte'];
       final String fileName = videoUrl.split('/').last;
       await _supabase.storage.from('bytes').remove([fileName]);
 
-      // Delete byte record
       await _supabase.from('bytes').delete().eq('byte_id', byteId);
 
       return true;
@@ -309,7 +326,6 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const int _pageSize = 20;
 
-  // Load initial bytes
   Future<void> loadBytes() async {
     if (state.isLoading) return;
 
@@ -318,50 +334,105 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
+        debugPrint('No authenticated user');
         state = state.copyWith(
           isLoading: false,
-          error: 'User not authenticated',
+          bytes: [],
+          hasMore: false,
+          currentPage: 1,
         );
         return;
       }
 
+      debugPrint('Loading bytes for user: ${user.id}');
+
+      // Test table access
+      try {
+        final testQuery = await _supabase
+            .from('bytes')
+            .select('byte_id')
+            .limit(1);
+        debugPrint('Table exists, found ${testQuery.length} records');
+      } catch (tableError) {
+        debugPrint('Table access error: $tableError');
+        state = state.copyWith(
+          isLoading: false,
+          bytes: [],
+          error: 'Database table not accessible: $tableError',
+        );
+        return;
+      }
+
+      // Fetch bytes with user profiles
       final response = await _supabase
           .from('bytes')
           .select('''
             *,
-            user_profiles!bytes_user_id_fkey (
-              username,
-              profile_pic
-            )
+            user_profiles!bytes_user_id_fkey(username, profile_pic)
           ''')
           .order('created_at', ascending: false)
-          .range(0, _pageSize - 1);
+          .limit(_pageSize);
 
+      debugPrint('Query executed successfully, fetched ${response.length} bytes');
+
+      if (response.isEmpty) {
+        debugPrint('No bytes found in database');
+        state = state.copyWith(
+          bytes: [],
+          isLoading: false,
+          hasMore: false,
+          currentPage: 1,
+        );
+        return;
+      }
+
+      // Process bytes
       final List<Byte> newBytes = [];
 
       for (var byteData in response) {
-        final String byteId = byteData['byte_id'].toString(); // Convert to string
-        final userProfile = byteData['user_profiles'];
+        try {
+          final byteId = byteData['byte_id'];
+          final userProfile = byteData['user_profiles'];
 
-        // Check if current user liked this byte
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('byte_likes')
-            .select('byte_like_id')
-            .eq('byte_id', byteId)
-            .eq('user_id', user.id)
-            .maybeSingle();
-        isLiked = likeResponse != null;
+          debugPrint('Processing byte: $byteId');
 
-        final byte = Byte.fromJson({
-          ...byteData,
-          'byte_id': byteId, // Ensure it's a string in the JSON
-          'username': userProfile?['username'],
-          'profile_pic': userProfile?['profile_pic'],
-          'isLiked': isLiked,
-        });
+          // Check if user liked this byte
+          bool isliked = false;
+          try {
+            final likeResponse = await _supabase
+                .from('byte_likes')
+                .select('byte_like_id')
+                .eq('byte_id', byteId)
+                .eq('user_id', user.id)
+                .maybeSingle();
 
-        newBytes.add(byte);
+            isliked = likeResponse != null;
+          } catch (e) {
+            debugPrint('Error checking like status for byte $byteId: $e');
+          }
+
+          final byte = Byte.fromJson({
+            'byte_id': byteId,
+            'user_id': byteData['user_id'],
+            'byte': byteData['byte'],
+            'caption': byteData['caption'],
+            'like_count': byteData['like_count'],
+            'comment_count': byteData['comment_count'],
+            'share_count': byteData['share_count'],
+            'created_at': byteData['created_at'],
+            'updated_at': byteData['updated_at'],
+            'username': userProfile?['username'],
+            'profile_pic': userProfile?['profile_pic'],
+            'isliked': isliked,
+          });
+
+          newBytes.add(byte);
+          debugPrint('Added byte: ${byte.byteId}');
+        } catch (byteError, stack) {
+          debugPrint('Error processing byte: $byteError');
+          debugPrint('Stack: $stack');
+          continue;
+        }
       }
 
       state = state.copyWith(
@@ -369,16 +440,33 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         isLoading: false,
         hasMore: newBytes.length == _pageSize,
         currentPage: 1,
+        error: null,
       );
-    } catch (e) {
+
+      debugPrint('Successfully loaded ${newBytes.length} bytes');
+    } catch (e, stack) {
+      debugPrint('Error loading bytes: $e');
+      debugPrint('Stack trace: $stack');
+
+      String errorMessage = 'Failed to load bytes';
+      if (e.toString().contains('relation') && e.toString().contains('does not exist')) {
+        errorMessage = 'Database table "bytes" does not exist. Please create it first.';
+      } else if (e.toString().contains('permission denied')) {
+        errorMessage = 'Permission denied. Check RLS policies.';
+      } else if (e.toString().contains('violates foreign key constraint')) {
+        errorMessage = 'User profile not found. Please complete your profile first.';
+      } else {
+        errorMessage = 'Failed to load bytes: ${e.toString()}';
+      }
+
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to load bytes: $e',
+        error: errorMessage,
+        bytes: [],
       );
     }
   }
 
-  // Load more bytes (pagination)
   Future<void> loadMoreBytes() async {
     if (state.isLoadingMore || !state.hasMore) return;
 
@@ -395,10 +483,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
           .from('bytes')
           .select('''
             *,
-            user_profiles!bytes_user_id_fkey (
-              username,
-              profile_pic
-            )
+            user_profiles!bytes_user_id_fkey(username, profile_pic)
           ''')
           .order('created_at', ascending: false)
           .range(startRange, endRange);
@@ -406,29 +491,39 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       final List<Byte> newBytes = [];
 
       for (var byteData in response) {
-        final String byteId = byteData['byte_id'].toString(); // Convert to string
+        final byteId = byteData['byte_id'];
+        final String byteIdStr = byteId.toString();
         final userProfile = byteData['user_profiles'];
 
-        // Avoid duplicates
-        final alreadyExists = state.bytes.any((b) => b.byteId == byteId);
+        final alreadyExists = state.bytes.any((b) => b.byteId == byteIdStr);
         if (alreadyExists) continue;
 
-        // Check if current user liked this byte
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('byte_likes')
-            .select('byte_like_id')
-            .eq('byte_id', byteId)
-            .eq('user_id', user.id)
-            .maybeSingle();
-        isLiked = likeResponse != null;
+        bool isliked = false;
+        try {
+          final likeResponse = await _supabase
+              .from('byte_likes')
+              .select('byte_like_id')
+              .eq('byte_id', byteId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+          isliked = likeResponse != null;
+        } catch (e) {
+          debugPrint('Error checking like status: $e');
+        }
 
         final byte = Byte.fromJson({
-          ...byteData,
-          'byte_id': byteId, // Ensure it's a string in the JSON
+          'byte_id': byteId,
+          'user_id': byteData['user_id'],
+          'byte': byteData['byte'],
+          'caption': byteData['caption'],
+          'like_count': byteData['like_count'],
+          'comment_count': byteData['comment_count'],
+          'share_count': byteData['share_count'],
+          'created_at': byteData['created_at'],
+          'updated_at': byteData['updated_at'],
           'username': userProfile?['username'],
           'profile_pic': userProfile?['profile_pic'],
-          'isLiked': isLiked,
+          'isliked': isliked,
         });
 
         newBytes.add(byte);
@@ -448,23 +543,12 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     }
   }
 
-  // Refresh bytes
   Future<void> refreshBytes() async {
     state = const BytesFeedState();
     await loadBytes();
   }
 
-  // Toggle like with optimistic updates
   Future<void> toggleLike(String byteId) async {
-    // Check if bytes are loaded
-    if (state.bytes.isEmpty) {
-      await loadBytes();
-      if (state.bytes.isEmpty) {
-        return;
-      }
-    }
-
-    // Prevent multiple simultaneous like operations on the same byte
     if (state.likingBytes.contains(byteId)) {
       return;
     }
@@ -474,21 +558,20 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       return;
     }
 
-    // Find the byte in current state
     final byteIndex = state.bytes.indexWhere((byte) => byte.byteId == byteId);
     if (byteIndex == -1) {
       return;
     }
 
     final currentByte = state.bytes[byteIndex];
-    final currentlyLiked = currentByte.isLiked ?? false;
+    final currentlyliked = currentByte.isliked ?? false;
     final currentLikeCount = currentByte.likeCount;
 
-    // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
+    // Optimistic update
     final newBytes = [...state.bytes];
     newBytes[byteIndex] = currentByte.copyWith(
-      likeCount: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
-      isLiked: !currentlyLiked,
+      likeCount: currentlyliked ? currentLikeCount - 1 : currentLikeCount + 1,
+      isliked: !currentlyliked,
     );
 
     state = state.copyWith(
@@ -497,8 +580,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     );
 
     try {
-      if (currentlyLiked) {
-        // Unlike the byte
+      if (currentlyliked) {
         await _supabase
             .from('byte_likes')
             .delete()
@@ -509,9 +591,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
             .from('bytes')
             .update({'like_count': currentLikeCount - 1})
             .eq('byte_id', byteId);
-
       } else {
-        // Like the byte
         await _supabase.from('byte_likes').insert({
           'byte_id': byteId,
           'user_id': user.id,
@@ -524,28 +604,27 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
             .eq('byte_id', byteId);
       }
 
-      // Remove from likingBytes - keep the optimistic update since it succeeded
       state = state.copyWith(
         likingBytes: {...state.likingBytes}..remove(byteId),
       );
-
     } catch (error) {
-      // REVERT OPTIMISTIC UPDATE: Restore original state on error
+      debugPrint('Error toggling like: $error');
+
+      // Revert optimistic update
       final revertedBytes = [...state.bytes];
       final currentByteIndex = revertedBytes.indexWhere((byte) => byte.byteId == byteId);
       if (currentByteIndex != -1) {
-        revertedBytes[currentByteIndex] = currentByte; // Restore original state
+        revertedBytes[currentByteIndex] = currentByte;
       }
 
       state = state.copyWith(
         bytes: revertedBytes,
         likingBytes: {...state.likingBytes}..remove(byteId),
-        error: 'Failed to update like: ${error.toString()}',
       );
     }
   }
 
-  // Load comments for a specific byte
+  // Load comments for a byte
   Future<List<ByteComment>> loadComments(String byteId) async {
     if (state.loadingComments.contains(byteId)) {
       return state.commentsByByteId[byteId] ?? [];
@@ -557,18 +636,21 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
 
     try {
       final user = _supabase.auth.currentUser;
-      if (user == null) return [];
+      if (user == null) {
+        state = state.copyWith(
+          loadingComments: {...state.loadingComments}..remove(byteId),
+        );
+        return [];
+      }
 
       final response = await _supabase
           .from('byte_comments')
           .select('''
             *,
-            user_profiles!byte_comments_user_id_fkey (
-              username,
-              profile_pic
-            )
+            user_profiles!byte_comments_user_id_fkey(username, profile_pic)
           ''')
           .eq('byte_id', byteId)
+          .isFilter('parent_comment_id', null)
           .order('created_at', ascending: false);
 
       final List<ByteComment> comments = [];
@@ -577,22 +659,25 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         final String commentId = commentData['comment_id'].toString();
         final userProfile = commentData['user_profiles'];
 
-        // Check if current user liked this comment
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('byte_comment_likes')
-            .select('byte_comment_like_id')
-            .eq('comment_id', commentId)
-            .eq('user_id', user.id)
-            .maybeSingle();
-        isLiked = likeResponse != null;
+        bool isliked = false;
+        try {
+          final likeResponse = await _supabase
+              .from('byte_comment_likes')
+              .select('like_id')
+              .eq('comment_id', commentId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+          isliked = likeResponse != null;
+        } catch (e) {
+          debugPrint('Error checking comment like status: $e');
+        }
 
         final comment = ByteComment.fromJson({
           ...commentData,
-          'comment_id': commentId,
           'username': userProfile?['username'] ?? 'Unknown',
           'profile_pic': userProfile?['profile_pic'],
-          'isLiked': isLiked,
+          'isliked': isliked,
         });
 
         comments.add(comment);
@@ -606,128 +691,244 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         loadingComments: {...state.loadingComments}..remove(byteId),
       );
 
+      debugPrint('Fetched ${comments.length} comments for byte $byteId');
       return comments;
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Error loading comments: $e\n$stack');
       state = state.copyWith(
         loadingComments: {...state.loadingComments}..remove(byteId),
-        error: 'Failed to load comments: $e',
       );
+      return state.commentsByByteId[byteId] ?? [];
+    }
+  }
+
+  // Load replies for a parent comment
+  Future<List<ByteComment>> loadReplies(String byteId, String parentCommentId) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return [];
+
+      final response = await _supabase
+          .from('byte_comments')
+          .select('''
+            *,
+            user_profiles!byte_comments_user_id_fkey(username, profile_pic)
+          ''')
+          .eq('byte_id', byteId)
+          .eq('parent_comment_id', parentCommentId)
+          .order('created_at', ascending: true);
+
+      final List<ByteComment> replies = [];
+
+      for (var replyData in response) {
+        final String commentId = replyData['comment_id'].toString();
+        final userProfile = replyData['user_profiles'];
+
+        bool isliked = false;
+        try {
+          final likeResponse = await _supabase
+              .from('byte_comment_likes')
+              .select('like_id')
+              .eq('comment_id', commentId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+          isliked = likeResponse != null;
+        } catch (e) {
+          debugPrint('Error checking reply like status: $e');
+        }
+
+        final reply = ByteComment.fromJson({
+          ...replyData,
+          'username': userProfile?['username'] ?? 'Unknown',
+          'profile_pic': userProfile?['profile_pic'],
+          'isliked': isliked,
+        });
+
+        replies.add(reply);
+      }
+
+      return replies;
+    } catch (e) {
+      debugPrint('Error loading replies: $e');
       return [];
     }
   }
 
-  // Add a comment
-  Future<bool> addComment(String byteId, String content) async {
+  Future<int> getRepliesCount(String parentCommentId) async {
+    try {
+      final countResponse = await _supabase
+          .from('byte_comments')
+          .select('comment_id')
+          .eq('parent_comment_id', parentCommentId);
+
+      return (countResponse as List).length;
+    } catch (e) {
+      debugPrint('Error getting replies count: $e');
+      return 0;
+    }
+  }
+
+  // Add a reply to a comment
+  Future<bool> addReply(String byteId, String parentCommentId, String content) async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return false;
 
-      // Insert the comment
       await _supabase.from('byte_comments').insert({
         'byte_id': byteId,
         'user_id': user.id,
-        'content': content,
+        'content': content.trim(),
+        'parent_comment_id': parentCommentId,
         'like_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      // Update the byte's comment count
-      final currentByte = state.bytes.firstWhere((b) => b.byteId == byteId);
-      await _supabase
-          .from('bytes')
-          .update({'comment_count': currentByte.commentCount + 1})
-          .eq('byte_id', byteId);
-
-      // Update local state
-      final updatedBytes = state.bytes.map((byte) {
-        if (byte.byteId == byteId) {
-          return byte.copyWith(commentCount: byte.commentCount + 1);
-        }
-        return byte;
-      }).toList();
-
-      state = state.copyWith(bytes: updatedBytes);
-
-      // Refresh comments for this byte
-      await loadComments(byteId);
-
+      debugPrint('Added reply to comment $parentCommentId');
       return true;
     } catch (e) {
-      state = state.copyWith(error: 'Failed to add comment: $e');
+      debugPrint('Error adding reply: $e');
       return false;
     }
   }
 
-  // Toggle comment like
+  // Add a new comment
+  Future<bool> addComment(String byteId, String content) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return false;
+
+      final insertResp = await _supabase.from('byte_comments').insert({
+        'byte_id': byteId,
+        'user_id': user.id,
+        'content': content.trim(),
+        'like_count': 0,
+        'parent_comment_id': null,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select().single();
+
+      final userProfile = await _supabase
+          .from('user_profiles')
+          .select('username, profile_pic')
+          .eq('user_id', user.id)
+          .single();
+
+      final newComment = ByteComment.fromJson({
+        ...insertResp,
+        'username': userProfile['username'] ?? 'Unknown',
+        'profile_pic': userProfile['profile_pic'],
+        'isliked': false,
+      });
+
+      final currentComments = state.commentsByByteId[byteId] ?? [];
+      final updatedComments = [newComment, ...currentComments];
+
+      state = state.copyWith(
+        commentsByByteId: {
+          ...state.commentsByByteId,
+          byteId: updatedComments,
+        },
+      );
+
+      // Update comment count
+      final byteIndex = state.bytes.indexWhere((b) => b.byteId == byteId);
+      if (byteIndex != -1) {
+        final updatedBytes = [...state.bytes];
+        updatedBytes[byteIndex] = updatedBytes[byteIndex].copyWith(
+          commentCount: updatedBytes[byteIndex].commentCount + 1,
+        );
+        state = state.copyWith(bytes: updatedBytes);
+      }
+
+      debugPrint('Added comment to byte $byteId');
+      return true;
+    } catch (e) {
+      debugPrint('Error adding comment: $e');
+      return false;
+    }
+  }
+
   Future<void> toggleCommentLike(String commentId) async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      // Find the comment across all byte comments
+      if (state.likingComments.contains(commentId)) {
+        return;
+      }
+
+      state = state.copyWith(
+        likingComments: {...state.likingComments, commentId},
+      );
+
       ByteComment? targetComment;
       String? targetByteId;
 
       for (var entry in state.commentsByByteId.entries) {
-        final comment = entry.value.firstWhere(
-              (c) => c.commentId == commentId,
-          orElse: () => throw Exception('Comment not found'),
-        );
-        if (comment.commentId == commentId) {
+        try {
+          final comment = entry.value.firstWhere(
+                (c) => c.commentId == commentId,
+          );
           targetComment = comment;
           targetByteId = entry.key;
           break;
+        } catch (_) {
+          continue;
         }
       }
 
-      if (targetComment == null || targetByteId == null) return;
+      if (targetComment == null || targetByteId == null) {
+        state = state.copyWith(
+          likingComments: {...state.likingComments}..remove(commentId),
+        );
+        return;
+      }
 
-      final currentlyLiked = targetComment.isLiked;
-      final currentLikeCount = targetComment.likeCount;
+      // Optimistic update
+      final updatedComments = state.commentsByByteId[targetByteId]!.map((comment) {
+        if (comment.commentId == commentId) {
+          return comment.copyWith(
+            isliked: !comment.isliked,
+            likeCount: comment.isliked
+                ? comment.likeCount - 1
+                : comment.likeCount + 1,
+          );
+        }
+        return comment;
+      }).toList();
 
-      if (currentlyLiked) {
-        // Unlike
+      state = state.copyWith(
+        commentsByByteId: {
+          ...state.commentsByByteId,
+          targetByteId: updatedComments,
+        },
+      );
+
+      if (targetComment.isliked) {
         await _supabase
             .from('byte_comment_likes')
             .delete()
             .eq('comment_id', commentId)
             .eq('user_id', user.id);
-
-        await _supabase
-            .from('byte_comments')
-            .update({'like_count': currentLikeCount - 1})
-            .eq('comment_id', commentId);
       } else {
-        // Like
         await _supabase.from('byte_comment_likes').insert({
           'comment_id': commentId,
           'user_id': user.id,
-          'liked_at': DateTime.now().toIso8601String(),
         });
-
-        await _supabase
-            .from('byte_comments')
-            .update({'like_count': currentLikeCount + 1})
-            .eq('comment_id', commentId);
       }
 
-      // Update local state
-      final updatedComments = Map<String, List<ByteComment>>.from(state.commentsByByteId);
-      final byteComments = List<ByteComment>.from(updatedComments[targetByteId] ?? []);
-      final commentIndex = byteComments.indexWhere((c) => c.commentId == commentId);
-
-      if (commentIndex != -1) {
-        byteComments[commentIndex] = targetComment.copyWith(
-          likeCount: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
-          isLiked: !currentlyLiked,
-        );
-        updatedComments[targetByteId] = byteComments;
-
-        state = state.copyWith(commentsByByteId: updatedComments);
-      }
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentId),
+      );
     } catch (e) {
-      state = state.copyWith(error: 'Failed to toggle comment like: $e');
+      debugPrint('Error toggling comment like: $e');
+
+      // Revert on error
+      state = state.copyWith(
+        likingComments: {...state.likingComments}..remove(commentId),
+      );
     }
   }
 

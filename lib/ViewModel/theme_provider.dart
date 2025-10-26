@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,7 +46,7 @@ class AppThemes {
       color: Colors.white,
     ),
     dividerColor: Colors.grey[700],
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: Colors.black87,
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -85,7 +86,7 @@ class AppThemes {
       color: Colors.black87,
     ),
     dividerColor: Colors.grey[300],
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(

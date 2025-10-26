@@ -150,6 +150,7 @@ class Comment {
   int likes;
   bool uliked;
   final DateTime createdAt;
+  final int? parentCommentId;
 
   Comment({
     required this.commentId,
@@ -161,6 +162,7 @@ class Comment {
     this.likes = 0,
     this.uliked = false,
     required this.createdAt,
+    this.parentCommentId,
   });
 
   String get timeAgo => _formatTimeAgo(createdAt);
@@ -181,13 +183,14 @@ class Comment {
       toastId: map['toast_id'] ?? '',
       userId: map['user_id'] ?? '',
       username: map['username'] ?? 'Unknown User',
-      profileImage: map['profile_pic'] ?? 'assets/plaro_logo.png',
+      profileImage: map['profile_pic'] ?? 'assets/plaro new logo.png',
       content: map['content'] ?? '',
       likes: map['like_count'] ?? 0,
       uliked: map['uliked'] ?? false,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'])
           : DateTime.now(),
+      parentCommentId: map['parent_comment_id'],
     );
   }
 
@@ -202,6 +205,7 @@ class Comment {
       'like_count': likes,
       'uliked': uliked,
       'created_at': createdAt.toIso8601String(),
+      'parent_comment_id': parentCommentId,
     };
   }
 

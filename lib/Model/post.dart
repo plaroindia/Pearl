@@ -1,4 +1,6 @@
+
 import 'package:image_picker/image_picker.dart';
+
 class Post_feed {
   String? post_id;
   String? user_id;
@@ -8,13 +10,13 @@ class Post_feed {
   String? caption;
   String? title;
   List<String>? tags;
-  DateTime? created_at;  // Changed from String? to DateTime?
+  DateTime? created_at;
   int like_count;
   bool isliked;
   int comment_count;
-  int? share_count;  // Made nullable to match usage
+  int? share_count;
   List<Comment> commentsList;
-  List<String>? media_urls;  // Added missing media_urls property
+  List<String>? media_urls;
   List<XFile>? localMediaFiles;
 
   Post_feed({
@@ -32,7 +34,7 @@ class Post_feed {
     this.comment_count = 0,
     this.share_count = 0,
     required this.commentsList,
-    this.media_urls,  // Added media_urls parameter
+    this.media_urls,
     this.localMediaFiles,
   });
 
@@ -48,16 +50,17 @@ class Post_feed {
       tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
       created_at: data['created_at'] != null
           ? DateTime.parse(data['created_at'])
-          : null,  // Parse string to DateTime
+          : null,
       like_count: data['like_count'] ?? 0,
       comment_count: data['comment_count'] ?? 0,
       share_count: data['share_count'] ?? 0,
       isliked: data['isliked'] ?? false,
       media_urls: data['media_urls'] != null
           ? List<String>.from(data['media_urls'])
-          : null,  // Added media_urls parsing
-      commentsList: data['toast_comments'] != null
-          ? (data['toast_comments'] as List)
+          : null,
+      // Accept either 'comments' or 'post_comments' as the payload key
+      commentsList: (data['comments'] ?? data['post_comments']) != null
+          ? List.from(data['comments'] ?? data['post_comments'])
           .map((comment) => Comment.fromMap(comment))
           .toList()
           : [],
@@ -66,7 +69,7 @@ class Post_feed {
 
   Map<String, dynamic> toMap() {
     return {
-      'toast_id': post_id,
+      'post_id': post_id,
       'user_id': user_id,
       'username': username,
       'profile_pic': profile_pic,
@@ -74,17 +77,17 @@ class Post_feed {
       'caption': caption,
       'title': title,
       'tags': tags,
-      'created_at': created_at?.toIso8601String(),  // Convert DateTime to string
+      'created_at': created_at?.toIso8601String(),
       'like_count': like_count,
       'comment_count': comment_count,
       'share_count': share_count,
       'isliked': isliked,
       'media_urls': media_urls,
-      'localMediaFiles': localMediaFiles,
+      'localMediaFiles': localMediaFiles?.map((x) => x.path).toList(),
+      'comments': commentsList.map((c) => c.toMap()).toList(),
     };
   }
 
-  // Create a copy of the toast with updated fields
   Post_feed copyWith({
     String? post_id,
     String? user_id,
@@ -94,7 +97,7 @@ class Post_feed {
     String? caption,
     String? title,
     List<String>? tags,
-    DateTime? created_at,  // Changed to DateTime?
+    DateTime? created_at,
     int? like_count,
     bool? isliked,
     int? comment_count,
@@ -102,7 +105,6 @@ class Post_feed {
     List<Comment>? commentsList,
     List<String>? media_urls,
     List<XFile>? localMediaFiles,
-
   }) {
     return Post_feed(
       post_id: post_id ?? this.post_id,
@@ -124,7 +126,6 @@ class Post_feed {
     );
   }
 
-  // Toggle like state (used for optimistic updates)
   void toggleLike() {
     if (isliked) {
       like_count = like_count > 0 ? like_count - 1 : 0;
@@ -135,37 +136,18 @@ class Post_feed {
     }
   }
 
-  // Increment like count (legacy method - prefer using copyWith)
-  void incrementLikes() {
-    if (isliked) {
-      like_count = like_count > 0 ? like_count - 1 : 0;
-      isliked = false;
-    } else {
-      like_count++;
-      isliked = true;
-    }
-  }
-
-  // Decrement like count
-  void decrementLikes() {
-    if (like_count > 0) {
-      like_count--;
-    }
-    isliked = false;
-  }
-
   void incrementComments() {
     comment_count++;
   }
 
   void incrementShares() {
-    share_count = (share_count ?? 0) + 1;  // Handle nullable share_count
+    share_count = (share_count ?? 0) + 1;
   }
 }
 
 class Comment {
   final int commentId;
-  final String toastId;
+  final String postId;          // Matches PostFeed.post_id
   final String userId;
   final String username;
   final String profileImage;
@@ -173,10 +155,13 @@ class Comment {
   int likes;
   bool isliked;
   final DateTime createdAt;
+  final int? parentCommentId;
+  final int? replyCount;
+  List<Comment> replies;        // Nested replies
 
   Comment({
     required this.commentId,
-    required this.toastId,
+    required this.postId,
     required this.userId,
     required this.username,
     required this.profileImage,
@@ -184,6 +169,9 @@ class Comment {
     this.likes = 0,
     this.isliked = false,
     required this.createdAt,
+    this.parentCommentId,
+    this.replyCount,
+    this.replies = const [],
   });
 
   String get timeAgo => _formatTimeAgo(createdAt);
@@ -201,23 +189,30 @@ class Comment {
   factory Comment.fromMap(Map<String, dynamic> map) {
     return Comment(
       commentId: map['comment_id'] ?? 0,
-      toastId: map['toast_id'] ?? '',
+      postId: (map['post_id'] ?? '').toString(),
       userId: map['user_id'] ?? '',
       username: map['username'] ?? 'Unknown User',
-      profileImage: map['profile_pic'] ?? 'assets/plaro_logo.png',
+      profileImage: map['profile_pic'] ?? 'assets/plaro new logo.png',
       content: map['content'] ?? '',
       likes: map['like_count'] ?? 0,
       isliked: map['isliked'] ?? false,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'])
           : DateTime.now(),
+      parentCommentId: map['parent_comment_id'],
+      replyCount: map['reply_count'],
+      replies: map['replies'] != null
+          ? (map['replies'] as List)
+          .map((r) => Comment.fromMap(r))
+          .toList()
+          : [],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'comment_id': commentId,
-      'toast_id': toastId,
+      'post_id': postId,
       'user_id': userId,
       'username': username,
       'profile_pic': profileImage,
@@ -225,6 +220,9 @@ class Comment {
       'like_count': likes,
       'isliked': isliked,
       'created_at': createdAt.toIso8601String(),
+      'parent_comment_id': parentCommentId,
+      'reply_count': replyCount,
+      'replies': replies.map((r) => r.toMap()).toList(),
     };
   }
 

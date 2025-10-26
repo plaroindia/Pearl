@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../Model/post.dart';
-import '../Model/toast.dart';
+import '../Model/post.dart' as post_model;
+import '../Model/toast.dart' as toast_model;
 import '../Model/byte.dart';
 
 // State class for profile feed
 class ProfileFeedState {
-  final List<Post_feed> posts;
-  final List<Toast_feed> toasts;
+  final List<post_model.Post_feed> posts;
+  final List<toast_model.Toast_feed> toasts;
   final List<Byte> bytes;
   final bool isLoadingPosts;
   final bool isLoadingToasts;
@@ -49,8 +49,8 @@ class ProfileFeedState {
   });
 
   ProfileFeedState copyWith({
-    List<Post_feed>? posts,
-    List<Toast_feed>? toasts,
+    List<post_model.Post_feed>? posts,
+    List<toast_model.Toast_feed>? toasts,
     List<Byte>? bytes,
     bool? isLoadingPosts,
     bool? isLoadingToasts,
@@ -103,10 +103,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   ProfileFeedNotifier() : super(const ProfileFeedState());
 
   final SupabaseClient _supabase = Supabase.instance.client;
-
-  // _supabase.auth.currentUser;
-
-  static const int _pageSize = 12; // Increased for grid layout
+  static const int _pageSize = 12;
 
   // Load user's posts
   Future<void> loadUserPosts(final UserId) async {
@@ -115,7 +112,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     state = state.copyWith(isLoadingPosts: true, error: null);
 
     try {
-      final user = UserId; // _supabase.auth.currentUser;
+      final user = UserId;
       if (user == null) {
         state = state.copyWith(
           isLoadingPosts: false,
@@ -127,15 +124,24 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       final response = await _supabase
           .from('post')
           .select('''
-            *,
-            user_profiles!inner(username, profile_pic)
-          ''')
+    post_id,
+    user_id,
+    content,
+    media_urls,
+    like_count,
+    comment_count,
+    share_count,
+    created_at,
+    is_published,
+    user_profiles(username, profile_pic),
+    post_comments(comment_id, user_id, content, like_count, created_at)
+  ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
 
-      final List<Post_feed> newPosts = [];
+      final List<post_model.Post_feed> newPosts = [];
 
       for (var postData in response) {
         final String postId = postData['post_id'].toString();
@@ -164,7 +170,33 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .maybeSingle();
         isLiked = likeResponse != null;
 
-        final post = Post_feed.fromMap({
+        // Process comments - convert to proper format for Post_feed
+
+        List<Map<String, dynamic>> commentMaps = [];
+        if (postData['post_comments'] != null) {
+          for (var commentData in postData['post_comments']) {
+            // Fetch user profile for each comment
+            final commentUserId = commentData['user_id'];
+            final userProfileResponse = await _supabase
+                .from('user_profiles')
+                .select('username, profile_pic')
+                .eq('user_id', commentUserId)
+                .maybeSingle();
+
+            commentMaps.add({
+              'comment_id': commentData['comment_id'],
+              'user_id': commentData['user_id'],
+              'content': commentData['content'],
+              'like_count': commentData['like_count'] ?? 0,
+              'created_at': commentData['created_at'],
+              'username': userProfileResponse?['username'] ?? 'Unknown',
+              'profile_pic': userProfileResponse?['profile_pic'] ?? '',
+              'isliked': false,
+            });
+          }
+        }
+
+        final post = post_model.Post_feed.fromMap({
           ...postData,
           'post_id': postId,
           'username': postData['user_profiles']['username'],
@@ -172,6 +204,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'like_count': likeCount,
           'comment_count': commentCount,
           'isliked': isLiked,
+          'post_comments': commentMaps,
         });
 
         newPosts.add(post);
@@ -198,7 +231,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     state = state.copyWith(isLoadingToasts: true, error: null);
 
     try {
-      final user = UserId;//_supabase.auth.currentUser;
+      final user = UserId;
       if (user == null) {
         state = state.copyWith(
           isLoadingToasts: false,
@@ -207,20 +240,27 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         return;
       }
 
-      print('Loading toasts for user: ${user}'); // Debug log
+      print('Loading toasts for user: ${user}');
 
       final response = await _supabase
           .from('toasts')
           .select('''
-          *,
-          user_profiles!inner(username, profile_pic)
-        ''')
+      *,
+      user_profiles!inner(username, profile_pic),
+      toast_comments(
+        comment_id,
+        user_id,
+        content,
+        like_count,
+        created_at
+      )
+    ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
 
-      print('Toast response: $response'); // Debug log
+      print('Toast response: $response');
 
       if (response.isEmpty) {
         print('No toasts found for user');
@@ -233,7 +273,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         return;
       }
 
-      final List<Toast_feed> newToasts = [];
+      final List<toast_model.Toast_feed> newToasts = [];
 
       for (var toastData in response) {
         try {
@@ -263,7 +303,33 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
               .maybeSingle();
           isLiked = likeResponse != null;
 
-          final toast = Toast_feed.fromMap({
+          // Process comments
+          // Process comments
+          List<Map<String, dynamic>> commentMaps = [];
+          if (toastData['toast_comments'] != null) {
+            for (var commentData in toastData['toast_comments']) {
+              // Fetch user profile for each comment
+              final commentUserId = commentData['user_id'];
+              final userProfileResponse = await _supabase
+                  .from('user_profiles')
+                  .select('username, profile_pic')
+                  .eq('user_id', commentUserId)
+                  .maybeSingle();
+
+              commentMaps.add({
+                'comment_id': commentData['comment_id'],
+                'toast_id': toastId,
+                'user_id': commentData['user_id'],
+                'content': commentData['content'],
+                'like_count': commentData['like_count'] ?? 0,
+                'created_at': commentData['created_at'],
+                'username': userProfileResponse?['username'] ?? 'Unknown',
+                'profile_pic': userProfileResponse?['profile_pic'] ?? '',
+                'uliked': false,
+              });
+            }
+          }
+          final toast = toast_model.Toast_feed.fromMap({
             ...toastData,
             'toast_id': toastId,
             'username': toastData['user_profiles']['username'],
@@ -271,12 +337,12 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             'like_count': likeCount,
             'comment_count': commentCount,
             'isliked': isLiked,
+            'toast_comments': commentMaps,
           });
 
           newToasts.add(toast);
         } catch (e) {
           print('Error processing toast: $e');
-          // Continue with other toasts instead of failing completely
           continue;
         }
       }
@@ -288,10 +354,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         currentToastPage: 1,
       );
 
-      print('Successfully loaded ${newToasts.length} toasts'); // Debug log
+      print('Successfully loaded ${newToasts.length} toasts');
 
     } catch (e) {
-      print('Error loading toasts: $e'); // Debug log
+      print('Error loading toasts: $e');
       state = state.copyWith(
         isLoadingToasts: false,
         error: 'Failed to load toasts: $e',
@@ -303,7 +369,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   Future<void> loadMoreUserPosts(final UserId) async {
     if (state.isLoadingMorePosts || !state.hasMorePosts) return;
 
-    final user = UserId;//_supabase.auth.currentUser;
+    final user = UserId;
     if (user == null) return;
 
     state = state.copyWith(isLoadingMorePosts: true, error: null);
@@ -316,14 +382,22 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('post')
           .select('''
             *,
-            user_profiles!inner(username, profile_pic)
+            user_profiles!inner(username, profile_pic),
+            post_comments(
+              comment_id,
+              user_id,
+              content,
+              like_count,
+              created_at,
+              user_profiles!post_comments_user_id_fkey(username, profile_pic)
+            )
           ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
 
-      final List<Post_feed> newPosts = [];
+      final List<post_model.Post_feed> newPosts = [];
 
       for (var postData in response) {
         final String postId = postData['post_id'].toString();
@@ -356,7 +430,24 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .maybeSingle();
         isLiked = likeResponse != null;
 
-        final post = Post_feed.fromMap({
+        // Process comments
+        List<Map<String, dynamic>> commentMaps = [];
+        if (postData['post_comments'] != null) {
+          for (var commentData in postData['post_comments']) {
+            commentMaps.add({
+              'comment_id': commentData['comment_id'],
+              'user_id': commentData['user_id'],
+              'content': commentData['content'],
+              'like_count': commentData['like_count'] ?? 0,
+              'created_at': commentData['created_at'],
+              'username': commentData['user_profiles']['username'],
+              'profile_pic': commentData['user_profiles']['profile_pic'],
+              'isliked': false,
+            });
+          }
+        }
+
+        final post = post_model.Post_feed.fromMap({
           ...postData,
           'post_id': postId,
           'username': postData['user_profiles']['username'],
@@ -364,6 +455,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'like_count': likeCount,
           'comment_count': commentCount,
           'isliked': isLiked,
+          'post_comments': commentMaps,
         });
 
         newPosts.add(post);
@@ -400,14 +492,22 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .from('toasts')
           .select('''
             *,
-            user_profiles!inner(username, profile_pic)
+            user_profiles!inner(username, profile_pic),
+            toast_comments(
+              comment_id,
+              user_id,
+              content,
+              like_count,
+              created_at,
+              user_profiles!toast_comments_user_id_fkey(username, profile_pic)
+            )
           ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
 
-      final List<Toast_feed> newToasts = [];
+      final List<toast_model.Toast_feed> newToasts = [];
 
       for (var toastData in response) {
         final String toastId = toastData['toast_id'].toString();
@@ -440,7 +540,25 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .maybeSingle();
         isLiked = likeResponse != null;
 
-        final toast = Toast_feed.fromMap({
+        // Process comments
+        List<Map<String, dynamic>> commentMaps = [];
+        if (toastData['toast_comments'] != null) {
+          for (var commentData in toastData['toast_comments']) {
+            commentMaps.add({
+              'comment_id': commentData['comment_id'],
+              'toast_id': toastId,
+              'user_id': commentData['user_id'],
+              'content': commentData['content'],
+              'like_count': commentData['like_count'] ?? 0,
+              'created_at': commentData['created_at'],
+              'username': commentData['user_profiles']['username'],
+              'profile_pic': commentData['user_profiles']['profile_pic'],
+              'uliked': false,
+            });
+          }
+        }
+
+        final toast = toast_model.Toast_feed.fromMap({
           ...toastData,
           'toast_id': toastId,
           'username': toastData['user_profiles']['username'],
@@ -448,6 +566,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'like_count': likeCount,
           'comment_count': commentCount,
           'isliked': isLiked,
+          'toast_comments': commentMaps,
         });
 
         newToasts.add(toast);
@@ -562,7 +681,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         final String byteId = byteData['byte_id'].toString();
         final userProfile = byteData['user_profiles'];
 
-        // Avoid duplicates
         final alreadyExists = state.bytes.any((b) => b.byteId == byteId);
         if (alreadyExists) continue;
 
@@ -624,7 +742,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     final currentlyLiked = currentPost.isliked;
     final currentLikeCount = currentPost.like_count;
 
-    // Optimistic update
     final newPosts = [...state.posts];
     newPosts[postIndex] = currentPost.copyWith(
       like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
@@ -638,22 +755,20 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
     try {
       if (currentlyLiked) {
-        // Unlike the post
         await _supabase
             .from('post_likes')
             .delete()
             .eq('post_id', postId)
-            .eq('user_id', user);
+            .eq('user_id', user.id);
 
         await _supabase
             .from('post')
             .update({'like_count': currentLikeCount - 1})
             .eq('post_id', postId);
       } else {
-        // Like the post
         await _supabase.from('post_likes').insert({
           'post_id': postId,
-          'user_id': user,
+          'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
@@ -663,13 +778,11 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             .eq('post_id', postId);
       }
 
-      // Remove from likingPosts
       state = state.copyWith(
         likingPosts: {...state.likingPosts}..remove(postId),
       );
 
     } catch (error) {
-      // Revert optimistic update
       final revertedPosts = [...state.posts];
       final currentPostIndex = revertedPosts.indexWhere((post) => post.post_id == postId);
       if (currentPostIndex != -1) {
@@ -698,7 +811,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     final currentlyLiked = currentToast.isliked;
     final currentLikeCount = currentToast.like_count;
 
-    // Optimistic update
     final newToasts = [...state.toasts];
     newToasts[toastIndex] = currentToast.copyWith(
       like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
@@ -712,30 +824,26 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
     try {
       if (currentlyLiked) {
-        // Unlike the toast
         await _supabase
             .from('toast_likes')
             .delete()
             .eq('toast_id', toastId)
-            .eq('user_id', user);
+            .eq('user_id', user.id);
       } else {
-        // Like the toast
         await _supabase.from('toast_likes').insert({
           'toast_id': toastId,
-          'user_id': user,
+          'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
       }
 
-      // Remove from likingToasts
       state = state.copyWith(
         likingToasts: {...state.likingToasts}..remove(toastId),
       );
 
     } catch (error) {
-      print('Error toggling toast like: $error'); // Debug log
+      print('Error toggling toast like: $error');
 
-      // Revert optimistic update
       final revertedToasts = [...state.toasts];
       final currentToastIndex = revertedToasts.indexWhere((toast) => toast.toast_id == toastId);
       if (currentToastIndex != -1) {
@@ -756,14 +864,12 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     if (user == null) return false;
 
     try {
-      // Delete from database
       await _supabase
           .from('post')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user.id); // Ensure only owner can delete
+          .eq('user_id', user.id);
 
-      // Remove from local state
       final updatedPosts = state.posts.where((post) => post.post_id != postId).toList();
       state = state.copyWith(posts: updatedPosts);
 
@@ -777,18 +883,15 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   // Delete user's toast
   Future<bool> deleteToast(String toastId) async {
     final user = _supabase.auth.currentUser;
-    if (user == null)
-      return false;
+    if (user == null) return false;
 
     try {
-      // Delete from database
       await _supabase
           .from('toasts')
           .delete()
           .eq('toast_id', toastId)
-          .eq('user_id', user.id); // Ensure only owner can delete
+          .eq('user_id', user.id);
 
-      // Remove from local state
       final updatedToasts = state.toasts.where((toast) => toast.toast_id != toastId).toList();
       state = state.copyWith(toasts: updatedToasts);
 

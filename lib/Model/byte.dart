@@ -13,7 +13,7 @@ class Byte {
   final DateTime updatedAt;
   final String? username;
   final String? profilePic;
-  final bool? isLiked;
+  final bool? isliked;
 
   Byte({
     required this.byteId,
@@ -27,25 +27,39 @@ class Byte {
     required this.updatedAt,
     this.username,
     this.profilePic,
-    this.isLiked,
+    this.isliked,
   });
 
   factory Byte.fromJson(Map<String, dynamic> json) {
+    // Helper function to safely convert to int
+    int safeInt(dynamic value, int defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? defaultValue;
+      return defaultValue;
+    }
+
+    // Helper function to safely convert to String
+    String safeString(dynamic value, String defaultValue) {
+      if (value == null) return defaultValue;
+      return value.toString();
+    }
+
     return Byte(
-      byteId: json['byte_id'] ?? '',
-      userId: json['user_id'] ?? '',
-      byte: json['byte'] ?? '',
-      caption: json['caption'],
-      likeCount: json['like_count'] ?? 0,
-      commentCount: json['comment_count'] ?? 0,
-      shareCount: json['share_count'] ?? 0,
+      byteId: safeString(json['byte_id'], ''),
+      userId: safeString(json['user_id'], ''),
+      byte: safeString(json['byte'], ''),
+      caption: json['caption']?.toString(),
+      likeCount: safeInt(json['like_count'], 0),
+      commentCount: safeInt(json['comment_count'], 0),
+      shareCount: safeInt(json['share_count'], 0),
       createdAt: DateTime.parse(
-          json['created_at'] ?? DateTime.now().toIso8601String()),
+          json['created_at']?.toString() ?? DateTime.now().toIso8601String()),
       updatedAt: DateTime.parse(
-          json['updated_at'] ?? DateTime.now().toIso8601String()),
-      username: json['username'],
-      profilePic: json['profile_pic'],
-      isLiked: json['isliked'] ?? false,
+          json['updated_at']?.toString() ?? DateTime.now().toIso8601String()),
+      username: json['username']?.toString(),
+      profilePic: json['profile_pic']?.toString(),
+      isliked: json['isliked'] == true || json['isliked'] == 1,
     );
   }
 
@@ -76,7 +90,7 @@ class Byte {
     DateTime? updatedAt,
     String? username,
     String? profilePic,
-    bool? isLiked,
+    bool? isliked,
   }) {
     return Byte(
       byteId: byteId ?? this.byteId,
@@ -90,7 +104,7 @@ class Byte {
       updatedAt: updatedAt ?? this.updatedAt,
       username: username ?? this.username,
       profilePic: profilePic ?? this.profilePic,
-      isLiked: isLiked ?? this.isLiked,
+      isliked: isliked ?? this.isliked,
     );
   }
 
@@ -104,6 +118,6 @@ class Byte {
   String toString() {
     return 'Byte(byteId: $byteId, userId: $userId, caption: $caption, '
         'likes: $likeCount, comments: $commentCount, shares: $shareCount, '
-        'isLiked: $isLiked, username: $username)';
+        'isliked: $isliked, username: $username)';
   }
 }

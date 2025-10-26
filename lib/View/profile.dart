@@ -14,34 +14,36 @@ import '../Model/post.dart';
 import '../Model/user_profile.dart';
 import '../View/foll_page.dart';
 import 'package:google_fonts/google_fonts.dart';
-// Removed dedicated viewers; using common lightbox overlay
 import '../ViewModel/lightbox_provider.dart';
 import 'widgets/lightbox_overlay.dart';
+import '../View/post_full_screen.dart' as post_screen;
+import '../View/toast_full_screen.dart' as toast_screen;
+import '../View/bytes_full_screen.dart';
 
 class OtherProfileScreen extends ConsumerStatefulWidget {
-  final String? userId; // null = current user, otherwise other user
-  final UserProfile? initialUserData; // passed from search card
+  final String? userId;
+  final UserProfile? initialUserData;
 
-  const OtherProfileScreen({
-    super.key,
-    this.userId,
-    this.initialUserData,
-  });
+  const OtherProfileScreen({super.key, this.userId, this.initialUserData});
 
   @override
   ConsumerState<OtherProfileScreen> createState() => _OtherProfileScreen();
 }
 
-class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerProviderStateMixin {
+class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
+    with TickerProviderStateMixin {
   bool _isInitialized = false;
   late TabController _tabController;
   final ScrollController _postsScrollController = ScrollController();
   final ScrollController _toastsScrollController = ScrollController();
   final ScrollController _bytesScrollController = ScrollController();
 
-  // Computed properties
-  bool get isOwnProfile => widget.userId == null || widget.userId == Supabase.instance.client.auth.currentUser?.id;
-  String get targetUserId => widget.userId ?? Supabase.instance.client.auth.currentUser?.id ?? '';
+  bool get isOwnProfile =>
+      widget.userId == null ||
+          widget.userId == Supabase.instance.client.auth.currentUser?.id;
+
+  String get targetUserId =>
+      widget.userId ?? Supabase.instance.client.auth.currentUser?.id ?? '';
 
   @override
   void initState() {
@@ -61,43 +63,37 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
     super.dispose();
   }
 
-  // Clear state when component unmounts or userId changes
   @override
   void didUpdateWidget(OtherProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.userId != widget.userId) {
-      // User changed, reset state
-      setState(() {
-        _isInitialized = false;
-      });
-      // Clear providers
+      setState(() => _isInitialized = false);
       _clearProvidersState();
-      // Load new user data
       _loadUserProfile();
     }
   }
 
   void _clearProvidersState() {
-    // Reset follow provider if not own profile
-    if (!isOwnProfile) {
-      ref.read(followProvider.notifier).clear();
-    }
+    if (!isOwnProfile) ref.read(followProvider.notifier).clear();
   }
 
   void _onPostsScroll() {
-    if (_postsScrollController.position.pixels >= _postsScrollController.position.maxScrollExtent - 200) {
+    if (_postsScrollController.position.pixels >=
+        _postsScrollController.position.maxScrollExtent - 200) {
       ref.read(profileFeedProvider.notifier).loadMoreUserPosts(targetUserId);
     }
   }
 
   void _onToastsScroll() {
-    if (_toastsScrollController.position.pixels >= _toastsScrollController.position.maxScrollExtent - 200) {
+    if (_toastsScrollController.position.pixels >=
+        _toastsScrollController.position.maxScrollExtent - 200) {
       ref.read(profileFeedProvider.notifier).loadMoreUserToasts(targetUserId);
     }
   }
 
   void _onBytesScroll() {
-    if (_bytesScrollController.position.pixels >= _bytesScrollController.position.maxScrollExtent - 200) {
+    if (_bytesScrollController.position.pixels >=
+        _bytesScrollController.position.maxScrollExtent - 200) {
       ref.read(profileFeedProvider.notifier).loadMoreUserBytes(targetUserId);
     }
   }
@@ -111,18 +107,13 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           await _loadUserContent();
         }
       } else {
-        // Load other user's profile
         await ref.read(setProfileProvider.notifier).getUserProfile(targetUserId);
         await _loadUserContent();
       }
-      setState(() {
-        _isInitialized = true;
-      });
+      setState(() => _isInitialized = true);
     } catch (e) {
       print('Error loading profile: $e');
-      setState(() {
-        _isInitialized = true;
-      });
+      setState(() => _isInitialized = true);
     }
   }
 
@@ -136,23 +127,18 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
   }
 
   Future<void> _refreshProfile() async {
-    setState(() {
-      _isInitialized = false;
-    });
+    setState(() => _isInitialized = false);
     await ref.read(profileFeedProvider.notifier).refreshUserContent(targetUserId);
     await _loadUserProfile();
   }
 
   Future<void> _toggleFollow() async {
-    if (!isOwnProfile) {
-      await ref.read(followProvider.notifier).toggleFollow(targetUserId);
-    }
+    if (!isOwnProfile) await ref.read(followProvider.notifier).toggleFollow(targetUserId);
   }
 
   void _openChat() {
     if (!isOwnProfile) {
       // Navigate to chat screen
-      // Navigator.pushNamed(context, '/chat', arguments: {'userId': targetUserId});
     }
   }
 
@@ -163,11 +149,8 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
     final feedState = ref.watch(profileFeedProvider);
     final followState = isOwnProfile ? null : ref.watch(followProvider);
 
-    // Initialize profile loading if not done yet
     if (!_isInitialized) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadUserProfile();
-      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadUserProfile());
     }
 
     return Scaffold(
@@ -178,49 +161,39 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
         backgroundColor: Colors.black,
         displacement: 40.0,
         child: NestedScrollView(
-          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-            return [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10.0, 5.0, 10.0, 0.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header container - Now shows back button and username for all profiles
-                      _buildHeader(profileState, authState),
-
-                      // Show loading indicator if not initialized
-                      if (!_isInitialized && profileState.isLoading)
-                        const Padding(
-                          padding: EdgeInsets.all(20.0),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                            ),
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10.0, 5.0, 10.0, 0.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(profileState, authState),
+                    if (!_isInitialized && profileState.isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                           ),
                         ),
-
-                      // Profile information section - Same for both
-                      _buildProfileInfo(profileState),
-
-                      // Action buttons - DIFFERENT for own vs other profile
-                      _buildActionButtons(followState),
-
-                      const SizedBox(height: 6.0),
-                    ],
-                  ),
+                      ),
+                    _buildProfileInfo(profileState),
+                    _buildActionButtons(followState),
+                    const SizedBox(height: 6.0),
+                  ],
                 ),
               ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _SliverAppBarDelegate(
-                  minHeight: 50.0,
-                  maxHeight: 50.0,
-                  child: _buildTabBar(feedState),
-                ),
+            ),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SliverAppBarDelegate(
+                minHeight: 50.0,
+                maxHeight: 50.0,
+                child: _buildTabBar(feedState),
               ),
-            ];
-          },
+            ),
+          ],
           body: Stack(
             children: [
               TabBarView(
@@ -240,69 +213,31 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
   }
 
   Widget _buildHeader(AsyncValue profileState, AsyncValue authState) {
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            // Back button - only show for other profiles
-            if (!isOwnProfile)
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.white,
-                  size: 20,
-                ),
+        if (!isOwnProfile)
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          ),
+        if (!isOwnProfile) const SizedBox(width: 10),
+        Expanded(
+          child: profileState.when(
+            data: (profile) => Text(
+              profile?.username ?? widget.initialUserData?.username ?? 'Unknown User',
+              style: GoogleFonts.playwriteFrModerne(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+                shadows: const [Shadow(blurRadius: 8, color: Colors.blue, offset: Offset(2, 2))],
               ),
-
-            // Add spacing only when back button is present
-            if (!isOwnProfile) const SizedBox(width: 10),
-
-            // Username for all profiles
-            Expanded(
-              child: profileState.when(
-                data: (profile) => Text(
-                  profile?.username ?? widget.initialUserData?.username ?? 'Unknown User',
-                  style: GoogleFonts.playwriteFrModerne(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    shadows: const [
-                      Shadow(
-                        blurRadius: 8,
-                        color: Colors.blue,
-                        offset: Offset(2, 2),
-                      ),
-                    ],
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                loading: () => const Text(
-                  'Loading...',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                error: (error, stack) => Text(
-                  widget.initialUserData?.username ?? 'Error loading user',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
+              overflow: TextOverflow.ellipsis,
             ),
-
-            // Optional: Add action buttons for own profile
-            // if (isOwnProfile)
-            //   IconButton(
-            //     onPressed: () {
-            //       // Add edit profile functionality here
-            //       // For example: _showEditProfileDialog();
-            //     },
-            //     icon: const Icon(
-            //       Icons.edit,
-            //       color: Colors.white,
-            //       size: 20,
-            //     ),
-            //   ),
-          ],
+            loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey)),
+            error: (error, stack) => Text(widget.initialUserData?.username ?? 'Error loading user',
+                style: const TextStyle(color: Colors.red)),
+          ),
         ),
       ],
     );
@@ -312,7 +247,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Main profile picture
         Padding(
           padding: const EdgeInsets.fromLTRB(10.0, 20.0, 10.0, 10.0),
           child: profileState.when(
@@ -325,175 +259,78 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
             loading: () => const CircleAvatar(
               radius: 45.0,
               backgroundColor: Colors.grey,
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-              ),
+              child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.blue)),
             ),
-            error: (error, stack) => const CircleAvatar(
-              backgroundImage: AssetImage('assets/plaro_logo.png'),
-              radius: 45.0,
-            ),
+            error: (error, stack) =>
+            const CircleAvatar(backgroundImage: AssetImage('assets/plaro_logo.png'), radius: 45.0),
           ),
         ),
-
-        // Username
         profileState.when(
           data: (profile) => Text(
             profile?.username ?? widget.initialUserData?.username ?? 'No username',
-            style: const TextStyle(
-              color: Colors.blue,
-              fontSize: 20.0,
-              letterSpacing: 2.0,
-            ),
+            style: const TextStyle(color: Colors.blue, fontSize: 20.0, letterSpacing: 2.0),
           ),
-          loading: () => const Text(
-            'Loading...',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 20.0,
-              letterSpacing: 2.0,
-            ),
-          ),
-          error: (error, stack) => Text(
-            widget.initialUserData?.username ?? 'Error loading username',
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 20.0,
-              letterSpacing: 2.0,
-            ),
-          ),
+          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 20.0)),
+          error: (error, stack) =>
+              Text(widget.initialUserData?.username ?? 'Error loading username', style: const TextStyle(color: Colors.red)),
         ),
-
-        // Study/School
         profileState.when(
-          data: (profile) => Text(
-            profile?.study ?? 'No school info',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15.0,
-              letterSpacing: 1.0,
-            ),
-          ),
-          loading: () => const Text(
-            'Loading...',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 15.0,
-              letterSpacing: 1.0,
-            ),
-          ),
-          error: (error, stack) => const Text(
-            'Error loading school',
-            style: TextStyle(
-              color: Colors.red,
-              fontSize: 15.0,
-              letterSpacing: 1.0,
-            ),
-          ),
+          data: (profile) => Text(profile?.study ?? 'No school info',
+              style: const TextStyle(color: Colors.white, fontSize: 15.0, letterSpacing: 1.0)),
+          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 15.0)),
+          error: (error, stack) => const Text('Error loading school', style: TextStyle(color: Colors.red, fontSize: 15.0)),
         ),
-
-        // Bio
         profileState.when(
-          data: (profile) => Text(
-            profile?.bio ?? 'No bio',
-            style: const TextStyle(
-              color: Colors.blue,
-              fontSize: 13.0,
-              letterSpacing: 1.0,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          loading: () => const Text(
-            'Loading...',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 13.0,
-              letterSpacing: 1.0,
-            ),
-          ),
-          error: (error, stack) => const Text(
-            'Error loading bio',
-            style: TextStyle(
-              color: Colors.red,
-              fontSize: 13.0,
-              letterSpacing: 1.0,
-            ),
-          ),
+          data: (profile) => Text(profile?.bio ?? 'No bio',
+              style: const TextStyle(color: Colors.blue, fontSize: 13.0), textAlign: TextAlign.center),
+          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 13.0)),
+          error: (error, stack) => const Text('Error loading bio', style: TextStyle(color: Colors.red, fontSize: 13.0)),
         ),
-
-        // Role and Location in horizontal layout
+        // Role & location
         profileState.when(
           data: (profile) {
             final hasRole = profile?.role != null;
             final hasLocation = profile?.location != null;
-
-            if (hasRole || hasLocation) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 5.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (hasRole)
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.work_history_outlined,
-                            color: Colors.lightBlue,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              profile!.role!,
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontSize: 12.0,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (hasLocation && hasRole)
-                      const SizedBox(width: 20),
-                    if (hasLocation)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.location_on_outlined, color: Colors.lightBlue, size: 16),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              profile!.location!,
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 12.0,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
+            if (!hasRole && !hasLocation) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 5.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (hasRole)
+                    Row(
+                      children: [
+                        const Icon(Icons.work_history_outlined, color: Colors.lightBlue, size: 16),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+                          child: Text(profile!.role!, style: const TextStyle(color: Colors.green, fontSize: 12.0)),
+                        ),
+                      ],
+                    ),
+                  if (hasRole && hasLocation) const SizedBox(width: 20),
+                  if (hasLocation)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: Colors.lightBlue, size: 16),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+                          child: Text(profile!.location!, style: const TextStyle(color: Colors.red, fontSize: 12.0)),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            );
           },
           loading: () => const SizedBox.shrink(),
           error: (error, stack) => const SizedBox.shrink(),
         ),
-
-        // Stats (followers, following, streak)
+        // Stats
         profileState.when(
           data: (profile) => profile != null
               ? Padding(
@@ -504,43 +341,11 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Flexible(
-                    child: _buildStatItem(
-                      'Followers',
-                      profile.followersCount?.toString() ?? '0',
-                      profile,
-                    ),
-                  ),
-                  SizedBox(
-                    height: 30,
-                    child: VerticalDivider(
-                      color: Colors.grey[600],
-                      thickness: 1,
-                      width: 1,
-                    ),
-                  ),
-                  Flexible(
-                    child: _buildStatItem(
-                      'Following',
-                      profile.followingCount?.toString() ?? '0',
-                      profile,
-                    ),
-                  ),
-                  SizedBox(
-                    height: 30,
-                    child: VerticalDivider(
-                      color: Colors.grey[600],
-                      thickness: 1,
-                      width: 1,
-                    ),
-                  ),
-                  Flexible(
-                    child: _buildStatItem(
-                      'Streak',
-                      profile.streakCount?.toString() ?? '0',
-                      profile,
-                    ),
-                  ),
+                  Flexible(child: _buildStatItem('Followers', profile.followersCount?.toString() ?? '0', profile)),
+                  SizedBox(height: 30, child: VerticalDivider(color: Colors.grey[600], thickness: 1, width: 1)),
+                  Flexible(child: _buildStatItem('Following', profile.followingCount?.toString() ?? '0', profile)),
+                  SizedBox(height: 30, child: VerticalDivider(color: Colors.grey[600], thickness: 1, width: 1)),
+                  Flexible(child: _buildStatItem('Streak', profile.streakCount?.toString() ?? '0', profile)),
                 ],
               ),
             ),
@@ -549,16 +354,13 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           loading: () => const SizedBox.shrink(),
           error: (error, stack) => const SizedBox.shrink(),
         ),
-
         const SizedBox(height: 20.0),
       ],
     );
   }
 
-
   Widget _buildActionButtons(FollowState? followState) {
     if (isOwnProfile) {
-      // Own profile buttons
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -567,19 +369,11 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 3.0, color: Colors.blue),
               foregroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
             ),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SetProfile(),
-                ),
-              ).then((_) {
-                _refreshProfile();
-              });
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const SetProfile()))
+                  .then((_) => _refreshProfile());
             },
             child: const Text("Profile"),
           ),
@@ -589,9 +383,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
               foregroundColor: Colors.blue,
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 3.0, color: Colors.blue),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
             ),
             onPressed: () {},
             child: const Text("Stats"),
@@ -599,7 +391,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
         ],
       );
     } else {
-      // Other user's profile buttons
       final isFollowing = followState?.followingStatus[targetUserId] ?? false;
       final isProcessing = followState?.processingFollowRequests.contains(targetUserId) ?? false;
 
@@ -610,24 +401,12 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
             style: ElevatedButton.styleFrom(
               backgroundColor: isFollowing ? Colors.grey[800] : Colors.blue,
               foregroundColor: Colors.white,
-              side: BorderSide(
-                width: 2.0,
-                color: isFollowing ? Colors.grey : Colors.blue,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
+              side: BorderSide(width: 2.0, color: isFollowing ? Colors.grey : Colors.blue),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
             ),
             onPressed: isProcessing ? null : _toggleFollow,
             child: isProcessing
-                ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
                 : Text(isFollowing ? "Following" : "Follow"),
           ),
           const SizedBox(width: 30.0),
@@ -636,9 +415,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 2.0, color: Colors.blue),
               foregroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
             ),
             onPressed: _openChat,
             child: const Text("Message"),
@@ -650,17 +427,13 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
 
   Widget _buildTabBar(ProfileFeedState feedState) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-      ),
+      color: Colors.black,
       child: TabBar(
+        isScrollable: true, //  shows all tabs properly
         controller: _tabController,
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(
-            width: 1.5,
-            color: Colors.blue[400]!,
-          ),
-          insets: const EdgeInsets.symmetric(horizontal: 90.0),
+          borderSide: BorderSide(width: 2, color: Colors.blue[400]!),
+          insets: const EdgeInsets.symmetric(horizontal: 16.0),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.blue,
@@ -668,7 +441,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
         tabs: [
           Tab(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.view_array_outlined, size: 16),
                 const SizedBox(width: 4),
@@ -678,7 +451,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           ),
           Tab(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.campaign_outlined, size: 16),
                 const SizedBox(width: 4),
@@ -688,7 +461,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
           ),
           Tab(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.video_library_outlined, size: 16),
                 const SizedBox(width: 4),
@@ -746,18 +519,22 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
       posts: feedState.posts,
       scrollController: _postsScrollController,
       onPostTap: (post) {
-        final posts = feedState.posts;
-        final index = posts.indexWhere((p) => p.post_id == post.post_id);
-        ref.read(lightboxProvider.notifier).openPosts(posts, index < 0 ? 0 : index);
+        // NAVIGATION UPDATED
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => post_screen.PostFullScreen(post: post)),
+        );
       },
       onLike: (postId) {
         ref.read(profileFeedProvider.notifier).togglePostLike(postId);
       },
-      onDelete: isOwnProfile ? (postId) {
+      onDelete: isOwnProfile
+          ? (postId) {
         _showDeleteConfirmation('post', () {
           ref.read(profileFeedProvider.notifier).deletePost(postId);
         });
-      } : null,
+      }
+          : null,
       isLoadingMore: feedState.isLoadingMorePosts,
       hasMore: feedState.hasMorePosts,
     );
@@ -808,18 +585,22 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen> with TickerP
       toasts: feedState.toasts,
       scrollController: _toastsScrollController,
       onToastTap: (toast) {
-        final toasts = feedState.toasts;
-        final index = toasts.indexWhere((t) => t.toast_id == toast.toast_id);
-        ref.read(lightboxProvider.notifier).openToasts(toasts, index < 0 ? 0 : index);
+        // NAVIGATION UPDATED
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => toast_screen.ToastFullScreen(toast: toast)),
+        );
       },
       onLike: (toastId) {
         ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
       },
-      onDelete: isOwnProfile ? (toastId) {
+      onDelete: isOwnProfile
+          ? (toastId) {
         _showDeleteConfirmation('toast', () {
           ref.read(profileFeedProvider.notifier).deleteToast(toastId);
         });
-      } : null,
+      }
+          : null,
       isLoadingMore: feedState.isLoadingMoreToasts,
       hasMore: feedState.hasMoreToasts,
     );
@@ -1262,8 +1043,18 @@ class ProfileBytesGrid extends ConsumerWidget {
               delegate: SliverChildBuilderDelegate(
                     (context, index) {
                   final byte = bytes[index];
+
                   return GestureDetector(
-                    onTap: () => onByteTap(byte),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BytesFullScreen(byteData: byte),
+                        ),
+                      );
+                    },
+
+
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.grey[900],
