@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 class Byte {
   final String byteId;
   final String userId;
-  final String byte;
+  final String videoUrl; // Added: video URL
+  final String? thumbnailUrl; // Added: thumbnail URL for optimization
   final String? caption;
   final int likeCount;
   final int commentCount;
@@ -18,7 +19,8 @@ class Byte {
   Byte({
     required this.byteId,
     required this.userId,
-    required this.byte,
+    required this.videoUrl, // Added
+    this.thumbnailUrl, // Added
     this.caption,
     required this.likeCount,
     required this.commentCount,
@@ -48,7 +50,8 @@ class Byte {
     return Byte(
       byteId: safeString(json['byte_id'], ''),
       userId: safeString(json['user_id'], ''),
-      byte: safeString(json['byte'], ''),
+      videoUrl: safeString(json['video_url'] ?? json['byte'], ''), // Support both 'video_url' and 'byte' fields
+      thumbnailUrl: json['thumbnail_url']?.toString(),
       caption: json['caption']?.toString(),
       likeCount: safeInt(json['like_count'], 0),
       commentCount: safeInt(json['comment_count'], 0),
@@ -67,7 +70,8 @@ class Byte {
     return {
       'byte_id': byteId,
       'user_id': userId,
-      'byte': byte,
+      'video_url': videoUrl,
+      'thumbnail_url': thumbnailUrl,
       'caption': caption,
       'like_count': likeCount,
       'comment_count': commentCount,
@@ -81,7 +85,8 @@ class Byte {
   Byte copyWith({
     String? byteId,
     String? userId,
-    String? byte,
+    String? videoUrl,
+    String? thumbnailUrl,
     String? caption,
     int? likeCount,
     int? commentCount,
@@ -95,7 +100,8 @@ class Byte {
     return Byte(
       byteId: byteId ?? this.byteId,
       userId: userId ?? this.userId,
-      byte: byte ?? this.byte,
+      videoUrl: videoUrl ?? this.videoUrl,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       caption: caption ?? this.caption,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,
@@ -116,8 +122,17 @@ class Byte {
   /// Debug print (for logging)
   @override
   String toString() {
-    return 'Byte(byteId: $byteId, userId: $userId, caption: $caption, '
+    return 'Byte(byteId: $byteId, userId: $userId, videoUrl: $videoUrl, '
+        'thumbnailUrl: $thumbnailUrl, caption: $caption, '
         'likes: $likeCount, comments: $commentCount, shares: $shareCount, '
         'isliked: $isliked, username: $username)';
+  }
+
+  /// Getter for imageUrls to maintain compatibility with profile grid
+  List<String> get imageUrls {
+    if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) {
+      return [thumbnailUrl!];
+    }
+    return [];
   }
 }

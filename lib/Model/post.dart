@@ -1,4 +1,3 @@
-
 import 'package:image_picker/image_picker.dart';
 
 class Post_feed {
@@ -57,6 +56,8 @@ class Post_feed {
       isliked: data['isliked'] ?? false,
       media_urls: data['media_urls'] != null
           ? List<String>.from(data['media_urls'])
+          : data['image_urls'] != null // Support both 'media_urls' and 'image_urls'
+          ? List<String>.from(data['image_urls'])
           : null,
       // Accept either 'comments' or 'post_comments' as the payload key
       commentsList: (data['comments'] ?? data['post_comments']) != null
@@ -83,6 +84,7 @@ class Post_feed {
       'share_count': share_count,
       'isliked': isliked,
       'media_urls': media_urls,
+      'image_urls': imageUrls, // Also store as image_urls for compatibility
       'localMediaFiles': localMediaFiles?.map((x) => x.path).toList(),
       'comments': commentsList.map((c) => c.toMap()).toList(),
     };
@@ -143,6 +145,9 @@ class Post_feed {
   void incrementShares() {
     share_count = (share_count ?? 0) + 1;
   }
+
+  /// Getter for imageUrls to maintain compatibility with profile grid
+  List<String> get imageUrls => media_urls ?? [];
 }
 
 class Comment {

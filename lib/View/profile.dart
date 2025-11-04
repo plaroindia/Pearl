@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'set_profile.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
@@ -31,12 +33,19 @@ class OtherProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   bool _isInitialized = false;
   late TabController _tabController;
   final ScrollController _postsScrollController = ScrollController();
   final ScrollController _toastsScrollController = ScrollController();
   final ScrollController _bytesScrollController = ScrollController();
+
+  // Animation controllers for smooth transitions
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  // Track which tabs have been loaded
+  final Set<int> _loadedTabs = {0}; // Start with first tab loaded
 
   bool get isOwnProfile =>
       widget.userId == null ||
@@ -46,20 +55,41 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
       widget.userId ?? Supabase.instance.client.auth.currentUser?.id ?? '';
 
   @override
+  bool get wantKeepAlive => true; // Keep state alive when switching tabs
+
+  @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _postsScrollController.addListener(_onPostsScroll);
     _toastsScrollController.addListener(_onToastsScroll);
     _bytesScrollController.addListener(_onBytesScroll);
+
+    // Initialize fade animation
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
+
+    // Listen to tab changes for background preloading
+    _tabController.addListener(_onTabChanged);
+
+    // Start fade in
+    _fadeController.forward();
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _postsScrollController.dispose();
     _toastsScrollController.dispose();
     _bytesScrollController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
@@ -67,9 +97,15 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
   void didUpdateWidget(OtherProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.userId != widget.userId) {
-      setState(() => _isInitialized = false);
+      setState(() {
+        _isInitialized = false;
+        _loadedTabs.clear();
+        _loadedTabs.add(0);
+      });
       _clearProvidersState();
+      _fadeController.reset();
       _loadUserProfile();
+      _fadeController.forward();
     }
   }
 
@@ -77,23 +113,65 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     if (!isOwnProfile) ref.read(followProvider.notifier).clear();
   }
 
+  // OPTIMIZATION: Tab change listener for background preloading
+  void _onTabChanged() {
+    final currentTab = _tabController.index;
+
+    if (!_loadedTabs.contains(currentTab)) {
+      _loadedTabs.add(currentTab);
+      _preloadTabContent(currentTab);
+    }
+
+    // Preload adjacent tab
+    final nextTab = (currentTab + 1) % 3;
+    if (!_loadedTabs.contains(nextTab)) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_loadedTabs.contains(nextTab)) {
+          _loadedTabs.add(nextTab);
+          _preloadTabContent(nextTab);
+        }
+      });
+    }
+  }
+
+  void _preloadTabContent(int tabIndex) {
+    final notifier = ref.read(profileFeedProvider.notifier);
+
+    switch (tabIndex) {
+      case 0:
+        if (ref.read(profileFeedProvider).posts.isEmpty) {
+          notifier.loadUserPosts(targetUserId); // No await here either
+        }
+        break;
+      case 1:
+        if (ref.read(profileFeedProvider).toasts.isEmpty) {
+          notifier.loadUserToasts(targetUserId);
+        }
+        break;
+      case 2:
+        if (ref.read(profileFeedProvider).bytes.isEmpty) {
+          notifier.loadUserBytes(targetUserId);
+        }
+        break;
+    }
+  }
   void _onPostsScroll() {
     if (_postsScrollController.position.pixels >=
-        _postsScrollController.position.maxScrollExtent - 200) {
+        _postsScrollController.position.maxScrollExtent - 300) {
       ref.read(profileFeedProvider.notifier).loadMoreUserPosts(targetUserId);
     }
   }
 
   void _onToastsScroll() {
     if (_toastsScrollController.position.pixels >=
-        _toastsScrollController.position.maxScrollExtent - 200) {
+        _toastsScrollController.position.maxScrollExtent - 300) {
       ref.read(profileFeedProvider.notifier).loadMoreUserToasts(targetUserId);
     }
   }
 
   void _onBytesScroll() {
     if (_bytesScrollController.position.pixels >=
-        _bytesScrollController.position.maxScrollExtent - 200) {
+        _bytesScrollController.position.maxScrollExtent - 300) {
       ref.read(profileFeedProvider.notifier).loadMoreUserBytes(targetUserId);
     }
   }
@@ -104,46 +182,53 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         final user = Supabase.instance.client.auth.currentUser;
         if (user != null) {
           await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
-          await _loadUserContent();
+          // Only load visible tab initially
+          await _loadVisibleTabContent();
         }
       } else {
         await ref.read(setProfileProvider.notifier).getUserProfile(targetUserId);
-        await _loadUserContent();
+        await _loadVisibleTabContent();
       }
       setState(() => _isInitialized = true);
     } catch (e) {
-      print('Error loading profile: $e');
+      print('❌ Error loading profile: $e');
       setState(() => _isInitialized = true);
     }
   }
 
-  Future<void> _loadUserContent() async {
-    final profileFeedNotifier = ref.read(profileFeedProvider.notifier);
-    await Future.wait([
-      profileFeedNotifier.loadUserPosts(targetUserId),
-      profileFeedNotifier.loadUserToasts(targetUserId),
-      profileFeedNotifier.loadUserBytes(targetUserId),
-    ]);
+  // OPTIMIZATION: Load only the visible tab content
+  Future<void> _loadVisibleTabContent() async {
+    final currentTab = _tabController.index;
+    _preloadTabContent(currentTab);
   }
 
   Future<void> _refreshProfile() async {
+    _fadeController.reset();
     setState(() => _isInitialized = false);
     await ref.read(profileFeedProvider.notifier).refreshUserContent(targetUserId);
     await _loadUserProfile();
+    _fadeController.forward();
   }
 
   Future<void> _toggleFollow() async {
-    if (!isOwnProfile) await ref.read(followProvider.notifier).toggleFollow(targetUserId);
+    if (!isOwnProfile) {
+      await ref.read(followProvider.notifier).toggleFollow(targetUserId);
+    }
   }
 
   void _openChat() {
     if (!isOwnProfile) {
       // Navigate to chat screen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chat feature coming soon!')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
     final feedState = ref.watch(profileFeedProvider);
@@ -161,27 +246,25 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         backgroundColor: Colors.black,
         displacement: 40.0,
         child: NestedScrollView(
+          physics: const BouncingScrollPhysics(), // OPTIMIZATION: Smooth scroll
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10.0, 5.0, 10.0, 0.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(profileState, authState),
-                    if (!_isInitialized && profileState.isLoading)
-                      const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                          ),
-                        ),
-                      ),
-                    _buildProfileInfo(profileState),
-                    _buildActionButtons(followState),
-                    const SizedBox(height: 6.0),
-                  ],
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(profileState, authState),
+                      if (!_isInitialized && profileState.isLoading)
+                        _buildProfileSkeleton()
+                      else
+                        _buildProfileInfo(profileState),
+                      _buildActionButtons(followState),
+                      const SizedBox(height: 6.0),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -198,6 +281,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
             children: [
               TabBarView(
                 controller: _tabController,
+                physics: const BouncingScrollPhysics(),
                 children: [
                   _buildPostsTab(feedState),
                   _buildToastsTab(feedState),
@@ -208,6 +292,88 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // OPTIMIZATION: Skeleton loading for profile
+  Widget _buildProfileSkeleton() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[800]!,
+      highlightColor: Colors.grey[600]!,
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          // Avatar skeleton
+          Container(
+            width: 136,
+            height: 136,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Username skeleton
+          Container(
+            width: 150,
+            height: 20,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // School skeleton
+          Container(
+            width: 200,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Bio skeleton
+          Container(
+            width: 250,
+            height: 14,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Stats skeleton
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(
+              3,
+                  (index) => Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 60,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
@@ -230,13 +396,24 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1.2,
-                shadows: const [Shadow(blurRadius: 8, color: Colors.blue, offset: Offset(2, 2))],
+                shadows: const [
+                  Shadow(
+                    blurRadius: 8,
+                    color: Colors.blue,
+                    offset: Offset(2, 2),
+                  )
+                ],
               ),
               overflow: TextOverflow.ellipsis,
             ),
-            loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey)),
-            error: (error, stack) => Text(widget.initialUserData?.username ?? 'Error loading user',
-                style: const TextStyle(color: Colors.red)),
+            loading: () => const Text(
+              'Loading...',
+              style: TextStyle(color: Colors.grey),
+            ),
+            error: (error, stack) => Text(
+              widget.initialUserData?.username ?? 'Error loading user',
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ),
       ],
@@ -250,41 +427,70 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(10.0, 20.0, 10.0, 10.0),
           child: profileState.when(
-            data: (profile) => CircleAvatar(
-              backgroundImage: profile?.profilePic != null
-                  ? NetworkImage(profile!.profilePic!)
-                  : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+            data: (profile) => _buildCachedAvatar(profile?.profilePic),
+            loading: () => const CircleAvatar(
+              radius: 68.0,
+              backgroundColor: Colors.grey,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+            ),
+            error: (error, stack) => const CircleAvatar(
+              backgroundImage: AssetImage('assets/plaro_logo.png'),
               radius: 68.0,
             ),
-            loading: () => const CircleAvatar(
-              radius: 45.0,
-              backgroundColor: Colors.grey,
-              child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.blue)),
-            ),
-            error: (error, stack) =>
-            const CircleAvatar(backgroundImage: AssetImage('assets/plaro_logo.png'), radius: 45.0),
           ),
         ),
         profileState.when(
           data: (profile) => Text(
             profile?.username ?? widget.initialUserData?.username ?? 'No username',
-            style: const TextStyle(color: Colors.blue, fontSize: 20.0, letterSpacing: 2.0),
+            style: const TextStyle(
+              color: Colors.blue,
+              fontSize: 20.0,
+              letterSpacing: 2.0,
+            ),
           ),
-          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 20.0)),
-          error: (error, stack) =>
-              Text(widget.initialUserData?.username ?? 'Error loading username', style: const TextStyle(color: Colors.red)),
+          loading: () => const Text(
+            'Loading...',
+            style: TextStyle(color: Colors.grey, fontSize: 20.0),
+          ),
+          error: (error, stack) => Text(
+            widget.initialUserData?.username ?? 'Error loading username',
+            style: const TextStyle(color: Colors.red),
+          ),
         ),
         profileState.when(
-          data: (profile) => Text(profile?.study ?? 'No school info',
-              style: const TextStyle(color: Colors.white, fontSize: 15.0, letterSpacing: 1.0)),
-          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 15.0)),
-          error: (error, stack) => const Text('Error loading school', style: TextStyle(color: Colors.red, fontSize: 15.0)),
+          data: (profile) => Text(
+            profile?.study ?? 'No school info',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15.0,
+              letterSpacing: 1.0,
+            ),
+          ),
+          loading: () => const Text(
+            'Loading...',
+            style: TextStyle(color: Colors.grey, fontSize: 15.0),
+          ),
+          error: (error, stack) => const Text(
+            'Error loading school',
+            style: TextStyle(color: Colors.red, fontSize: 15.0),
+          ),
         ),
         profileState.when(
-          data: (profile) => Text(profile?.bio ?? 'No bio',
-              style: const TextStyle(color: Colors.blue, fontSize: 13.0), textAlign: TextAlign.center),
-          loading: () => const Text('Loading...', style: TextStyle(color: Colors.grey, fontSize: 13.0)),
-          error: (error, stack) => const Text('Error loading bio', style: TextStyle(color: Colors.red, fontSize: 13.0)),
+          data: (profile) => Text(
+            profile?.bio ?? 'No bio',
+            style: const TextStyle(color: Colors.blue, fontSize: 13.0),
+            textAlign: TextAlign.center,
+          ),
+          loading: () => const Text(
+            'Loading...',
+            style: TextStyle(color: Colors.grey, fontSize: 13.0),
+          ),
+          error: (error, stack) => const Text(
+            'Error loading bio',
+            style: TextStyle(color: Colors.red, fontSize: 13.0),
+          ),
         ),
         // Role & location
         profileState.when(
@@ -300,12 +506,21 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
                   if (hasRole)
                     Row(
                       children: [
-                        const Icon(Icons.work_history_outlined, color: Colors.lightBlue, size: 16),
+                        const Icon(Icons.work_history_outlined,
+                            color: Colors.lightBlue, size: 16),
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
-                          child: Text(profile!.role!, style: const TextStyle(color: Colors.green, fontSize: 12.0)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            profile!.role!,
+                            style: const TextStyle(
+                                color: Colors.green, fontSize: 12.0),
+                          ),
                         ),
                       ],
                     ),
@@ -314,12 +529,21 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.location_on_outlined, color: Colors.lightBlue, size: 16),
+                        const Icon(Icons.location_on_outlined,
+                            color: Colors.lightBlue, size: 16),
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
-                          child: Text(profile!.location!, style: const TextStyle(color: Colors.red, fontSize: 12.0)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            profile!.location!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 12.0),
+                          ),
                         ),
                       ],
                     ),
@@ -335,17 +559,49 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
           data: (profile) => profile != null
               ? Padding(
             padding: const EdgeInsets.only(top: 10.0),
-            child: Container(
+            child: SizedBox(
               height: 60,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Flexible(child: _buildStatItem('Followers', profile.followersCount?.toString() ?? '0', profile)),
-                  SizedBox(height: 30, child: VerticalDivider(color: Colors.grey[600], thickness: 1, width: 1)),
-                  Flexible(child: _buildStatItem('Following', profile.followingCount?.toString() ?? '0', profile)),
-                  SizedBox(height: 30, child: VerticalDivider(color: Colors.grey[600], thickness: 1, width: 1)),
-                  Flexible(child: _buildStatItem('Streak', profile.streakCount?.toString() ?? '0', profile)),
+                  Flexible(
+                    child: _buildStatItem(
+                      'Followers',
+                      profile.followersCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: VerticalDivider(
+                      color: Colors.grey[600],
+                      thickness: 1,
+                      width: 1,
+                    ),
+                  ),
+                  Flexible(
+                    child: _buildStatItem(
+                      'Following',
+                      profile.followingCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: VerticalDivider(
+                      color: Colors.grey[600],
+                      thickness: 1,
+                      width: 1,
+                    ),
+                  ),
+                  Flexible(
+                    child: _buildStatItem(
+                      'Streak',
+                      profile.streakCount?.toString() ?? '0',
+                      profile,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -359,6 +615,35 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     );
   }
 
+  // OPTIMIZATION: Cached avatar with placeholder
+  Widget _buildCachedAvatar(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return const CircleAvatar(
+        backgroundImage: AssetImage('assets/plaro_logo.png'),
+        radius: 68.0,
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      imageBuilder: (context, imageProvider) => CircleAvatar(
+        backgroundImage: imageProvider,
+        radius: 68.0,
+      ),
+      placeholder: (context, url) => CircleAvatar(
+        radius: 68.0,
+        backgroundColor: Colors.grey[800],
+        child: const CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+        ),
+      ),
+      errorWidget: (context, url, error) => const CircleAvatar(
+        backgroundImage: AssetImage('assets/plaro_logo.png'),
+        radius: 68.0,
+      ),
+    );
+  }
+
   Widget _buildActionButtons(FollowState? followState) {
     if (isOwnProfile) {
       return Row(
@@ -369,11 +654,15 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 3.0, color: Colors.blue),
               foregroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10.0),
+              ),
             ),
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SetProfile()))
-                  .then((_) => _refreshProfile());
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SetProfile()),
+              ).then((_) => _refreshProfile());
             },
             child: const Text("Profile"),
           ),
@@ -383,7 +672,9 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
               foregroundColor: Colors.blue,
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 3.0, color: Colors.blue),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10.0),
+              ),
             ),
             onPressed: () {},
             child: const Text("Stats"),
@@ -392,7 +683,8 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
       );
     } else {
       final isFollowing = followState?.followingStatus[targetUserId] ?? false;
-      final isProcessing = followState?.processingFollowRequests.contains(targetUserId) ?? false;
+      final isProcessing =
+          followState?.processingFollowRequests.contains(targetUserId) ?? false;
 
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -401,12 +693,24 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: isFollowing ? Colors.grey[800] : Colors.blue,
               foregroundColor: Colors.white,
-              side: BorderSide(width: 2.0, color: isFollowing ? Colors.grey : Colors.blue),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+              side: BorderSide(
+                width: 2.0,
+                color: isFollowing ? Colors.grey : Colors.blue,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10.0),
+              ),
             ),
             onPressed: isProcessing ? null : _toggleFollow,
             child: isProcessing
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
                 : Text(isFollowing ? "Following" : "Follow"),
           ),
           const SizedBox(width: 30.0),
@@ -415,7 +719,9 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
               backgroundColor: Colors.black54,
               side: const BorderSide(width: 2.0, color: Colors.blue),
               foregroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10.0),
+              ),
             ),
             onPressed: _openChat,
             child: const Text("Message"),
@@ -429,7 +735,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     return Container(
       color: Colors.black,
       child: TabBar(
-        isScrollable: true, //  shows all tabs properly
+        isScrollable: true,
         controller: _tabController,
         indicator: UnderlineTabIndicator(
           borderSide: BorderSide(width: 2, color: Colors.blue[400]!),
@@ -438,6 +744,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.blue,
         unselectedLabelColor: Colors.grey,
+        physics: const BouncingScrollPhysics(),
         tabs: [
           Tab(
             child: Row(
@@ -475,188 +782,198 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
   }
 
   Widget _buildPostsTab(ProfileFeedState feedState) {
-    if (feedState.isLoadingPosts && feedState.posts.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-        ),
+    final isLoading = feedState.isLoadingPosts && feedState.posts.isEmpty;
+    final isEmpty = feedState.posts.isEmpty && !feedState.isLoadingPosts;
+
+    if (isLoading) {
+      return _buildGridSkeleton();
+    }
+
+    if (isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.view_array_outlined,
+        title: isOwnProfile ? 'No posts yet' : 'No posts to show',
+        subtitle: isOwnProfile
+            ? 'Your posts will appear here'
+            : 'This user hasn\'t posted anything yet',
       );
     }
 
-    if (feedState.posts.isEmpty && !feedState.isLoadingPosts) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.view_array_outlined,
-              size: 64,
-              color: Colors.grey,
+    return AnimatedOpacity(
+      opacity: _isInitialized ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      child: ProfilePostsGrid(
+        posts: feedState.posts,
+        scrollController: _postsScrollController,
+        onPostTap: (post) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => post_screen.PostFullScreen(post: post),
             ),
-            const SizedBox(height: 16),
-            Text(
-              isOwnProfile ? 'No posts yet' : 'No posts to show',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isOwnProfile ? 'Your posts will appear here' : 'This user hasn\'t posted anything yet',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ProfilePostsGrid(
-      posts: feedState.posts,
-      scrollController: _postsScrollController,
-      onPostTap: (post) {
-        // NAVIGATION UPDATED
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => post_screen.PostFullScreen(post: post)),
-        );
-      },
-      onLike: (postId) {
-        ref.read(profileFeedProvider.notifier).togglePostLike(postId);
-      },
-      onDelete: isOwnProfile
-          ? (postId) {
-        _showDeleteConfirmation('post', () {
-          ref.read(profileFeedProvider.notifier).deletePost(postId);
-        });
-      }
-          : null,
-      isLoadingMore: feedState.isLoadingMorePosts,
-      hasMore: feedState.hasMorePosts,
+          );
+        },
+        onLike: (postId) {
+          ref.read(profileFeedProvider.notifier).togglePostLike(postId);
+        },
+        onDelete: isOwnProfile
+            ? (postId) {
+          _showDeleteConfirmation('post', () {
+            ref.read(profileFeedProvider.notifier).deletePost(postId);
+          });
+        }
+            : null,
+        isLoadingMore: feedState.isLoadingMorePosts,
+        hasMore: feedState.hasMorePosts,
+      ),
     );
   }
 
   Widget _buildToastsTab(ProfileFeedState feedState) {
-    if (feedState.isLoadingToasts && feedState.toasts.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-        ),
+    final isLoading = feedState.isLoadingToasts && feedState.toasts.isEmpty;
+    final isEmpty = feedState.toasts.isEmpty && !feedState.isLoadingToasts;
+
+    if (isLoading) {
+      return _buildGridSkeleton();
+    }
+
+    if (isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.campaign_outlined,
+        title: isOwnProfile ? 'No toasts yet' : 'No toasts to show',
+        subtitle: isOwnProfile
+            ? 'Your toasts will appear here'
+            : 'This user hasn\'t shared any toasts yet',
       );
     }
 
-    if (feedState.toasts.isEmpty && !feedState.isLoadingToasts) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.campaign_outlined,
-              size: 64,
-              color: Colors.grey,
+    return AnimatedOpacity(
+      opacity: _isInitialized ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      child: ProfileToastsGrid(
+        toasts: feedState.toasts,
+        scrollController: _toastsScrollController,
+        onToastTap: (toast) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => toast_screen.ToastFullScreen(toast: toast),
             ),
-            const SizedBox(height: 16),
-            Text(
-              isOwnProfile ? 'No toasts yet' : 'No toasts to show',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isOwnProfile ? 'Your toasts will appear here' : 'This user hasn\'t shared any toasts yet',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ProfileToastsGrid(
-      toasts: feedState.toasts,
-      scrollController: _toastsScrollController,
-      onToastTap: (toast) {
-        // NAVIGATION UPDATED
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => toast_screen.ToastFullScreen(toast: toast)),
-        );
-      },
-      onLike: (toastId) {
-        ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
-      },
-      onDelete: isOwnProfile
-          ? (toastId) {
-        _showDeleteConfirmation('toast', () {
-          ref.read(profileFeedProvider.notifier).deleteToast(toastId);
-        });
-      }
-          : null,
-      isLoadingMore: feedState.isLoadingMoreToasts,
-      hasMore: feedState.hasMoreToasts,
+          );
+        },
+        onLike: (toastId) {
+          ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
+        },
+        onDelete: isOwnProfile
+            ? (toastId) {
+          _showDeleteConfirmation('toast', () {
+            ref.read(profileFeedProvider.notifier).deleteToast(toastId);
+          });
+        }
+            : null,
+        isLoadingMore: feedState.isLoadingMoreToasts,
+        hasMore: feedState.hasMoreToasts,
+      ),
     );
   }
 
   Widget _buildBytesTab(ProfileFeedState feedState) {
-    if (feedState.isLoadingBytes && feedState.bytes.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-        ),
+    final isLoading = feedState.isLoadingBytes && feedState.bytes.isEmpty;
+    final isEmpty = feedState.bytes.isEmpty && !feedState.isLoadingBytes;
+
+    if (isLoading) {
+      return _buildGridSkeleton();
+    }
+
+    if (isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.video_library_outlined,
+        title: isOwnProfile ? 'No bytes yet' : 'No bytes to show',
+        subtitle: isOwnProfile
+            ? 'Your bytes will appear here'
+            : 'This user hasn\'t posted any bytes yet',
       );
     }
 
-    if (feedState.bytes.isEmpty && !feedState.isLoadingBytes) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.video_library_outlined,
-              size: 64,
+    return AnimatedOpacity(
+      opacity: _isInitialized ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      child: ProfileBytesGrid(
+        bytes: feedState.bytes,
+        scrollController: _bytesScrollController,
+        onByteTap: (byte) {
+          final bytes = feedState.bytes;
+          final index = bytes.indexWhere((b) => b.byteId == byte.byteId);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => BytesFullScreen(
+                bytes: bytes,
+                initialIndex: index < 0 ? 0 : index,
+              ),
+            ),
+          );
+        },
+        isLoadingMore: feedState.isLoadingMoreBytes,
+        hasMore: feedState.hasMoreBytes,
+      ),
+    );
+  }
+
+  // OPTIMIZATION: Skeleton loader for grids
+  Widget _buildGridSkeleton() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.75,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) => Shimmer.fromColors(
+          baseColor: Colors.grey[800]!,
+          highlightColor: Colors.grey[600]!,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // OPTIMIZATION: Reusable empty state
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: const TextStyle(
               color: Colors.grey,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 16),
-            Text(
-              isOwnProfile ? 'No bytes yet' : 'No bytes to show',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isOwnProfile ? 'Your bytes will appear here' : 'This user hasn\'t posted any bytes yet',
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ProfileBytesGrid(
-      bytes: feedState.bytes,
-      scrollController: _bytesScrollController,
-      onByteTap: (byte) {
-        final bytes = feedState.bytes;
-        final index = bytes.indexWhere((b) => b.byteId == byte.byteId);
-        ref.read(lightboxProvider.notifier).openBytes(bytes, index < 0 ? 0 : index);
-      },
-      isLoadingMore: feedState.isLoadingMoreBytes,
-      hasMore: feedState.hasMoreBytes,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ],
+      ),
     );
   }
 
@@ -700,7 +1017,8 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
 
   Widget _buildStatItem(String label, String value, UserProfile? userProfile) {
     return GestureDetector(
-      onTap: isOwnProfile ? () {
+      onTap: (label == 'Followers' || label == 'Following')
+          ? () {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -710,8 +1028,10 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
             ),
           ),
         );
-      } : null,
+      }
+          : null,
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             value,
@@ -721,6 +1041,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             label,
             style: const TextStyle(
@@ -765,6 +1086,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
+// OPTIMIZED: ProfilePostsGrid with cached images
 class ProfilePostsGrid extends ConsumerWidget {
   final List<Post_feed> posts;
   final ScrollController scrollController;
@@ -790,88 +1112,135 @@ class ProfilePostsGrid extends ConsumerWidget {
     final feedState = ref.watch(profileFeedProvider);
 
     return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: CustomScrollView(
-          controller: scrollController,
-          slivers: [
-            if (feedState.error != null)
-              SliverToBoxAdapter(
-                child: Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          feedState.error!,
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
-                        icon: const Icon(Icons.close, color: Colors.red, size: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      padding: const EdgeInsets.all(8.0),
+      child: CustomScrollView(
+        controller: scrollController,
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          if (feedState.error != null) _buildErrorBanner(feedState.error!, ref),
+          SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.5,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                final post = posts[index];
+                return _buildOptimizedPostCard(post);
+              },
+              childCount: posts.length,
+            ),
+          ),
+          if (isLoadingMore) _buildLoadingIndicator(),
+          if (!hasMore && posts.isNotEmpty) _buildEndMessage('No more posts'),
+        ],
+      ),
+    );
+  }
 
-            SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.5,
-                crossAxisSpacing: 1,
-                mainAxisSpacing: 1,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                  final post = posts[index];
-                  return PostProfileCard(
-                    post: post,
-                    onTap: () => onPostTap(post),
-                  );
-                },
-                childCount: posts.length,
+  Widget _buildOptimizedPostCard(Post_feed post) {
+    // Use the first image URL or fallback to empty string
+    final imageUrl = post.imageUrls.isNotEmpty ? post.imageUrls[0] : '';
+
+    return GestureDetector(
+      onTap: () => onPostTap(post),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: imageUrl.isNotEmpty
+              ? CachedNetworkImage(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: Colors.grey[800],
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
               ),
             ),
-            if (isLoadingMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                  ),
-                ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey[800],
+              child: const Icon(Icons.broken_image, color: Colors.grey),
+            ),
+            memCacheWidth: 400, // Memory optimization
+            maxWidthDiskCache: 400, // Disk cache optimization
+          )
+              : Container(
+            color: Colors.grey[800],
+            child: const Icon(Icons.image, color: Colors.grey, size: 40),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(String error, WidgetRef ref) {
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
               ),
-            if (!hasMore && posts.isNotEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text(
-                      'No more posts',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            ),
+            IconButton(
+              onPressed: () =>
+                  ref.read(profileFeedProvider.notifier).clearError(),
+              icon: const Icon(Icons.close, color: Colors.red, size: 16),
+            ),
           ],
-        ));
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndMessage(String message) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            message,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ),
+      ),
+    );
   }
 }
 
+// OPTIMIZED: ProfileToastsGrid with cached images
 class ProfileToastsGrid extends ConsumerWidget {
   final List<Toast_feed> toasts;
   final ScrollController scrollController;
@@ -897,38 +1266,12 @@ class ProfileToastsGrid extends ConsumerWidget {
     final feedState = ref.watch(profileFeedProvider);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 56, 8, 8),
+      padding: const EdgeInsets.all(8.0),
       child: CustomScrollView(
         controller: scrollController,
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          if (feedState.error != null)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        feedState.error!,
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
-                      icon: const Icon(Icons.close, color: Colors.red, size: 16),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (feedState.error != null) _buildErrorBanner(feedState.error!, ref),
           SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -939,46 +1282,127 @@ class ProfileToastsGrid extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
                   (context, index) {
                 final toast = toasts[index];
-                return ToastProfileCard(
-                  toast: toast,
-                  onTap: () => onToastTap(toast),
-                );
+                return _buildOptimizedToastCard(toast);
               },
               childCount: toasts.length,
             ),
           ),
-          if (isLoadingMore)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                  ),
-                ),
-              ),
-            ),
-          if (!hasMore && toasts.isNotEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: Text(
-                    'No more toasts',
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          if (isLoadingMore) _buildLoadingIndicator(),
+          if (!hasMore && toasts.isNotEmpty) _buildEndMessage('No more toasts'),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOptimizedToastCard(Toast_feed toast) {
+    return GestureDetector(
+      onTap: () => onToastTap(toast),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
+        ),
+        child: Stack(
+          children: [
+            // Text content container
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Toast content
+                  Text(
+                    toast.content ?? 'No content',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+            // Toast icon in corner
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Icon(
+                Icons.campaign,
+                color: Colors.blue.withOpacity(0.7),
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(String error, WidgetRef ref) {
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ),
+            IconButton(
+              onPressed: () =>
+                  ref.read(profileFeedProvider.notifier).clearError(),
+              icon: const Icon(Icons.close, color: Colors.red, size: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndMessage(String message) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            message,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ),
       ),
     );
   }
 }
 
+// OPTIMIZED: ProfileBytesGrid with thumbnails
 class ProfileBytesGrid extends ConsumerWidget {
   final List<Byte> bytes;
   final ScrollController scrollController;
@@ -1000,107 +1424,154 @@ class ProfileBytesGrid extends ConsumerWidget {
     final feedState = ref.watch(profileFeedProvider);
 
     return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: CustomScrollView(
-          controller: scrollController,
-          slivers: [
-            if (feedState.error != null)
-              SliverToBoxAdapter(
+      padding: const EdgeInsets.all(8.0),
+      child: CustomScrollView(
+        controller: scrollController,
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          if (feedState.error != null) _buildErrorBanner(feedState.error!, ref),
+          SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.9,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                final byte = bytes[index];
+                return _buildOptimizedByteCard(byte, context);
+              },
+              childCount: bytes.length,
+            ),
+          ),
+          if (isLoadingMore) _buildLoadingIndicator(),
+          if (!hasMore && bytes.isNotEmpty) _buildEndMessage('No more bytes'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptimizedByteCard(Byte byte, BuildContext context) {
+    // Use thumbnailUrl if available, otherwise fallback to videoUrl or empty
+    final thumbnailUrl = byte.thumbnailUrl ?? byte.videoUrl ?? '';
+
+    return GestureDetector(
+      onTap: () => onByteTap(byte),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Video thumbnail (if available)
+              if (thumbnailUrl.isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: thumbnailUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[800],
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      ),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.video_library,
+                        color: Colors.grey, size: 40),
+                  ),
+                  memCacheWidth: 400,
+                  maxWidthDiskCache: 400,
+                )
+              else
+                Container(
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.video_library,
+                      color: Colors.grey, size: 40),
+                ),
+              // Play button overlay
+              Center(
                 child: Container(
-                  margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          feedState.error!,
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => ref.read(profileFeedProvider.notifier).clearError(),
-                        icon: const Icon(Icons.close, color: Colors.red, size: 16),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 32,
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.9,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                  final byte = bytes[index];
-
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => BytesFullScreen(byteData: byte),
-                        ),
-                      );
-                    },
-
-
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Center(
-                            child: Icon(Icons.play_circle_outline, color: Colors.white70),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                childCount: bytes.length,
+  Widget _buildErrorBanner(String error, WidgetRef ref) {
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
               ),
             ),
-            if (isLoadingMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                  ),
-                ),
-              ),
-            if (!hasMore && bytes.isNotEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text(
-                      'No more bytes',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            IconButton(
+              onPressed: () =>
+                  ref.read(profileFeedProvider.notifier).clearError(),
+              icon: const Icon(Icons.close, color: Colors.red, size: 16),
+            ),
           ],
-        ));
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndMessage(String message) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            message,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ),
+      ),
+    );
   }
 }

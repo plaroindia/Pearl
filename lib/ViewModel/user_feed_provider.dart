@@ -716,6 +716,73 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         error: 'Failed to load more bytes: $e',
       );
     }
+  }// Toggle like for user's byte
+  Future<void> toggleByteLike(String byteId) async {
+    if (state.bytes.isEmpty || state.likingBytes.contains(byteId)) return;
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final byteIndex = state.bytes.indexWhere((byte) => byte.byteId == byteId);
+    if (byteIndex == -1) return;
+
+    final currentByte = state.bytes[byteIndex];
+    final currentlyLiked = currentByte.isliked ?? false;
+    final currentLikeCount = currentByte.likeCount;
+
+    final newBytes = [...state.bytes];
+    newBytes[byteIndex] = currentByte.copyWith(
+      likeCount: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
+      isliked: !currentlyLiked,
+    );
+
+    state = state.copyWith(
+      bytes: newBytes,
+      likingBytes: {...state.likingBytes, byteId},
+    );
+
+    try {
+      if (currentlyLiked) {
+        await _supabase
+            .from('byte_likes')
+            .delete()
+            .eq('byte_id', byteId)
+            .eq('user_id', user.id);
+
+        await _supabase
+            .from('bytes')
+            .update({'like_count': currentLikeCount - 1})
+            .eq('byte_id', byteId);
+      } else {
+        await _supabase.from('byte_likes').insert({
+          'byte_id': byteId,
+          'user_id': user.id,
+          'liked_at': DateTime.now().toIso8601String(),
+        });
+
+        await _supabase
+            .from('bytes')
+            .update({'like_count': currentLikeCount + 1})
+            .eq('byte_id', byteId);
+      }
+
+      state = state.copyWith(
+        likingBytes: {...state.likingBytes}..remove(byteId),
+      );
+
+    } catch (error) {
+      final revertedBytes = [...state.bytes];
+      final currentByteIndex = revertedBytes.indexWhere((byte) => byte.byteId == byteId);
+      if (currentByteIndex != -1) {
+        revertedBytes[currentByteIndex] = currentByte;
+      }
+
+      state = state.copyWith(
+        bytes: revertedBytes,
+        likingBytes: {...state.likingBytes}..remove(byteId),
+        error: 'Failed to update byte like: ${error.toString()}',
+      );
+    }
   }
 
   // Refresh user's posts and toasts

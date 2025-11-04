@@ -93,7 +93,7 @@ class _LightboxOverlayState extends ConsumerState<LightboxOverlay> {
           final item = state.items[index];
           if (item.type == LightboxType.byte) {
             final byte = item.data as Byte;
-            _initializeVideoController(byte.byte);
+            _initializeVideoController(byte.videoUrl);
           } else {
             // Dispose video controller for non-byte items
             _videoController?.dispose();
@@ -125,13 +125,13 @@ class _LightboxOverlayState extends ConsumerState<LightboxOverlay> {
               // Initialize video controller for the initial byte
               if (_videoController == null && index == state.initialIndex) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _initializeVideoController(byte.byte);
+                  _initializeVideoController(byte.videoUrl);
                 });
               }
 
               return ByteVideoPlayer(
                 byte: byte,
-                controller: _videoController ?? VideoPlayerController.networkUrl(Uri.parse(byte.byte)),
+                controller: _videoController ?? VideoPlayerController.networkUrl(Uri.parse(byte.videoUrl)),
                 isCurrentVideo: true,
                 onTogglePlayPause: () {
                   if (_videoController != null && _videoController!.value.isInitialized) {

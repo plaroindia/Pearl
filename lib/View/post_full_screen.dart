@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 import '../Model/post.dart';
 import '../ViewModel/user_feed_provider.dart';
+import 'widgets/double_tap_like.dart';
 
 class PostFullScreen extends ConsumerStatefulWidget {
   final Post_feed post;
@@ -17,13 +19,89 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   int _currentMediaIndex = 0;
+  final Map<int, VideoPlayerController> _videoControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideos();
+  }
 
   @override
   void dispose() {
     _scrollController.dispose();
     _commentController.dispose();
     _commentFocusNode.dispose();
+    _disposeVideoControllers();
     super.dispose();
+  }
+
+  void _initializeVideos() {
+    if (widget.post.media_urls == null) return;
+
+    for (int i = 0; i < widget.post.media_urls!.length; i++) {
+      final url = widget.post.media_urls![i];
+
+      if (_isVideoUrl(url)) {
+        final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+
+        controller.initialize().then((_) {
+          if (!mounted) return;
+
+          setState(() {});
+
+          if (i == 0) {
+            controller.play();
+            controller.setLooping(true);
+          }
+        }).catchError((e) => debugPrint('init video error: $e'));
+
+        _videoControllers[i] = controller; // <-- now here it's fine
+      }
+    }
+  }
+
+  void _disposeVideoControllers() {
+    for (var controller in _videoControllers.values) {
+      controller.dispose();
+    }
+    _videoControllers.clear();
+  }
+
+  bool _isVideoUrl(String url) {
+    final videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.m4v', '.webm'];
+    return videoExtensions.any((ext) => url.toLowerCase().contains(ext));
+  }
+
+  void _onMediaPageChanged(int index) {
+    // Pause all videos first
+    for (var entry in _videoControllers.entries) {
+      entry.value.pause();
+    }
+
+    setState(() {
+      _currentMediaIndex = index;
+    });
+
+    // Play the current video if exists
+    if (_videoControllers.containsKey(index)) {
+      _videoControllers[index]!.play();
+    }
+  }
+
+  void _toggleVideoPlayPause(int index) {
+    if (!_videoControllers.containsKey(index)) return;
+
+    final controller = _videoControllers[index]!;
+    if (!controller.value.isInitialized) return;
+
+    setState(() {
+      if (controller.value.isPlaying) {
+        controller.pause();
+      } else {
+        controller.play();
+      }
+    });
   }
 
   @override
@@ -35,6 +113,8 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
           (p) => p.post_id == widget.post.post_id,
       orElse: () => widget.post,
     );
+
+    final isLiking = feedState.likingPosts.contains(currentPost.post_id);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -82,7 +162,7 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                 // Media Section
                 if (currentPost.media_urls != null && currentPost.media_urls!.isNotEmpty)
                   SliverToBoxAdapter(
-                    child: _buildMediaSection(currentPost),
+                    child: _buildMediaSection(currentPost, isLiking),
                   ),
 
                 // Post Info Section
@@ -170,40 +250,107 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
     );
   }
 
-  Widget _buildMediaSection(Post_feed post) {
+  Widget _buildMediaSection(Post_feed post, bool isLiking) {
     return Container(
       height: 400,
       color: Colors.grey[900],
       child: Stack(
         children: [
-          PageView.builder(
-            itemCount: post.media_urls!.length,
-            onPageChanged: (index) {
-              setState(() => _currentMediaIndex = index);
+          DoubleTapLike(
+            onDoubleTap: () {
+              ref.read(profileFeedProvider.notifier).togglePostLike(post.post_id!);
             },
-            itemBuilder: (context, index) {
-              return Image.network(
-                post.media_urls![index],
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                          : null,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+            isliked: post.isliked,
+            isLoading: isLiking,
+            child: PageView.builder(
+              itemCount: post.media_urls!.length,
+              onPageChanged: _onMediaPageChanged,
+              itemBuilder: (context, index) {
+                final url = post.media_urls![index];
+                final isVideo = _isVideoUrl(url);
+
+                if (isVideo && _videoControllers.containsKey(index)) {
+                  final controller = _videoControllers[index]!;
+
+                  return GestureDetector(
+                    onTap: () => _toggleVideoPlayPause(index),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Center(
+                          child: controller.value.isInitialized
+                              ? AspectRatio(
+                            aspectRatio: controller.value.aspectRatio,
+                            child: VideoPlayer(controller),
+                          )
+                              : const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                          ),
+                        ),
+                        // Play/Pause overlay
+                        if (controller.value.isInitialized && !controller.value.isPlaying)
+                          IgnorePointer(
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: 48,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Video progress indicator
+                        if (controller.value.isInitialized)
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: VideoProgressIndicator(
+                              controller,
+                              allowScrubbing: true,
+                              colors: const VideoProgressColors(
+                                playedColor: Colors.blue,
+                                bufferedColor: Colors.grey,
+                                backgroundColor: Colors.white24,
+                              ),
+                              padding: const EdgeInsets.all(8),
+                            ),
+                          ),
+                      ],
                     ),
                   );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Icon(Icons.error_outline, color: Colors.red, size: 48),
+                } else {
+                  // Display image
+                  return Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                              : null,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(Icons.error_outline, color: Colors.red, size: 48),
+                      );
+                    },
                   );
-                },
-              );
-            },
+                }
+              },
+            ),
           ),
 
           // Media indicator dots
@@ -230,6 +377,32 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                 ),
               ),
             ),
+
+          // Video icon indicator for video items
+          Positioned(
+            top: 16,
+            right: 16,
+            child: _isVideoUrl(post.media_urls![_currentMediaIndex])
+                ? Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.play_circle_outline, color: Colors.white, size: 20),
+                  SizedBox(width: 4),
+                  Text(
+                    'Video',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
@@ -281,6 +454,13 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                 icon: const Icon(Icons.share_outlined, color: Colors.white, size: 26),
                 onPressed: () {
                   // Share functionality
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Share feature coming soon!'),
+                      backgroundColor: Colors.blue,
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
                 },
               ),
             ],
@@ -289,7 +469,7 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
           const SizedBox(height: 12),
 
           // Caption
-          if (post.caption != null && post.caption!.isNotEmpty)
+          if (post.content != null && post.content!.isNotEmpty)
             RichText(
               text: TextSpan(
                 children: [
@@ -302,7 +482,7 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                     ),
                   ),
                   TextSpan(
-                    text: post.caption!,
+                    text: post.content!,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -517,7 +697,13 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
               title: const Text('Save', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(context);
-                // Save functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Save feature coming soon!'),
+                    backgroundColor: Colors.blue,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -525,7 +711,13 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
               title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(context);
-                // Copy link functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Link copied!'),
+                    backgroundColor: Colors.blue,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -533,7 +725,13 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
               title: const Text('Report', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                // Report functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Report feature coming soon!'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 8),
@@ -560,17 +758,5 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
     } else {
       return 'Just now';
     }
-  }
-  DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    if (value is String) {
-      try {
-        return DateTime.parse(value);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
   }
 }

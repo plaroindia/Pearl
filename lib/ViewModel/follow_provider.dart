@@ -1,8 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/user_profile.dart';
 
-// Follow State class to hold follow-related data
+// Follow State - OPTIMIZED with caching metadata
 class FollowState {
   final List<UserProfile> followers;
   final List<UserProfile> following;
@@ -13,8 +14,12 @@ class FollowState {
   final bool hasMoreFollowing;
   final int followersPage;
   final int followingPage;
-  final Map<String, bool> followingStatus; // userId -> isFollowing
-  final Set<String> processingFollowRequests; // Track which users are being processed
+  final Map<String, bool> followingStatus;
+  final Set<String> processingFollowRequests;
+  final DateTime? lastFollowersUpdate; // NEW: Track last update
+  final DateTime? lastFollowingUpdate; // NEW: Track last update
+  final Map<String, int> followerCounts; // NEW: Cache follower counts
+  final Map<String, int> followingCounts; // NEW: Cache following counts
 
   const FollowState({
     this.followers = const [],
@@ -28,6 +33,10 @@ class FollowState {
     this.followingPage = 0,
     this.followingStatus = const {},
     this.processingFollowRequests = const {},
+    this.lastFollowersUpdate,
+    this.lastFollowingUpdate,
+    this.followerCounts = const {},
+    this.followingCounts = const {},
   });
 
   FollowState copyWith({
@@ -42,6 +51,10 @@ class FollowState {
     int? followingPage,
     Map<String, bool>? followingStatus,
     Set<String>? processingFollowRequests,
+    DateTime? lastFollowersUpdate,
+    DateTime? lastFollowingUpdate,
+    Map<String, int>? followerCounts,
+    Map<String, int>? followingCounts,
   }) {
     return FollowState(
       followers: followers ?? this.followers,
@@ -55,22 +68,35 @@ class FollowState {
       followingPage: followingPage ?? this.followingPage,
       followingStatus: followingStatus ?? this.followingStatus,
       processingFollowRequests: processingFollowRequests ?? this.processingFollowRequests,
+      lastFollowersUpdate: lastFollowersUpdate ?? this.lastFollowersUpdate,
+      lastFollowingUpdate: lastFollowingUpdate ?? this.lastFollowingUpdate,
+      followerCounts: followerCounts ?? this.followerCounts,
+      followingCounts: followingCounts ?? this.followingCounts,
     );
   }
 }
 
-// Follow Notifier class that handles all follow-related operations
+// OPTIMIZED Follow Notifier
 class FollowNotifier extends StateNotifier<FollowState> {
   FollowNotifier() : super(const FollowState());
 
   final SupabaseClient _supabase = Supabase.instance.client;
   static const int _pageSize = 20;
+  static const _cacheExpiry = Duration(minutes: 5);
 
-  // Get current user ID - Fixed getter
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
-  // Load followers for a specific user
+  // OPTIMIZED: Load followers with caching
   Future<void> loadFollowers(String userId, {bool refresh = false}) async {
+    // Check if we need to refresh based on cache expiry
+    if (!refresh &&
+        state.lastFollowersUpdate != null &&
+        DateTime.now().difference(state.lastFollowersUpdate!) < _cacheExpiry &&
+        state.followers.isNotEmpty) {
+      debugPrint(' Using cached followers');
+      return;
+    }
+
     if (state.isLoadingFollowers && !refresh) return;
 
     state = state.copyWith(
@@ -82,42 +108,54 @@ class FollowNotifier extends StateNotifier<FollowState> {
       final page = refresh ? 0 : state.followersPage;
       final offset = page * _pageSize;
 
-      // First, let's try a simpler query to avoid foreign key issues
-      final response = await _supabase
+      // OPTIMIZATION: Get follower IDs in batch
+      final followsResponse = await _supabase
           .from('user_follows')
           .select('follower_id')
           .eq('followee_id', userId)
           .order('followed_at', ascending: false)
           .range(offset, offset + _pageSize - 1);
 
-      // Get user profiles separately
-      final followerIds = (response as List).map((item) => item['follower_id'] as String).toList();
+      final followerIds = (followsResponse as List<dynamic>)
+          .map((item) => item['follower_id'] as String)
+          .toList();
 
-      List<UserProfile> newFollowers = [];
-      if (followerIds.isNotEmpty) {
-        // Use individual queries or batch them differently
-        for (String followerId in followerIds) {
-          try {
-            final profileResponse = await _supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('user_id', followerId)
-                .maybeSingle();
-
-            if (profileResponse != null) {
-              newFollowers.add(UserProfile.fromJson(profileResponse));
-            }
-          } catch (e) {
-            print('Error fetching profile for $followerId: $e');
-          }
-        }
+      if (followerIds.isEmpty) {
+        state = state.copyWith(
+          followers: refresh ? [] : state.followers,
+          isLoadingFollowers: false,
+          hasMoreFollowers: false,
+          followersPage: refresh ? 1 : state.followersPage + 1,
+          lastFollowersUpdate: DateTime.now(),
+        );
+        return;
       }
 
-      // Update following status for current user
+      // OPTIMIZATION: Batch fetch user profiles
+      final profilesResponse = await _supabase
+          .from('user_profiles')
+          .select('*')
+          .inFilter('user_id', followerIds);
+
+      final newFollowers = (profilesResponse as List<dynamic>)
+          .map((json) => UserProfile.fromJson(json))
+          .toList();
+
+      // OPTIMIZATION: Batch check following status
       Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-      if (_currentUserId != null) {
+      if (_currentUserId != null && newFollowers.isNotEmpty) {
+        final followingCheckResponse = await _supabase
+            .from('user_follows')
+            .select('followee_id')
+            .eq('follower_id', _currentUserId!)
+            .inFilter('followee_id', followerIds);
+
+        final followingSet = (followingCheckResponse as List<dynamic>)
+            .map((item) => item['followee_id'] as String)
+            .toSet();
+
         for (var follower in newFollowers) {
-          updatedFollowingStatus[follower.user_id] = await _checkIfFollowing(follower.user_id);
+          updatedFollowingStatus[follower.user_id] = followingSet.contains(follower.user_id);
         }
       }
 
@@ -127,8 +165,12 @@ class FollowNotifier extends StateNotifier<FollowState> {
         hasMoreFollowers: newFollowers.length == _pageSize,
         followersPage: refresh ? 1 : state.followersPage + 1,
         followingStatus: updatedFollowingStatus,
+        lastFollowersUpdate: DateTime.now(),
       );
+
+      debugPrint(' Loaded ${newFollowers.length} followers');
     } catch (e) {
+      debugPrint(' Error loading followers: $e');
       state = state.copyWith(
         isLoadingFollowers: false,
         error: 'Failed to load followers: ${e.toString()}',
@@ -136,8 +178,17 @@ class FollowNotifier extends StateNotifier<FollowState> {
     }
   }
 
-  // Load following for a specific user
+  // OPTIMIZED: Load following with caching
   Future<void> loadFollowing(String userId, {bool refresh = false}) async {
+    // Check cache
+    if (!refresh &&
+        state.lastFollowingUpdate != null &&
+        DateTime.now().difference(state.lastFollowingUpdate!) < _cacheExpiry &&
+        state.following.isNotEmpty) {
+      debugPrint(' Using cached following');
+      return;
+    }
+
     if (state.isLoadingFollowing && !refresh) return;
 
     state = state.copyWith(
@@ -149,43 +200,43 @@ class FollowNotifier extends StateNotifier<FollowState> {
       final page = refresh ? 0 : state.followingPage;
       final offset = page * _pageSize;
 
-      // First, let's try a simpler query to avoid foreign key issues
-      final response = await _supabase
+      // OPTIMIZATION: Get following IDs in batch
+      final followsResponse = await _supabase
           .from('user_follows')
           .select('followee_id')
           .eq('follower_id', userId)
           .order('followed_at', ascending: false)
           .range(offset, offset + _pageSize - 1);
 
-      // Get user profiles separately
-      final followeeIds = (response as List).map((item) => item['followee_id'] as String).toList();
+      final followeeIds = (followsResponse as List<dynamic>)
+          .map((item) => item['followee_id'] as String)
+          .toList();
 
-      List<UserProfile> newFollowing = [];
-      if (followeeIds.isNotEmpty) {
-        // Use individual queries or batch them differently
-        for (String followeeId in followeeIds) {
-          try {
-            final profileResponse = await _supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('user_id', followeeId)
-                .maybeSingle();
-
-            if (profileResponse != null) {
-              newFollowing.add(UserProfile.fromJson(profileResponse));
-            }
-          } catch (e) {
-            print('Error fetching profile for $followeeId: $e');
-          }
-        }
+      if (followeeIds.isEmpty) {
+        state = state.copyWith(
+          following: refresh ? [] : state.following,
+          isLoadingFollowing: false,
+          hasMoreFollowing: false,
+          followingPage: refresh ? 1 : state.followingPage + 1,
+          lastFollowingUpdate: DateTime.now(),
+        );
+        return;
       }
 
-      // Update following status for current user
+      // OPTIMIZATION: Batch fetch user profiles
+      final profilesResponse = await _supabase
+          .from('user_profiles')
+          .select('*')
+          .inFilter('user_id', followeeIds);
+
+      final newFollowing = (profilesResponse as List<dynamic>)
+          .map((json) => UserProfile.fromJson(json))
+          .toList();
+
+      // Update following status - we know we follow all these users
       Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-      if (_currentUserId != null) {
-        for (var followedUser in newFollowing) {
-          updatedFollowingStatus[followedUser.user_id] = true; // We know we're following them
-        }
+      for (var followedUser in newFollowing) {
+        updatedFollowingStatus[followedUser.user_id] = true;
       }
 
       state = state.copyWith(
@@ -194,8 +245,12 @@ class FollowNotifier extends StateNotifier<FollowState> {
         hasMoreFollowing: newFollowing.length == _pageSize,
         followingPage: refresh ? 1 : state.followingPage + 1,
         followingStatus: updatedFollowingStatus,
+        lastFollowingUpdate: DateTime.now(),
       );
+
+      debugPrint('Loaded ${newFollowing.length} following');
     } catch (e) {
+      debugPrint(' Error loading following: $e');
       state = state.copyWith(
         isLoadingFollowing: false,
         error: 'Failed to load following: ${e.toString()}',
@@ -203,21 +258,33 @@ class FollowNotifier extends StateNotifier<FollowState> {
     }
   }
 
-  // Toggle follow/unfollow for a user with improved error handling
+  // OPTIMIZED: Toggle follow with optimistic updates
   Future<void> toggleFollow(String targetUserId) async {
     if (_currentUserId == null || _currentUserId == targetUserId) return;
 
-    // Prevent multiple simultaneous requests for the same user
-    if (state.processingFollowRequests.contains(targetUserId)) return;
+    // Prevent multiple simultaneous requests
+    if (state.processingFollowRequests.contains(targetUserId)) {
+      debugPrint(' Already processing follow request for $targetUserId');
+      return;
+    }
 
-    // Add to processing set
+    final isCurrentlyFollowing = state.followingStatus[targetUserId] ?? false;
+
+    // OPTIMISTIC UPDATE
     state = state.copyWith(
       processingFollowRequests: {...state.processingFollowRequests, targetUserId},
+      followingStatus: {
+        ...state.followingStatus,
+        targetUserId: !isCurrentlyFollowing,
+      },
     );
 
-    try {
-      final isCurrentlyFollowing = state.followingStatus[targetUserId] ?? false;
+    // Update counts optimistically
+    _updateUserProfilesInLists(targetUserId, isCurrentlyFollowing ? -1 : 1);
 
+    debugPrint(' Optimistic update: ${isCurrentlyFollowing ? 'Unfollowed' : 'Followed'} $targetUserId');
+
+    try {
       if (isCurrentlyFollowing) {
         // Unfollow
         await _supabase
@@ -226,7 +293,6 @@ class FollowNotifier extends StateNotifier<FollowState> {
             .eq('follower_id', _currentUserId!)
             .eq('followee_id', targetUserId);
 
-        // Update follower count
         await _updateFollowerCount(targetUserId, -1);
         await _updateFollowingCount(_currentUserId!, -1);
       } else {
@@ -239,30 +305,36 @@ class FollowNotifier extends StateNotifier<FollowState> {
           'followed_at': DateTime.now().toIso8601String(),
         });
 
-        // Update follower count
         await _updateFollowerCount(targetUserId, 1);
         await _updateFollowingCount(_currentUserId!, 1);
       }
 
-      // Update following status after successful operation
-      Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-      updatedFollowingStatus[targetUserId] = !isCurrentlyFollowing;
+      debugPrint(' Follow toggle successful');
+
+      // Remove from processing
+      final updatedProcessingSet = Set<String>.from(state.processingFollowRequests);
+      updatedProcessingSet.remove(targetUserId);
 
       state = state.copyWith(
-        followingStatus: updatedFollowingStatus,
-        error: null, // Clear any previous errors
+        processingFollowRequests: updatedProcessingSet,
+        error: null,
       );
-
-      // Update followers/following lists with new counts
-      _updateUserProfilesInLists(targetUserId, isCurrentlyFollowing ? -1 : 1);
-
     } catch (e) {
-      // Don't do optimistic updates, just show error
+      debugPrint(' Error toggling follow: $e');
+
+      // REVERT optimistic update
       state = state.copyWith(
-        error: 'Failed to ${state.followingStatus[targetUserId] == true ? 'unfollow' : 'follow'} user: ${e.toString()}',
+        followingStatus: {
+          ...state.followingStatus,
+          targetUserId: isCurrentlyFollowing,
+        },
+        error: 'Failed to ${isCurrentlyFollowing ? 'unfollow' : 'follow'} user',
       );
-    } finally {
-      // Remove from processing set
+
+      // Revert counts
+      _updateUserProfilesInLists(targetUserId, isCurrentlyFollowing ? 1 : -1);
+
+      // Remove from processing
       final updatedProcessingSet = Set<String>.from(state.processingFollowRequests);
       updatedProcessingSet.remove(targetUserId);
 
@@ -272,10 +344,9 @@ class FollowNotifier extends StateNotifier<FollowState> {
     }
   }
 
-  // Helper method to update user profiles in lists
+  // Helper: Update user profiles in lists
   void _updateUserProfilesInLists(String targetUserId, int increment) {
-    // Update followers list if target user is in current followers
-    List<UserProfile> updatedFollowers = state.followers.map((follower) {
+    final updatedFollowers = state.followers.map((follower) {
       if (follower.user_id == targetUserId) {
         return follower.copyWith(
           followersCount: (follower.followersCount ?? 0) + increment,
@@ -284,8 +355,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
       return follower;
     }).toList();
 
-    // Update following list if target user is in current following
-    List<UserProfile> updatedFollowing = state.following.map((following) {
+    final updatedFollowing = state.following.map((following) {
       if (following.user_id == targetUserId) {
         return following.copyWith(
           followersCount: (following.followersCount ?? 0) + increment,
@@ -300,164 +370,113 @@ class FollowNotifier extends StateNotifier<FollowState> {
     );
   }
 
-  // Check if current user is following a specific user
-  Future<bool> _checkIfFollowing(String targetUserId) async {
-    if (_currentUserId == null || _currentUserId == targetUserId) return false;
-
-    try {
-      final response = await _supabase
-          .from('user_follows')
-          .select('follower_id')
-          .eq('follower_id', _currentUserId!)
-          .eq('followee_id', targetUserId)
-          .maybeSingle();
-
-      return response != null;
-    } catch (e) {
-      print('Error checking follow status: $e');
-      return false;
-    }
-  }
-
-  // Update follower count in user profile
+  // OPTIMIZED: Update follower count with RPC
   Future<void> _updateFollowerCount(String userId, int increment) async {
     try {
-      // Try using RPC first
       await _supabase.rpc('increment_followers_count', params: {
         'user_id': userId,
         'increment_by': increment,
       });
     } catch (e) {
-      // // If RPC doesn't exist, fall back to manual update
-      // try {
-      //   final currentProfile = await _supabase
-      //       .from('user_profiles')
-      //       .select('followers_count')
-      //       .eq('user_id', userId)
-      //       .single();
-      //
-      //   final currentCount = currentProfile['followers_count'] ?? 0;
-      //   final newCount = (currentCount + increment).clamp(0, double.infinity).toInt();
-      //
-      //   await _supabase
-      //       .from('user_profiles')
-      //       .update({'followers_count': newCount})
-      //       .eq('user_id', userId);
-      // } catch (fallbackError) {
-      //   // Log error but don't throw - count updates are not critical
-      //   print('Failed to update follower count: $fallbackError');
-      // }
+      debugPrint('RPC not available, skipping count update: $e');
+      // Non-critical - count will sync on next profile fetch
     }
   }
 
-  // Update following count in user profile
+  // OPTIMIZED: Update following count with RPC
   Future<void> _updateFollowingCount(String userId, int increment) async {
     try {
-      // Try using RPC first
       await _supabase.rpc('increment_following_count', params: {
         'user_id': userId,
         'increment_by': increment,
       });
     } catch (e) {
-      // // If RPC doesn't exist, fall back to manual update
-      // try {
-      //   final currentProfile = await _supabase
-      //       .from('user_profiles')
-      //       .select('following_count')
-      //       .eq('user_id', userId)
-      //       .single();
-      //
-      //   final currentCount = currentProfile['following_count'] ?? 0;
-      //   final newCount = (currentCount + increment).clamp(0, double.infinity).toInt();
-      //
-      //   await _supabase
-      //       .from('user_profiles')
-      //       .update({'following_count': newCount})
-      //       .eq('user_id', userId);
-      // } catch (fallbackError) {
-      //   // Log error but don't throw - count updates are not critical
-      //   print('Failed to update following count: $fallbackError');
-      // }
+      debugPrint(' RPC not available, skipping count update: $e');
+      // Non-critical - count will sync on next profile fetch
     }
   }
 
-  // Load more followers
+  // Batch check following status
+  Future<Map<String, bool>> batchCheckFollowing(List<String> userIds) async {
+    if (_currentUserId == null || userIds.isEmpty) return {};
+
+    try {
+      final response = await _supabase
+          .from('user_follows')
+          .select('followee_id')
+          .eq('follower_id', _currentUserId!)
+          .inFilter('followee_id', userIds);
+
+      final followingSet = (response as List<dynamic>)
+          .map((item) => item['followee_id'] as String)
+          .toSet();
+
+      return Map.fromEntries(
+        userIds.map((id) => MapEntry(id, followingSet.contains(id))),
+      );
+    } catch (e) {
+      debugPrint('Error batch checking following: $e');
+      return {};
+    }
+  }
+
+  // Load more methods
   Future<void> loadMoreFollowers(String userId) async {
     if (!state.hasMoreFollowers || state.isLoadingFollowers) return;
     await loadFollowers(userId);
   }
 
-  // Load more following
   Future<void> loadMoreFollowing(String userId) async {
     if (!state.hasMoreFollowing || state.isLoadingFollowing) return;
     await loadFollowing(userId);
   }
 
-  // Refresh both lists and following status
+  // Refresh both lists
   Future<void> refresh(String userId) async {
     await Future.wait([
       loadFollowers(userId, refresh: true),
       loadFollowing(userId, refresh: true),
     ]);
-
-    // Refresh following status for all loaded users
-    if (_currentUserId != null) {
-      Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-      final allUsers = [...state.followers, ...state.following];
-
-      for (var user in allUsers) {
-        updatedFollowingStatus[user.user_id] = await _checkIfFollowing(user.user_id);
-      }
-
-      state = state.copyWith(followingStatus: updatedFollowingStatus);
-    }
   }
 
-  // Clear error
   void clearError() {
     state = state.copyWith(error: null);
   }
 
-  // Get following status for a specific user
   bool isFollowing(String userId) {
     return state.followingStatus[userId] ?? false;
   }
 
-  // Check if a follow request is being processed
   bool isProcessingFollow(String userId) {
     return state.processingFollowRequests.contains(userId);
   }
 
-  // Clear all data (useful when switching between users)
   void clear() {
     state = const FollowState();
   }
 
-  // Method to refresh following status for a specific user
   Future<void> refreshFollowingStatus(String userId) async {
     if (_currentUserId == null) return;
 
-    final isFollowingUser = await _checkIfFollowing(userId);
-    Map<String, bool> updatedFollowingStatus = Map.from(state.followingStatus);
-    updatedFollowingStatus[userId] = isFollowingUser;
+    final statusMap = await batchCheckFollowing([userId]);
 
-    state = state.copyWith(followingStatus: updatedFollowingStatus);
+    state = state.copyWith(
+      followingStatus: {
+        ...state.followingStatus,
+        ...statusMap,
+      },
+    );
   }
 }
 
-// Provider for the follow functionality
 final followProvider = StateNotifierProvider<FollowNotifier, FollowState>((ref) {
   return FollowNotifier();
 });
 
-// Provider for checking if current user follows a specific user
 final isFollowingProvider = Provider.family<bool, String>((ref, userId) {
-  final followState = ref.watch(followProvider);
-  return followState.followingStatus[userId] ?? false;
+  return ref.watch(followProvider).followingStatus[userId] ?? false;
 });
 
-// Provider for checking if a follow request is being processed
 final isProcessingFollowProvider = Provider.family<bool, String>((ref, userId) {
-  final followState = ref.watch(followProvider);
-  return followState.processingFollowRequests.contains(userId);
+  return ref.watch(followProvider).processingFollowRequests.contains(userId);
 });

@@ -202,7 +202,7 @@ class _ByteViewerPageState extends ConsumerState<ByteViewerPage> {
               final byte = bytesState.bytes[index];
               return ByteVideoPlayer(
                 byte: byte,
-                controller: _getController(index, byte.byte),
+                controller: _getController(index, byte.videoUrl),
                 isCurrentVideo: index == _currentIndex,
                 onTogglePlayPause: () => _togglePlayPause(index),
                 onLike: () async {

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
-import '../../ViewModel/theme_provider.dart'; // Add this import
+import '../../ViewModel/theme_provider.dart';
 import 'comment_card.dart';
 import 'double_tap_like.dart';
 
@@ -56,186 +56,186 @@ class ToastCard extends ConsumerWidget {
       );
     }
 
-    Widget buildContent(BuildContext context, String content) {
-      final textStyle = TextStyle(
-        color: theme.colorScheme.onSurface.withOpacity(0.8),
-        fontSize: 14,
-        height: 1.4,
-      );
-
-      // Simplified approach - just return the text without complex layout calculations
-      return Text(
-        content,
-        style: textStyle,
-        maxLines: 10,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8), // Remove horizontal margin
       color: theme.cardTheme.color,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(0), // Remove border radius for Instagram style
       ),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Info Header
-              GestureDetector(
-                onTap:onUserInfo,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundImage: toast.profile_pic != null
-                          ? NetworkImage(toast.profile_pic!)
-                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
-                      radius: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            toast.username ?? 'Unknown User',
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            _formatTimeAgo(toast.created_at),
-                            style: TextStyle(
-                              color: theme.dividerColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.more_vert, color: theme.dividerColor),
-                      onPressed: () {
-                        _showMoreOptions(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Title
-              if (toast.title != null && toast.title!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    toast.title!,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+      elevation: 0, // Remove shadow for flat design
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // User Info Header - Keep padding here
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12.0, 8.0, 8.0, 8.0),
+            child: GestureDetector(
+              onTap: onUserInfo,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundImage: toast.profile_pic != null
+                        ? NetworkImage(toast.profile_pic!)
+                        : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                    radius: 16, // Slightly smaller for Instagram style
                   ),
-                ),
-
-              // Content
-              if (toast.content != null && toast.content!.isNotEmpty)
-                ToastDoubleTapLike(
-                  toastId: toast.toast_id ?? '',
-                  isliked: toast.isliked,
-                  child: buildContent(context, toast.content!),
-                ),
-
-              const SizedBox(height: 12),
-
-              // Tags
-              if (toast.tags != null && toast.tags!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: toast.tags!.map((tag) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.5)),
-                        ),
-                        child: Text(
-                          '#$tag',
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          toast.username ?? 'Unknown User',
                           style: TextStyle(
-                            color: theme.colorScheme.primary,
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 14, // Slightly smaller
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          _formatTimeAgo(toast.created_at),
+                          style: TextStyle(
+                            color: theme.dividerColor,
                             fontSize: 12,
                           ),
                         ),
-                      );
-                    }).toList(),
+                      ],
+                    ),
                   ),
-                ),
-
-              // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  // Like Button
-                  _ActionButton(
-                    icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
-                    label: '${toast.like_count}',
-                    color: toast.isliked ? Colors.red : theme.dividerColor,
-                    isLoading: isLiking,
-                    onPressed: isLiking ? null : () {
-                      print('🔵 Like button pressed for toast: ${toast.toast_id}');
-                      if (toast.toast_id != null) {
-                        ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
-                      } else {
-                        print('🔴 Toast ID is null!');
-                      }
-                    },
-                  ),
-
-                  // Comment Button
-                  _ActionButton(
-                    icon: Icons.comment_outlined,
-                    label: '${toast.comment_count}',
-                    color: theme.dividerColor,
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: theme.dividerColor, size: 20),
                     onPressed: () {
-                      _showCommentsSheet(context, toast.toast_id!);
-                    },
-                  ),
-
-                  // Share Button
-                  _ActionButton(
-                    icon: Icons.share_outlined,
-                    label: '${toast.share_count}',
-                    color: theme.dividerColor,
-                    onPressed: () {
-                      _sharePost(context);
-                    },
-                  ),
-
-                  // Bookmark Button
-                  _ActionButton(
-                    icon: Icons.bookmark_border,
-                    label: '',
-                    color: theme.dividerColor,
-                    onPressed: () {
-                      _bookmarkPost(context);
+                      _showMoreOptions(context);
                     },
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
+
+          // Title - with padding
+          if (toast.title != null && toast.title!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12.0, 0.0, 12.0, 8.0),
+              child: Text(
+                toast.title!,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16, // Slightly smaller
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+          // Content - Full width with edge-to-edge design
+          if (toast.content != null && toast.content!.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: ToastDoubleTapLike(
+                toastId: toast.toast_id ?? '',
+                isliked: toast.isliked,
+                child: Text(
+                  toast.content!,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.9),
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                  maxLines: 10,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+
+          // Tags - with padding
+          if (toast.tags != null && toast.tags!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12.0, 0.0, 12.0, 12.0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: toast.tags!.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '#$tag',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+          // Action Buttons - with padding
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Like Button
+                _ActionButton(
+                  icon: toast.isliked ? Icons.favorite : Icons.favorite_border,
+                  label: '${toast.like_count}',
+                  color: toast.isliked ? Colors.red : theme.dividerColor,
+                  isLoading: isLiking,
+                  onPressed: isLiking ? null : () {
+                    print('🔵 Like button pressed for toast: ${toast.toast_id}');
+                    if (toast.toast_id != null) {
+                      ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
+                    } else {
+                      print('🔴 Toast ID is null!');
+                    }
+                  },
+                ),
+
+                // Comment Button
+                _ActionButton(
+                  icon: Icons.comment_outlined,
+                  label: '${toast.comment_count}',
+                  color: theme.dividerColor,
+                  onPressed: () {
+                    _showCommentsSheet(context, toast.toast_id!);
+                  },
+                ),
+
+                // Share Button
+                _ActionButton(
+                  icon: Icons.share_outlined,
+                  label: '${toast.share_count}',
+                  color: theme.dividerColor,
+                  onPressed: () {
+                    _sharePost(context);
+                  },
+                ),
+
+                // Bookmark Button - Align to end
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _ActionButton(
+                      icon: Icons.bookmark_border,
+                      label: '',
+                      color: theme.dividerColor,
+                      onPressed: () {
+                        _bookmarkPost(context);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
@@ -350,28 +350,28 @@ class _ActionButton extends StatelessWidget {
       onTap: onPressed,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isLoading)
               SizedBox(
-                width: 20,
-                height: 20,
+                width: 18,
+                height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(color),
                 ),
               )
             else
-              Icon(icon, size: 20, color: color),
+              Icon(icon, size: 18, color: color),
             if (label.isNotEmpty) ...[
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
               ),
