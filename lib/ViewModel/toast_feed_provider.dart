@@ -78,13 +78,29 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   final Map<String, List<Comment>> _commentCache = {};
   static const _cacheExpiry = Duration(minutes: 5);
 
+  // Helper method to map toast data
+  Toast_feed _mapToToastFeed(
+      Map<String, dynamic> toastData,
+      String userId,
+      Set<String> likedToastIds,
+      ) {
+    final String toastId = toastData['toast_id'].toString();
+
+    return Toast_feed.fromMap({
+      ...toastData,
+      'username': toastData['user_profiles']['username'],
+      'profile_pic': toastData['user_profiles']['profile_pic'],
+      'isliked': likedToastIds.contains(toastId),
+      'toast_comments': [],
+    });
+  }
+
   // OPTIMIZED: Load initial posts with single efficient query
   Future<void> loadTosts() async {
     if (state.isLoading) return;
 
-    // Check cache first
     if (_toastCache.isNotEmpty && !_isCacheExpired()) {
-      print('📦 Using cached toasts');
+      print('DEBUG: Using cached toasts');
       state = state.copyWith(
         posts: _toastCache.values.map((c) => c.toast).toList(),
         isLoading: false,
@@ -104,7 +120,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         return;
       }
 
-      // OPTIMIZATION 1: Single query instead of N queries per toast
       final response = await _supabase
           .from('toasts')
           .select('''
@@ -139,7 +154,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
       final toastIds = toastsData.map((t) => t['toast_id'].toString()).toList();
 
-      // OPTIMIZATION 2: Batch check all likes in single query
       final userLikes = await _supabase
           .from('toast_likes')
           .select('toast_id')
@@ -150,7 +164,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
           .map((l) => l['toast_id'] as String)
           .toSet();
 
-      // OPTIMIZATION 3: Map toasts without loading comments (lazy load)
       final List<Toast_feed> newToasts = [];
 
       for (var toastData in toastsData) {
@@ -164,7 +177,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
         newToasts.add(toast);
 
-        // Update cache
         _toastCache[toastId] = CachedToast(
           toast: toast,
           timestamp: DateTime.now(),
@@ -179,9 +191,9 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         lastFetchTime: DateTime.now(),
       );
 
-      print('✅ Loaded ${newToasts.length} toasts efficiently');
+      print('SUCCESS: Loaded ${newToasts.length} toasts efficiently');
     } catch (error) {
-      print('❌ Error loading toasts: $error');
+      print('ERROR: Error loading toasts: $error');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load toasts: $error',
@@ -233,7 +245,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
       final toastIds = toastsData.map((t) => t['toast_id'].toString()).toList();
 
-      // Batch check likes
       final userLikes = await _supabase
           .from('toast_likes')
           .select('toast_id')
@@ -249,7 +260,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       for (var toastData in toastsData) {
         final String toastId = toastData['toast_id'].toString();
 
-        // Avoid duplicates
         if (state.posts.any((t) => t.toast_id == toastId)) continue;
 
         final toast = _mapToToastFeed(
@@ -260,7 +270,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
         newToasts.add(toast);
 
-        // Update cache
         _toastCache[toastId] = CachedToast(
           toast: toast,
           timestamp: DateTime.now(),
@@ -274,9 +283,9 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         currentPage: state.currentPage + 1,
       );
 
-      print('✅ Loaded ${newToasts.length} more toasts');
+      print('SUCCESS: Loaded ${newToasts.length} more toasts');
     } catch (error) {
-      print('❌ Error loading more toasts: $error');
+      print('ERROR: Error loading more toasts: $error');
       state = state.copyWith(
         isLoadingMore: false,
         error: 'Failed to load more toasts: $error',
@@ -286,31 +295,31 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
   // Refresh posts with cache invalidation
   Future<void> refreshPosts() async {
-    print('🔄 Refreshing toasts and clearing cache');
+    print('DEBUG: Refreshing toasts and clearing cache');
     _toastCache.clear();
     _commentCache.clear();
     state = const ToastFeedState();
     await loadTosts();
   }
 
-  // OPTIMIZED: Use database operations for atomic like toggle
+  // OPTIMIZED: Toggles are handled by database triggers
   Future<void> toggleLike(String toastId) async {
-    print('🔵 toggleLike called for toast: $toastId');
+    print('DEBUG: toggleLike called for toast: $toastId');
 
     if (state.likingPosts.contains(toastId)) {
-      print('🟡 Already liking this toast, returning');
+      print('DEBUG: Already liking this toast, returning');
       return;
     }
 
     final user = _supabase.auth.currentUser;
     if (user == null) {
-      print('🔴 User not authenticated');
+      print('ERROR: User not authenticated');
       return;
     }
 
     final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
     if (toastIndex == -1) {
-      print('🔴 Toast not found in current state');
+      print('ERROR: Toast not found in current state');
       return;
     }
 
@@ -318,7 +327,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     final currentlyLiked = currentToast.isliked;
     final currentLikeCount = currentToast.like_count;
 
-    print('🔵 Current like status: $currentlyLiked, count: $currentLikeCount');
+    print('DEBUG: Current like status: $currentlyLiked, count: $currentLikeCount');
 
     // OPTIMISTIC UPDATE: Update UI immediately
     final newToasts = [...state.posts];
@@ -332,77 +341,47 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       likingPosts: {...state.likingPosts, toastId},
     );
 
-    // Update cache
     _toastCache[toastId] = CachedToast(
       toast: newToasts[toastIndex],
       timestamp: DateTime.now(),
     );
 
-    print('🔵 Optimistic update applied - UI updated immediately');
+    print('DEBUG: Optimistic update applied - UI updated immediately');
 
     try {
       if (currentlyLiked) {
-        // Unlike the toast
-        print('🔵 Attempting to unlike toast...');
+        // Unlike - trigger will handle count update
+        print('DEBUG: Attempting to unlike toast...');
         await _supabase
             .from('toast_likes')
             .delete()
             .eq('toast_id', toastId)
             .eq('user_id', user.id);
 
-        // Try to use RPC function, fallback to direct update if not available
-        try {
-          await _supabase.rpc(
-            'decrement_toast_likes',
-            params: {'toast_id_param': toastId},
-          );
-        } catch (rpcError) {
-          // Fallback to direct update if RPC doesn't exist
-          await _supabase
-              .from('toasts')
-              .update({'like_count': currentLikeCount - 1})
-              .eq('toast_id', toastId);
-        }
-
-        print('🔵 Unlike successful');
+        print('DEBUG: Unlike successful');
       } else {
-        // Like the toast
-        print('🔵 Attempting to like toast...');
+        // Like - trigger will handle count update
+        print('DEBUG: Attempting to like toast...');
         await _supabase.from('toast_likes').insert({
           'toast_id': toastId,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
-        // Try to use RPC function, fallback to direct update if not available
-        try {
-          await _supabase.rpc(
-            'increment_toast_likes',
-            params: {'toast_id_param': toastId},
-          );
-        } catch (rpcError) {
-          // Fallback to direct update if RPC doesn't exist
-          await _supabase
-              .from('toasts')
-              .update({'like_count': currentLikeCount + 1})
-              .eq('toast_id', toastId);
-        }
-
-        print('🔵 Like successful');
+        print('DEBUG: Like successful');
       }
 
-      print('🟢 Like operation completed successfully');
+      print('SUCCESS: Like operation completed successfully');
 
-      // Remove from likingPosts
       state = state.copyWith(
         likingPosts: {...state.likingPosts}..remove(toastId),
       );
 
-      print('🟢 Loading indicator removed, optimistic update kept');
+      print('DEBUG: Loading indicator removed, optimistic update kept');
     } catch (error) {
-      print('🔴 Error in toggleLike: $error');
+      print('ERROR: Error in toggleLike: $error');
 
-      // REVERT OPTIMISTIC UPDATE
+      // REVERT OPTIMISTIC UPDATE on error
       final revertedToasts = [...state.posts];
       final currentToastIndex = revertedToasts.indexWhere((toast) => toast.toast_id == toastId);
       if (currentToastIndex != -1) {
@@ -415,77 +394,70 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         error: 'Failed to update like: ${error.toString()}',
       );
 
-      // Revert cache
       _toastCache[toastId] = CachedToast(
         toast: currentToast,
         timestamp: DateTime.now(),
       );
 
-      print('🔴 Optimistic update reverted due to error');
+      print('ERROR: Optimistic update reverted due to error');
     }
   }
 
   // OPTIMIZED: Lazy load comments only when needed
   Future<List<Comment>> loadComments(String toastId) async {
-    // Check cache first
     if (_commentCache.containsKey(toastId)) {
-      print('📦 Using cached comments for $toastId');
+      print('DEBUG: Using cached comments for $toastId');
       return _commentCache[toastId]!;
     }
 
     final user = _supabase.auth.currentUser;
-    if (user == null) return [];
 
     try {
       final response = await _supabase
           .from('toast_comments')
           .select('''
-            comment_id,
-            toast_id,
-            user_id,
-            content,
-            like_count,
-            created_at,
-            user_profiles!inner(username, profile_pic)
-          ''')
+          *,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('toast_id', toastId)
-          .filter('parent_comment_id', 'is', null)
+          .isFilter('parent_comment_id', null)
           .order('created_at', ascending: false);
 
-      // Batch check liked comments
       final commentIds = (response as List<dynamic>).map((c) => c['comment_id'] as int).toList();
 
-      final likedCommentsResponse = await _supabase
-          .from('toast_comment_likes')
-          .select('comment_id')
-          .eq('user_id', user.id)
-          .inFilter('comment_id', commentIds);
+      Set<int> likedCommentIds = {};
+      if (user != null && commentIds.isNotEmpty) {
+        final likedCommentsResponse = await _supabase
+            .from('toast_comment_likes')
+            .select('comment_id')
+            .eq('user_id', user.id)
+            .inFilter('comment_id', commentIds);
 
-      final likedCommentIds = (likedCommentsResponse as List<dynamic>)
-          .map((e) => e['comment_id'] as int)
-          .toSet();
+        likedCommentIds = (likedCommentsResponse as List<dynamic>)
+            .map((e) => e['comment_id'] as int)
+            .toSet();
+      }
 
-      final comments = (response as List<dynamic>)
-          .map((json) => Comment.fromMap({
-        ...json,
-        'username': json['user_profiles']['username'],
-        'profile_pic': json['user_profiles']['profile_pic'],
-        'uliked': likedCommentIds.contains(json['comment_id']),
-      }))
-          .toList();
+      final List<Comment> comments = (response as List<dynamic>).map((commentData) {
+        return Comment.fromMap({
+          ...commentData,
+          'username': commentData['user_profiles']['username'],
+          'profile_pic': commentData['user_profiles']['profile_pic'],
+          'uliked': likedCommentIds.contains(commentData['comment_id']),
+        });
+      }).toList();
 
-      // Cache comments
       _commentCache[toastId] = comments;
 
       return comments;
-    } catch (error) {
-      print('❌ Error loading comments: $error');
-      state = state.copyWith(error: 'Failed to load comments: $error');
+    } catch (e) {
+      print('ERROR: Error loading comments: $e');
+      state = state.copyWith(error: 'Failed to load comments: $e');
       return [];
     }
   }
 
-  // OPTIMIZED: Add comment with atomic increment
+  // OPTIMIZED: Add comment - trigger handles count
   Future<bool> addComment(String toastId, String content) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return false;
@@ -498,43 +470,28 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Try to use RPC function, fallback to manual increment
+      // Optimistic update for UI
       final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
       if (toastIndex != -1) {
         final currentCount = state.posts[toastIndex].comment_count;
 
-        try {
-          await _supabase.rpc('increment_toast_comments', params: {
-            'toast_id_param': toastId
-          });
-        } catch (rpcError) {
-          // Fallback to direct update
-          await _supabase
-              .from('toasts')
-              .update({'comment_count': currentCount + 1})
-              .eq('toast_id', toastId);
-        }
-
-        // Update local state
         final updatedToasts = [...state.posts];
         updatedToasts[toastIndex] = state.posts[toastIndex].copyWith(
           comment_count: currentCount + 1,
         );
         state = state.copyWith(posts: updatedToasts);
 
-        // Update cache
         _toastCache[toastId] = CachedToast(
           toast: updatedToasts[toastIndex],
           timestamp: DateTime.now(),
         );
       }
 
-      // Invalidate comment cache for this toast
       _commentCache.remove(toastId);
 
       return true;
     } catch (e) {
-      print('❌ Error adding comment: $e');
+      print('ERROR: Error adding comment: $e');
       state = state.copyWith(error: 'Failed to add comment: $e');
       return false;
     }
@@ -542,39 +499,47 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
   // Load replies for a given parent comment
   Future<List<Comment>> loadReplies(String toastId, int parentCommentId) async {
+    final user = _supabase.auth.currentUser;
+
     try {
-      final response = await _supabase
+      final repliesResponse = await _supabase
           .from('toast_comments')
           .select('''
-            comment_id,
-            toast_id,
-            user_id,
-            content,
-            like_count,
-            created_at,
-            parent_comment_id,
-            user_profiles!inner(username, profile_pic)
-          ''')
+          *,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('toast_id', toastId)
           .eq('parent_comment_id', parentCommentId)
           .order('created_at', ascending: false);
 
-      return (response as List<dynamic>)
-          .map((json) => Comment.fromMap({
-        ...json,
-        'username': json['user_profiles']['username'],
-        'profile_pic': json['user_profiles']['profile_pic'],
-      }))
-          .toList();
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'") || msg.contains('schema cache')) {
-        state = state.copyWith(
-            error: 'Replies are not enabled yet. Add parent_comment_id to toast_comments and reload API schema.'
-        );
-      } else {
-        state = state.copyWith(error: 'Failed to load replies: $e');
+      final replyIds = (repliesResponse as List<dynamic>).map((c) => c['comment_id'] as int).toList();
+
+      Set<int> likedReplyIds = {};
+      if (user != null && replyIds.isNotEmpty) {
+        final likedRepliesResponse = await _supabase
+            .from('toast_comment_likes')
+            .select('comment_id')
+            .eq('user_id', user.id)
+            .inFilter('comment_id', replyIds);
+
+        likedReplyIds = (likedRepliesResponse as List<dynamic>)
+            .map((e) => e['comment_id'] as int)
+            .toSet();
       }
+
+      final List<Comment> replies = (repliesResponse as List<dynamic>).map((commentData) {
+        return Comment.fromMap({
+          ...commentData,
+          'username': commentData['user_profiles']['username'],
+          'profile_pic': commentData['user_profiles']['profile_pic'],
+          'uliked': likedReplyIds.contains(commentData['comment_id']),
+        });
+      }).toList();
+
+      return replies;
+    } catch (e) {
+      print('ERROR: Failed to load replies: $e');
+      state = state.copyWith(error: 'Failed to load replies: $e');
       return [];
     }
   }
@@ -592,7 +557,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
     }
   }
 
-  // Add a reply to a specific parent comment
+  // Add a reply - trigger handles count
   Future<bool> addReply(String toastId, int parentCommentId, String content) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return false;
@@ -606,21 +571,10 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Update comment count
+      // Optimistic update for UI
       final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
       if (toastIndex != -1) {
         final currentCount = state.posts[toastIndex].comment_count;
-
-        try {
-          await _supabase.rpc('increment_toast_comments', params: {
-            'toast_id_param': toastId
-          });
-        } catch (rpcError) {
-          await _supabase
-              .from('toasts')
-              .update({'comment_count': currentCount + 1})
-              .eq('toast_id', toastId);
-        }
 
         final updatedToasts = [...state.posts];
         updatedToasts[toastIndex] = state.posts[toastIndex].copyWith(
@@ -628,7 +582,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         );
         state = state.copyWith(posts: updatedToasts);
 
-        // Update cache
         _toastCache[toastId] = CachedToast(
           toast: updatedToasts[toastIndex],
           timestamp: DateTime.now(),
@@ -637,19 +590,13 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
       return true;
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'") || msg.contains('schema cache')) {
-        state = state.copyWith(
-            error: 'Failed to add reply: parent_comment_id missing in toast_comments. Run migration and reload API schema.'
-        );
-      } else {
-        state = state.copyWith(error: 'Failed to add reply: $e');
-      }
+      print('ERROR: Failed to add reply: $e');
+      state = state.copyWith(error: 'Failed to add reply: $e');
       return false;
     }
   }
 
-  // Toggle comment like
+  // Toggle comment like - trigger handles count
   Future<void> toggleCommentLike(int commentId) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
@@ -673,42 +620,19 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
           .maybeSingle();
 
       if (existingLike != null) {
-        // Unlike
+        // Unlike - trigger will handle count
         await _supabase
             .from('toast_comment_likes')
             .delete()
-            .eq('toast_comment_like_id', existingLike['toast_comment_like_id']);
-
-        final currentComment = await _supabase
-            .from('toast_comments')
-            .select('like_count')
-            .eq('comment_id', commentId)
-            .single();
-
-        final newCount = (currentComment['like_count'] as int) - 1;
-        await _supabase
-            .from('toast_comments')
-            .update({'like_count': newCount >= 0 ? newCount : 0})
-            .eq('comment_id', commentId);
+            .eq('toast_comment_like_id', existingLike['toast_comment_like_id'])
+            .eq('user_id', currentUserId);
       } else {
-        // Like
+        // Like - trigger will handle count
         await _supabase.from('toast_comment_likes').insert({
           'comment_id': commentId,
           'user_id': currentUserId,
           'liked_at': DateTime.now().toIso8601String(),
         });
-
-        final currentComment = await _supabase
-            .from('toast_comments')
-            .select('like_count')
-            .eq('comment_id', commentId)
-            .single();
-
-        final newCount = (currentComment['like_count'] as int) + 1;
-        await _supabase
-            .from('toast_comments')
-            .update({'like_count': newCount})
-            .eq('comment_id', commentId);
       }
 
       state = state.copyWith(
@@ -720,31 +644,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         error: 'Failed to toggle comment like: $e',
       );
     }
-  }
-
-  // Helper method to map JSON to Toast_feed
-  Toast_feed _mapToToastFeed(
-      Map<String, dynamic> json,
-      String userId,
-      Set<String> likedToastIds,
-      ) {
-    final userProfile = json['user_profiles'] as Map<String, dynamic>?;
-
-    return Toast_feed(
-      toast_id: json['toast_id'],
-      user_id: json['user_id'],
-      username: userProfile?['username'] ?? 'Unknown User',
-      profile_pic: userProfile?['profile_pic'],
-      title: json['title'],
-      content: json['content'],
-      tags: json['tags'] != null ? List<String>.from(json['tags']) : [],
-      created_at: json['created_at'],
-      like_count: json['like_count'] ?? 0,
-      comment_count: json['comment_count'] ?? 0,
-      share_count: json['share_count'] ?? 0,
-      isliked: likedToastIds.contains(json['toast_id']),
-      commentsList: [], // Lazy load when needed
-    );
   }
 
   bool _isCacheExpired() {

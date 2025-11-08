@@ -21,12 +21,22 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with AutomaticKeepAliveClientMixin {
   bool _isLoading = false;
   bool _isInitialized = false;
   bool _feedsInitialized = false;
   final ScrollController _scrollController = ScrollController();
-  final Map<String, DateTime> _lastRefreshTime = {};
+
+  // Optimization: Track if user has scrolled to prevent unnecessary loads
+  bool _hasScrolled = false;
+
+  // Optimization: Debounce loading more content
+  DateTime? _lastLoadMoreTime;
+  static const _loadMoreDebounce = Duration(milliseconds: 500);
+
+  @override
+  bool get wantKeepAlive => true; // Keep state alive when switching tabs
 
   @override
   void initState() {
@@ -42,17 +52,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _onScroll() {
+    if (!_hasScrolled) {
+      setState(() => _hasScrolled = true);
+    }
+
+    // OPTIMIZATION: Load more at 70% scroll instead of 80% for smoother experience
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.8) {
+        _scrollController.position.maxScrollExtent * 0.7) {
       _loadMoreContent();
     }
   }
 
   Future<void> _loadMoreContent() async {
+    // OPTIMIZATION: Debounce to prevent multiple rapid calls
+    final now = DateTime.now();
+    if (_lastLoadMoreTime != null &&
+        now.difference(_lastLoadMoreTime!) < _loadMoreDebounce) {
+      return;
+    }
+    _lastLoadMoreTime = now;
+
     final toastFeedState = ref.read(toastFeedProvider);
     final postFeedState = ref.read(postFeedProvider);
 
-    // Use optimized loadMorePosts for both providers
     final futures = <Future>[];
 
     if (toastFeedState.hasMore && !toastFeedState.isLoadingMore) {
@@ -79,9 +101,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } catch (e) {
       print('Error loading user profile: $e');
     } finally {
-      setState(() {
-        _isInitialized = true;
-      });
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     }
   }
 
@@ -93,14 +115,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final futures = <Future>[];
 
-    // Check cache first - if cache exists and not expired, skip loading
     final bool shouldLoadToasts = toastFeedState.posts.isEmpty &&
         (toastFeedState.lastFetchTime == null ||
-            DateTime.now().difference(toastFeedState.lastFetchTime!) > Duration(minutes: 5));
+            DateTime.now().difference(toastFeedState.lastFetchTime!) >
+                Duration(minutes: 5));
 
     final bool shouldLoadPosts = postFeedState.posts.isEmpty &&
         (postFeedState.lastFetchTime == null ||
-            DateTime.now().difference(postFeedState.lastFetchTime!) > Duration(minutes: 5));
+            DateTime.now().difference(postFeedState.lastFetchTime!) >
+                Duration(minutes: 5));
 
     if (shouldLoadToasts && !toastFeedState.isLoading) {
       futures.add(ref.read(toastFeedProvider.notifier).loadTosts());
@@ -114,15 +137,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       await Future.wait(futures);
     }
 
-    setState(() {
-      _feedsInitialized = true;
-    });
+    if (mounted) {
+      setState(() => _feedsInitialized = true);
+    }
   }
 
   Future<void> _handleSignOut() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       await ref.read(authControllerProvider).logout();
@@ -147,9 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -159,33 +178,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     setState(() {
       _feedsInitialized = false;
+      _hasScrolled = false;
     });
 
     try {
-      // Use the optimized refreshPosts methods that clear cache
       await Future.wait([
         ref.read(toastFeedProvider.notifier).refreshPosts(),
         ref.read(postFeedProvider.notifier).refreshPosts(),
       ]);
 
-      setState(() {
-        _feedsInitialized = true;
-      });
+      setState(() => _feedsInitialized = true);
 
       print('✅ Feeds refreshed successfully with fresh data');
     } catch (e) {
       print('❌ Error refreshing feeds: $e');
-      setState(() {
-        _feedsInitialized = true;
-      });
+      setState(() => _feedsInitialized = true);
     }
   }
 
-  // OPTIMIZED: Improved combined feed with better timestamp handling
   List<Map<String, dynamic>> _getCombinedFeed(toastFeedState, postFeedState) {
     final List<Map<String, dynamic>> combinedFeed = [];
 
-    // Add toasts with type identifier
     for (final toast in toastFeedState.posts) {
       DateTime timestamp;
       try {
@@ -201,7 +214,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    // Add posts with type identifier
     for (final post in postFeedState.posts) {
       DateTime timestamp;
       try {
@@ -217,23 +229,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    // Sort by timestamp (newest first)
     combinedFeed.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
 
     return combinedFeed;
   }
 
-  // OPTIMIZED: Cache-aware feed initialization
   bool _shouldInitializeFeeds(toastFeedState, postFeedState) {
-    final bool hasCachedData = toastFeedState.posts.isNotEmpty || postFeedState.posts.isNotEmpty;
+    final bool hasCachedData = toastFeedState.posts.isNotEmpty ||
+        postFeedState.posts.isNotEmpty;
     final bool isCacheFresh = toastFeedState.lastFetchTime != null &&
-        DateTime.now().difference(toastFeedState.lastFetchTime!) < Duration(minutes: 5);
+        DateTime.now().difference(toastFeedState.lastFetchTime!) <
+            Duration(minutes: 5);
 
     return !hasCachedData || !isCacheFresh;
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
     final toastFeedState = ref.watch(toastFeedProvider);
@@ -246,9 +260,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    // OPTIMIZED: Initialize feeds only when needed
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_shouldInitializeFeeds(toastFeedState, postFeedState) && !_feedsInitialized) {
+      if (_shouldInitializeFeeds(toastFeedState, postFeedState) &&
+          !_feedsInitialized) {
         _initializeFeeds();
       }
     });
@@ -258,7 +272,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
-        elevation: Theme.of(context).appBarTheme.elevation,
+        elevation: 0, // Flat design like YouTube
         iconTheme: Theme.of(context).appBarTheme.iconTheme,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -278,7 +292,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const SearchScreen()),
+                      MaterialPageRoute(
+                          builder: (context) => const SearchScreen()
+                      ),
                     );
                   },
                   icon: Icon(
@@ -314,11 +330,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           return _buildCombinedFeed(toastFeedState, postFeedState);
         },
-        loading: () => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-          ),
-        ),
+        loading: () => _buildSkeletonLoader(),
         error: (error, stack) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -354,7 +366,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User Info Section
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16.0),
@@ -370,12 +381,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Center(
                     child: Consumer(
                       builder: (context, ref, child) {
-                        final currentUserProfile = ref.watch(currentUserProfileProvider);
+                        final currentUserProfile =
+                        ref.watch(currentUserProfileProvider);
                         return currentUserProfile.when(
                           data: (profile) => CircleAvatar(
                             backgroundImage: profile?.profilePic != null
                                 ? NetworkImage(profile!.profilePic!)
-                                : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                                : const AssetImage('assets/plaro_logo.png')
+                            as ImageProvider,
                             radius: 40.0,
                           ),
                           loading: () => const CircleAvatar(
@@ -386,7 +399,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white
+                                ),
                               ),
                             ),
                           ),
@@ -403,13 +418,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Consumer(
                       builder: (context, ref, child) {
                         final authState = ref.watch(authStateProvider);
-                        final currentUserProfile = ref.watch(currentUserProfileProvider);
+                        final currentUserProfile =
+                        ref.watch(currentUserProfileProvider);
 
                         return authState.when(
                           data: (session) {
                             return currentUserProfile.when(
                               data: (profile) => Text(
-                                profile?.username ?? session?.user.email ?? 'No user',
+                                profile?.username ??
+                                    session?.user.email ??
+                                    'No user',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
@@ -445,7 +463,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
-            // Navigation Items
             ListTile(
               leading: Icon(
                 Icons.event_note,
@@ -461,7 +478,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const AllEventsPage()),
+                  MaterialPageRoute(
+                      builder: (context) => const AllEventsPage()
+                  ),
                 );
               },
             ),
@@ -479,11 +498,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                // Add your settings navigation here
               },
             ),
 
-            // Dark Mode Toggle
             SwitchListTile(
               title: Text(
                 'Dark Mode',
@@ -496,7 +513,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ref.read(themeNotifierProvider.notifier).toggleTheme(value);
               },
               secondary: Icon(
-                themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                themeMode == ThemeMode.dark
+                    ? Icons.dark_mode
+                    : Icons.light_mode,
                 color: Theme.of(context).iconTheme.color,
               ),
               activeColor: Theme.of(context).colorScheme.primary,
@@ -504,7 +523,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
             Divider(color: Theme.of(context).dividerColor),
 
-            // Sign Out
             ListTile(
               leading: _isLoading
                   ? SizedBox(
@@ -539,60 +557,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final combinedFeed = _getCombinedFeed(toastFeedState, postFeedState);
     final hasError = toastFeedState.error != null || postFeedState.error != null;
     final isLoading = toastFeedState.isLoading || postFeedState.isLoading;
-    final isLoadingMore = toastFeedState.isLoadingMore || postFeedState.isLoadingMore;
+    final isLoadingMore = toastFeedState.isLoadingMore ||
+        postFeedState.isLoadingMore;
     final isEmpty = combinedFeed.isEmpty;
 
-    // OPTIMIZED: Show cached data immediately while loading
+    // OPTIMIZATION: Show cached data immediately while loading
     final bool showCachedData = combinedFeed.isNotEmpty && isLoading;
 
     return RefreshIndicator(
       onRefresh: _refreshFeed,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       color: Theme.of(context).colorScheme.primary,
+      // OPTIMIZATION: Reduced displacement for smoother pull
+      displacement: 40,
+      strokeWidth: 2.5,
       child: CustomScrollView(
         controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(
+          // OPTIMIZATION: Better scroll physics like YouTube
+          parent: BouncingScrollPhysics(),
+        ),
+        // OPTIMIZATION: Cache extent for smoother scrolling
+        cacheExtent: 1000, // Pre-render content 1000px ahead
         slivers: [
-          // Error handling
+          // Error handling - Dismissible banner
           if (hasError)
             SliverToBoxAdapter(
               child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                margin: const EdgeInsets.all(8),
+                child: Material(
                   color: Colors.red.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        toastFeedState.error ?? postFeedState.error ?? 'Unknown error',
-                        style: const TextStyle(color: Colors.red),
+                  child: InkWell(
+                    onTap: () {
+                      if (toastFeedState.error != null) {
+                        ref.read(toastFeedProvider.notifier).clearError();
+                      }
+                      if (postFeedState.error != null) {
+                        ref.read(postFeedProvider.notifier).clearError();
+                      }
+                      _refreshFeed();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: Colors.red,
+                              size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              toastFeedState.error ??
+                                  postFeedState.error ??
+                                  'Unknown error',
+                              style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 13
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.refresh,
+                              color: Colors.red,
+                              size: 20),
+                        ],
                       ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        if (toastFeedState.error != null) {
-                          ref.read(toastFeedProvider.notifier).clearError();
-                        }
-                        if (postFeedState.error != null) {
-                          ref.read(postFeedProvider.notifier).clearError();
-                        }
-                        _refreshFeed();
-                      },
-                      child: const Text('Retry'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
 
-          // Combined feed list - show cached data even while loading
-          if (showCachedData || combinedFeed.isNotEmpty)
+          // OPTIMIZATION: Show skeleton while initial load, cached data otherwise
+          if (isEmpty && isLoading && !showCachedData)
+            _buildSkeletonFeed()
+          else if (combinedFeed.isNotEmpty)
             SliverList(
               delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -600,12 +640,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final type = feedItem['type'] as String;
                   final data = feedItem['data'];
 
-                  if (type == 'toast') {
-                    return ToastCard(
+                  // OPTIMIZATION: Add subtle fade-in animation for items
+                  return AnimatedOpacity(
+                    opacity: 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: type == 'toast'
+                        ? ToastCard(
                       toast: data,
-                      onTap: () {
-                        // Handle toast tap
-                      },
+                      onTap: () {},
                       onUserInfo: () {
                         Navigator.push(
                           context,
@@ -616,13 +658,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         );
                       },
-                    );
-                  } else {
-                    return PostCard(
+                    )
+                        : PostCard(
                       post: data,
-                      onTap: () {
-                        // Handle post tap
-                      },
+                      onTap: () {},
                       onUserInfo: () {
                         Navigator.push(
                           context,
@@ -633,103 +672,300 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         );
                       },
-                    );
-                  }
+                    ),
+                  );
                 },
                 childCount: combinedFeed.length,
+                // OPTIMIZATION: Add semantic indexes for better accessibility
+                addAutomaticKeepAlives: true,
+                addRepaintBoundaries: true,
+                addSemanticIndexes: true,
               ),
             ),
 
-          // Loading and empty states
-          _buildEmptyOrLoadingState(isEmpty, isLoading, hasError, showCachedData),
+          // Empty state
+          if (isEmpty && !isLoading && !hasError)
+            _buildEmptyState(),
 
-          // Loading indicator for pagination
+          // OPTIMIZATION: Improved loading indicator for pagination
           if (isLoadingMore && combinedFeed.isNotEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
               ),
             ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          // Bottom padding
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyOrLoadingState(bool isEmpty, bool isLoading, bool hasError, bool showCachedData) {
-    // Don't show loading state if we're showing cached data
-    if (showCachedData) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
+  // OPTIMIZATION: Skeleton loader for better perceived performance
+  Widget _buildSkeletonLoader() {
+    return ListView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 5,
+      itemBuilder: (context, index) => _SkeletonCard(),
+    );
+  }
 
-    if (isEmpty && isLoading) {
-      return const SliverFillRemaining(
-        child: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-          ),
-        ),
-      );
-    }
+  Widget _buildSkeletonFeed() {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+            (context, index) => _SkeletonCard(),
+        childCount: 5,
+      ),
+    );
+  }
 
-    if (isEmpty && !isLoading && !hasError) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.article_outlined,
-                size: 64,
+  Widget _buildEmptyState() {
+    return SliverFillRemaining(
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No posts yet',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Be the first to share something!',
+              style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                fontSize: 14,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'No posts yet',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/create_post');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Be the first to share something!',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/create_post');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text('Create Post'),
-              ),
-            ],
-          ),
+              child: const Text('Create Post'),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+}
 
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
+// OPTIMIZATION: Skeleton card widget for loading state
+class _SkeletonCard extends StatefulWidget {
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat();
+
+    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final baseColor = theme.cardTheme.color ?? Colors.grey[850]!;
+    final highlightColor = theme.brightness == Brightness.dark
+        ? Colors.grey[700]!
+        : Colors.grey[300]!;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      color: baseColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+      elevation: 0,
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          return Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment(_animation.value, 0),
+                end: Alignment(_animation.value + 1, 0),
+                colors: [
+                  baseColor,
+                  highlightColor,
+                  baseColor,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User header
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: highlightColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 120,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: highlightColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              width: 80,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: highlightColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content lines
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: highlightColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: highlightColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 200,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: highlightColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Row(
+                    children: List.generate(
+                      4,
+                          (index) => Padding(
+                        padding: const EdgeInsets.only(right: 24),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: highlightColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              width: 24,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: highlightColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }

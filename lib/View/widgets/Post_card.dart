@@ -1,5 +1,3 @@
-
-// widgets/post_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -10,6 +8,7 @@ import '../../ViewModel/theme_provider.dart'; // Add this import
 import 'post_comment_card.dart';
 import 'dart:io';
 // import '../profile.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'zoomable_image.dart';
 import 'double_tap_like.dart';
 
@@ -105,7 +104,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     CircleAvatar(
                       backgroundImage: widget.post.profile_pic != null
                           ? NetworkImage(widget.post.profile_pic!)
-                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
                       radius: 20,
                     ),
                     const SizedBox(width: 12),
@@ -290,8 +289,8 @@ class _PostCardState extends ConsumerState<PostCard> {
                   children: [
                     CircleAvatar(
                       backgroundImage: currentPost.profile_pic != null
-                          ? NetworkImage(currentPost.profile_pic!)
-                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                          ? CachedNetworkImageProvider(currentPost.profile_pic!)
+                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
                       radius: 20,
                     ),
                     const SizedBox(width: 12),
@@ -495,37 +494,28 @@ class _PostCardState extends ConsumerState<PostCard> {
             boundaryMargin: const EdgeInsets.all(20),
             minScale: 1.0,
             maxScale: 4.0,
-            child: Image.network(
-              mediaUrl,
+            child: CachedNetworkImage(
+              imageUrl: mediaUrl,
               fit: BoxFit.cover,
               width: double.infinity,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: theme.cardTheme.color,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                          : null,
-                      color: theme.colorScheme.primary,
-                    ),
+              memCacheWidth: 800, // Optimize memory usage
+              maxWidthDiskCache: 1000, // Disk cache size
+              placeholder: (context, url) => Container(
+                color: theme.cardTheme.color,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: theme.colorScheme.primary,
                   ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: theme.cardTheme.color,
-                  child: Center(
-                    child: Icon(
-                      Icons.image_not_supported,
-                      color: theme.dividerColor,
-                      size: 50,
-                    ),
-                  ),
-                );
-              },
+                ),
+              ),
+              errorWidget: (context, url, error) => Container(
+                color: theme.cardTheme.color,
+                child: Icon(
+                  Icons.image_not_supported,
+                  color: theme.dividerColor,
+                  size: 50,
+                ),
+              ),
             ),
           ),
         ),

@@ -6,6 +6,7 @@ import '../../ViewModel/toast_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart';
 import 'comment_card.dart';
 import 'double_tap_like.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -75,9 +76,9 @@ class ToastCard extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     backgroundImage: toast.profile_pic != null
-                        ? NetworkImage(toast.profile_pic!)
-                        : const AssetImage('assets/plaro new logo.png') as ImageProvider,
-                    radius: 16, // Slightly smaller for Instagram style
+                        ? CachedNetworkImageProvider(toast.profile_pic!)
+                        : const AssetImage('assets/plaro_logo.png') as ImageProvider,
+                    radius: 16,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -661,7 +662,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                                       radius: 12,
                                       backgroundImage: r.profileImage.isNotEmpty
                                           ? NetworkImage(r.profileImage)
-                                          : const AssetImage('assets/plaro new logo.png') as ImageProvider,
+                                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
                                     ),
                                     title: Row(
                                       children: [

@@ -50,9 +50,10 @@ dependencies:
   intl: ^0.18.1
   google_fonts: ^6.3.0
   cached_network_image: ^3.4.1
-  package_info_plus: ^4.2.0
+  package_info_plus: 9.0.0
   chewie: ^1.7.4
   shimmer: ^3.0.0
+  better_player: ^0.0.83
 
 
 dev_dependencies:

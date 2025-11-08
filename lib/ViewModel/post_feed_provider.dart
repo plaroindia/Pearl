@@ -79,13 +79,12 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
   final Map<String, List<Comment>> _commentCache = {};
   static const _cacheExpiry = Duration(minutes: 5);
 
-// OPTIMIZED: Load initial posts with single efficient query
+  // OPTIMIZED: Load initial posts with single efficient query
   Future<void> loadPosts() async {
     if (state.isLoading) return;
 
-    // Check cache first
     if (_postCache.isNotEmpty && !_isCacheExpired()) {
-      print('📦 Using cached posts');
+      print('DEBUG: Using cached posts');
       state = state.copyWith(
         posts: _postCache.values.map((c) => c.post).toList(),
         isLoading: false,
@@ -105,7 +104,6 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
-      // OPTIMIZATION 1: Single query instead of N queries per post
       final response = await _supabase
           .from('post')
           .select('''
@@ -140,42 +138,36 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
-      // FIXED: Handle post_id as dynamic type (could be int or string)
-      final postIds = postsData.map((p) => p['post_id']).toList();
+      final postIds = postsData.map((p) => p['post_id'] as int).toList();
 
-      // OPTIMIZATION 2: Batch check all likes in single query
       final userLikes = await _supabase
           .from('post_likes')
           .select('post_id')
           .eq('user_id', user.id)
-          .inFilter('post_id', postIds); // Use raw postIds without conversion
+          .inFilter('post_id', postIds);
 
-      // FIXED: Handle post_id comparison properly
       final likedPostIds = (userLikes as List<dynamic>)
-          .map((l) => l['post_id'].toString()) // Convert to string for consistent comparison
+          .map((l) => l['post_id'] as int)
           .toSet();
 
-      // OPTIMIZATION 3: Map posts without loading comments (lazy load)
       final List<Post_feed> newPosts = [];
 
       for (var postData in postsData) {
-        // FIXED: Handle post_id as dynamic and ensure string conversion
-        final dynamic rawPostId = postData['post_id'];
-        final String postId = rawPostId.toString(); // Safe conversion to string
+        final int postId = postData['post_id'] as int;
+        final String postIdString = postId.toString();
 
         final post = Post_feed.fromMap({
           ...postData,
-          'post_id': postId, // Ensure post_id is string
+          'post_id': postIdString,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          'isliked': likedPostIds.contains(postId), // Consistent string comparison
-          'post_comments': [], // Lazy load when needed
+          'isliked': likedPostIds.contains(postId),
+          'post_comments': [],
         });
 
         newPosts.add(post);
 
-        // Update cache
-        _postCache[postId] = CachedPost(
+        _postCache[postIdString] = CachedPost(
           post: post,
           timestamp: DateTime.now(),
         );
@@ -189,9 +181,9 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         lastFetchTime: DateTime.now(),
       );
 
-      print(' Loaded ${newPosts.length} posts efficiently');
+      print('SUCCESS: Loaded ${newPosts.length} posts efficiently');
     } catch (e) {
-      print(' Error loading posts: $e');
+      print('ERROR: Error loading posts: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load posts: $e',
@@ -199,7 +191,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
-// OPTIMIZED: Load more posts (pagination)
+  // OPTIMIZED: Load more posts (pagination)
   Future<void> loadMorePosts() async {
     if (state.isLoadingMore || !state.hasMore) return;
 
@@ -243,44 +235,38 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
-      // FIXED: Use raw postIds without conversion for the query
-      final postIds = postsData.map((p) => p['post_id']).toList();
+      final postIds = postsData.map((p) => p['post_id'] as int).toList();
 
-      // Batch check likes
       final userLikes = await _supabase
           .from('post_likes')
           .select('post_id')
           .eq('user_id', user.id)
-          .inFilter('post_id', postIds); // Use raw postIds
+          .inFilter('post_id', postIds);
 
-      // FIXED: Convert to string for consistent comparison
       final likedPostIds = (userLikes as List<dynamic>)
-          .map((l) => l['post_id'].toString()) // Convert to string
+          .map((l) => l['post_id'] as int)
           .toSet();
 
       final List<Post_feed> newPosts = [];
 
       for (var postData in postsData) {
-        // FIXED: Handle post_id as dynamic and ensure string conversion
-        final dynamic rawPostId = postData['post_id'];
-        final String postId = rawPostId.toString(); // Safe conversion to string
+        final int postId = postData['post_id'] as int;
+        final String postIdString = postId.toString();
 
-        // Avoid duplicates
-        if (state.posts.any((p) => p.post_id == postId)) continue;
+        if (state.posts.any((p) => p.post_id == postIdString)) continue;
 
         final post = Post_feed.fromMap({
           ...postData,
-          'post_id': postId,
+          'post_id': postIdString,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          'isliked': likedPostIds.contains(postId), // Consistent string comparison
+          'isliked': likedPostIds.contains(postId),
           'post_comments': [],
         });
 
         newPosts.add(post);
 
-        // Update cache
-        _postCache[postId] = CachedPost(
+        _postCache[postIdString] = CachedPost(
           post: post,
           timestamp: DateTime.now(),
         );
@@ -293,43 +279,43 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         currentPage: state.currentPage + 1,
       );
 
-      print(' Loaded ${newPosts.length} more posts');
-    } catch (e) {
-      print(' Error loading more posts: $e');
+      print('SUCCESS: Loaded ${newPosts.length} more posts');
+    } catch (error) {
+      print('ERROR: Error loading more posts: $error');
       state = state.copyWith(
         isLoadingMore: false,
-        error: 'Failed to load more posts: $e',
+        error: 'Failed to load more posts: $error',
       );
     }
   }
 
   // Refresh posts with cache invalidation
   Future<void> refreshPosts() async {
-    print('🔄 Refreshing posts and clearing cache');
+    print('DEBUG: Refreshing posts and clearing cache');
     _postCache.clear();
     _commentCache.clear();
     state = const PostFeedState();
     await loadPosts();
   }
 
-  // OPTIMIZED: Use database function for atomic like toggle
+  // OPTIMIZED: Toggles are handled by database triggers
   Future<void> toggleLike(String postId) async {
-    print('🔵 toggleLike called for post: $postId');
+    print('DEBUG: toggleLike called for post: $postId');
 
     if (state.likingPosts.contains(postId)) {
-      print('🟡 Already liking this post, returning');
+      print('DEBUG: Already liking this post, returning');
       return;
     }
 
     final user = _supabase.auth.currentUser;
     if (user == null) {
-      print('🔴 User not authenticated');
+      print('ERROR: User not authenticated');
       return;
     }
 
     final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
     if (postIndex == -1) {
-      print('🔴 Post not found in current state');
+      print('ERROR: Post not found in current state');
       return;
     }
 
@@ -337,7 +323,9 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     final currentlyLiked = currentPost.isliked;
     final currentLikeCount = currentPost.like_count;
 
-    print('🔵 Current like status: $currentlyLiked, count: $currentLikeCount');
+    final int postIdInt = int.parse(postId);
+
+    print('DEBUG: Current like status: $currentlyLiked, count: $currentLikeCount');
 
     // OPTIMISTIC UPDATE: Update UI immediately
     final newPosts = [...state.posts];
@@ -351,77 +339,47 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       likingPosts: {...state.likingPosts, postId},
     );
 
-    // Update cache
     _postCache[postId] = CachedPost(
       post: newPosts[postIndex],
       timestamp: DateTime.now(),
     );
 
-    print('🔵 Optimistic update applied - UI updated immediately');
+    print('DEBUG: Optimistic update applied - UI updated immediately');
 
     try {
       if (currentlyLiked) {
-        // Unlike the post
-        print('🔵 Attempting to unlike post...');
+        // Unlike - trigger will handle count update
+        print('DEBUG: Attempting to unlike post...');
         await _supabase
             .from('post_likes')
             .delete()
-            .eq('post_id', postId)
+            .eq('post_id', postIdInt)
             .eq('user_id', user.id);
 
-        // Try to use RPC function, fallback to direct update if not available
-        try {
-          await _supabase.rpc(
-            'decrement_post_likes',
-            params: {'post_id_param': postId},
-          );
-        }catch (rpcError) {
-          // Fallback to direct update if RPC doesn't exist
-          await _supabase
-              .from('post')
-              .update({'like_count': currentLikeCount - 1})
-              .eq('post_id', postId);
-        }
-
-        print('🔵 Unlike successful');
+        print('DEBUG: Unlike successful');
       } else {
-        // Like the post
-        print('🔵 Attempting to like post...');
+        // Like - trigger will handle count update
+        print('DEBUG: Attempting to like post...');
         await _supabase.from('post_likes').insert({
-          'post_id': postId,
+          'post_id': postIdInt,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
-        // Try to use RPC function, fallback to direct update if not available
-        try {
-          await _supabase.rpc(
-            'increment_post_likes',
-            params: {'post_id_param': postId},
-          );
-        } catch (rpcError) {
-          // Fallback to direct update if RPC doesn't exist
-          await _supabase
-              .from('post')
-              .update({'like_count': currentLikeCount + 1})
-              .eq('post_id', postId);
-        }
-
-        print('🔵 Like successful');
+        print('DEBUG: Like successful');
       }
 
-      print('🟢 Like operation completed successfully');
+      print('SUCCESS: Like operation completed successfully');
 
-      // Remove from likingPosts
       state = state.copyWith(
         likingPosts: {...state.likingPosts}..remove(postId),
       );
 
-      print('🟢 Loading indicator removed, optimistic update kept');
+      print('DEBUG: Loading indicator removed, optimistic update kept');
     } catch (error) {
-      print('🔴 Error in toggleLike: $error');
+      print('ERROR: Error in toggleLike: $error');
 
-      // REVERT OPTIMISTIC UPDATE
+      // REVERT OPTIMISTIC UPDATE on error
       final revertedPosts = [...state.posts];
       final currentPostIndex = revertedPosts.indexWhere((post) => post.post_id == postId);
       if (currentPostIndex != -1) {
@@ -434,104 +392,107 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         error: 'Failed to update like: ${error.toString()}',
       );
 
-      // Revert cache
       _postCache[postId] = CachedPost(
         post: currentPost,
         timestamp: DateTime.now(),
       );
 
-      print('🔴 Optimistic update reverted due to error');
+      print('ERROR: Optimistic update reverted due to error');
     }
   }
 
   // OPTIMIZED: Lazy load comments only when needed
   Future<List<Comment>> loadComments(String postId) async {
-    // Check cache first
     if (_commentCache.containsKey(postId)) {
-      print('📦 Using cached comments for $postId');
+      print('DEBUG: Using cached comments for $postId');
       return _commentCache[postId]!;
     }
+
+    final int postIdInt = int.parse(postId);
+    final user = _supabase.auth.currentUser;
 
     try {
       final response = await _supabase
           .from('post_comments')
           .select('''
-            *,
-            user_profiles!inner(username, profile_pic)
-          ''')
-          .eq('post_id', postId)
+          *,
+          user_profiles!inner(username, profile_pic)
+        ''')
+          .eq('post_id', postIdInt)
           .isFilter('parent_comment_id', null)
           .order('created_at', ascending: false);
+
+      final commentIds = (response as List<dynamic>).map((c) => c['comment_id'] as int).toList();
+
+      Set<int> likedCommentIds = {};
+      if (user != null && commentIds.isNotEmpty) {
+        final likedCommentsResponse = await _supabase
+            .from('post_comment_likes')
+            .select('comment_id')
+            .eq('user_id', user.id)
+            .inFilter('comment_id', commentIds);
+
+        likedCommentIds = (likedCommentsResponse as List<dynamic>)
+            .map((e) => e['comment_id'] as int)
+            .toSet();
+      }
 
       final List<Comment> comments = (response as List<dynamic>).map((commentData) {
         return Comment.fromMap({
           ...commentData,
           'username': commentData['user_profiles']['username'],
           'profile_pic': commentData['user_profiles']['profile_pic'],
+          'uliked': likedCommentIds.contains(commentData['comment_id']),
         });
       }).toList();
 
-      // Cache comments
       _commentCache[postId] = comments;
 
       return comments;
     } catch (e) {
-      print('❌ Error loading comments: $e');
+      print('ERROR: Error loading comments: $e');
       state = state.copyWith(error: 'Failed to load comments: $e');
       return [];
     }
   }
 
-  // OPTIMIZED: Add comment with atomic increment
+  // OPTIMIZED: Add comment - trigger handles count
   Future<bool> addComment(String postId, String content) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return false;
 
+    final int postIdInt = int.parse(postId);
+
     try {
       await _supabase.from('post_comments').insert({
-        'post_id': postId,
+        'post_id': postIdInt,
         'user_id': currentUserId,
         'content': content,
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Try to use RPC function, fallback to manual increment
+      // Optimistic update for UI
       final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
       if (postIndex != -1) {
         final currentCount = state.posts[postIndex].comment_count;
 
-        try {
-          await _supabase.rpc('increment_post_comments', params: {
-            'post_id_param': postId
-          });
-        } catch (rpcError) {
-          // Fallback to direct update
-          await _supabase
-              .from('post')
-              .update({'comment_count': currentCount + 1})
-              .eq('post_id', postId);
-        }
-
-        // Update local state
         final updatedPosts = [...state.posts];
         updatedPosts[postIndex] = state.posts[postIndex].copyWith(
           comment_count: currentCount + 1,
         );
         state = state.copyWith(posts: updatedPosts);
 
-        // Update cache
         _postCache[postId] = CachedPost(
           post: updatedPosts[postIndex],
           timestamp: DateTime.now(),
         );
       }
 
-      // Invalidate comment cache for this post
       _commentCache.remove(postId);
 
       return true;
     } catch (e) {
-      print('❌ Error adding comment: $e');
+      print('ERROR: Error adding comment: $e');
       state = state.copyWith(error: 'Failed to add comment: $e');
       return false;
     }
@@ -539,35 +500,48 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
   // Load replies for a given parent comment
   Future<List<Comment>> loadReplies(String postId, int parentCommentId) async {
+    final int postIdInt = int.parse(postId);
+    final user = _supabase.auth.currentUser;
+
     try {
       final repliesResponse = await _supabase
           .from('post_comments')
           .select('''
-            *,
-            user_profiles!inner(username, profile_pic)
-          ''')
-          .eq('post_id', postId)
+          *,
+          user_profiles!inner(username, profile_pic)
+        ''')
+          .eq('post_id', postIdInt)
           .eq('parent_comment_id', parentCommentId)
           .order('created_at', ascending: false);
+
+      final replyIds = (repliesResponse as List<dynamic>).map((c) => c['comment_id'] as int).toList();
+
+      Set<int> likedReplyIds = {};
+      if (user != null && replyIds.isNotEmpty) {
+        final likedRepliesResponse = await _supabase
+            .from('post_comment_likes')
+            .select('comment_id')
+            .eq('user_id', user.id)
+            .inFilter('comment_id', replyIds);
+
+        likedReplyIds = (likedRepliesResponse as List<dynamic>)
+            .map((e) => e['comment_id'] as int)
+            .toSet();
+      }
 
       final List<Comment> replies = (repliesResponse as List<dynamic>).map((commentData) {
         return Comment.fromMap({
           ...commentData,
           'username': commentData['user_profiles']['username'],
           'profile_pic': commentData['user_profiles']['profile_pic'],
+          'uliked': likedReplyIds.contains(commentData['comment_id']),
         });
       }).toList();
 
       return replies;
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'") || msg.contains('schema cache')) {
-        state = state.copyWith(
-            error: 'Replies are not enabled yet. Add parent_comment_id to post_comments and reload API schema.'
-        );
-      } else {
-        state = state.copyWith(error: 'Failed to load replies: $e');
-      }
+      print('ERROR: Failed to load replies: $e');
+      state = state.copyWith(error: 'Failed to load replies: $e');
       return [];
     }
   }
@@ -585,35 +559,26 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
-  // Add a reply to a specific parent comment
+  // Add a reply - trigger handles count
   Future<bool> addReply(String postId, int parentCommentId, String content) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return false;
 
+    final int postIdInt = int.parse(postId);
+
     try {
       await _supabase.from('post_comments').insert({
-        'post_id': postId,
+        'post_id': postIdInt,
         'user_id': currentUserId,
         'content': content,
         'parent_comment_id': parentCommentId,
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Update comment count
+      // Optimistic update for UI
       final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
       if (postIndex != -1) {
         final currentCount = state.posts[postIndex].comment_count;
-
-        try {
-          await _supabase.rpc('increment_post_comments', params: {
-            'post_id_param': postId
-          });
-        } catch (rpcError) {
-          await _supabase
-              .from('post')
-              .update({'comment_count': currentCount + 1})
-              .eq('post_id', postId);
-        }
 
         final updatedPosts = [...state.posts];
         updatedPosts[postIndex] = state.posts[postIndex].copyWith(
@@ -621,7 +586,6 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         );
         state = state.copyWith(posts: updatedPosts);
 
-        // Update cache
         _postCache[postId] = CachedPost(
           post: updatedPosts[postIndex],
           timestamp: DateTime.now(),
@@ -630,19 +594,13 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
       return true;
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('PGRST204') || msg.contains("'parent_comment_id'") || msg.contains('schema cache')) {
-        state = state.copyWith(
-            error: 'Failed to add reply: parent_comment_id missing in post_comments. Run migration and reload API schema.'
-        );
-      } else {
-        state = state.copyWith(error: 'Failed to add reply: $e');
-      }
+      print('ERROR: Failed to add reply: $e');
+      state = state.copyWith(error: 'Failed to add reply: $e');
       return false;
     }
   }
 
-  // Toggle comment like
+  // Toggle comment like - trigger handles count
   Future<void> toggleCommentLike(int commentId) async {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) return;
@@ -666,43 +624,19 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
           .maybeSingle();
 
       if (existingLike != null) {
-        // Unlike
+        // Unlike - trigger will handle count
         await _supabase
             .from('post_comment_likes')
             .delete()
             .eq('post_comment_like_id', existingLike['post_comment_like_id'])
             .eq('user_id', currentUserId);
-
-        final currentComment = await _supabase
-            .from('post_comments')
-            .select('like_count')
-            .eq('comment_id', commentId)
-            .single();
-
-        final newCount = (currentComment['like_count'] as int) - 1;
-        await _supabase
-            .from('post_comments')
-            .update({'like_count': newCount >= 0 ? newCount : 0})
-            .eq('comment_id', commentId);
       } else {
-        // Like
+        // Like - trigger will handle count
         await _supabase.from('post_comment_likes').insert({
           'comment_id': commentId,
           'user_id': currentUserId,
           'liked_at': DateTime.now().toIso8601String(),
         });
-
-        final currentComment = await _supabase
-            .from('post_comments')
-            .select('like_count')
-            .eq('comment_id', commentId)
-            .single();
-
-        final newCount = (currentComment['like_count'] as int) + 1;
-        await _supabase
-            .from('post_comments')
-            .update({'like_count': newCount})
-            .eq('comment_id', commentId);
       }
 
       state = state.copyWith(
