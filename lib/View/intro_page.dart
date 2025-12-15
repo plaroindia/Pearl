@@ -6,8 +6,6 @@ import 'package:flutter/animation.dart';
 import 'dart:async';
 import 'home_page.dart';
 import 'navipg.dart';
-import '../constants/auth_keys.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 
 class IntroPage extends ConsumerStatefulWidget {
@@ -19,8 +17,6 @@ class IntroPage extends ConsumerStatefulWidget {
 
 class _IntroPageState extends ConsumerState<IntroPage> with TickerProviderStateMixin {
   bool _isInitializing = true;
-  bool _initializationFailed = false;
-  String? _errorMessage;
 
   late final AnimationController _zoomController;
   late final Animation<double> _zoomAnimation;
@@ -60,8 +56,15 @@ class _IntroPageState extends ConsumerState<IntroPage> with TickerProviderStateM
     // Start animation sequence
     _startAnimations();
 
-    // Initialize Supabase
-    _initializeSupabase();
+    // Supabase is now initialized in main(), wait a bit then navigate
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+        _completeAnimationsAndNavigate();
+      }
+    });
   }
 
   Future<void> _startAnimations() async {
@@ -69,7 +72,7 @@ class _IntroPageState extends ConsumerState<IntroPage> with TickerProviderStateM
     await _zoomController.forward();
 
     // Loop the zoom animation while initializing
-    if (_isInitializing && !_initializationFailed) {
+    if (_isInitializing) {
       _zoomController.repeat(reverse: true);
     }
   }
@@ -105,46 +108,7 @@ class _IntroPageState extends ConsumerState<IntroPage> with TickerProviderStateM
     super.dispose();
   }
 
-  Future<void> _initializeSupabase() async {
-    try {
-      await Supabase.initialize(
-        url: url,
-        anonKey: anonKey,
-        authOptions: const FlutterAuthClientOptions(
-          autoRefreshToken: true,
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-
-        // Complete animations and navigate
-        await _completeAnimationsAndNavigate();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-          _initializationFailed = true;
-          _errorMessage = e.toString();
-        });
-
-        // If initialization fails, still complete animations and go to login
-        await _completeAnimationsAndNavigate();
-      }
-    }
-  }
-
-  void _retryInitialization() {
-    setState(() {
-      _isInitializing = true;
-      _initializationFailed = false;
-      _errorMessage = null;
-    });
-    _initializeSupabase();
-  }
+  // Supabase initialization moved to main()
 
   @override
   Widget build(BuildContext context) {
@@ -210,39 +174,6 @@ class _IntroPageState extends ConsumerState<IntroPage> with TickerProviderStateM
                   color: Colors.white54,
                   fontSize: 16,
                 ),
-              ),
-            ] else if (_initializationFailed) ...[
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Failed to initialize',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage ?? 'Unknown error',
-                style: const TextStyle(
-                  color: Colors.red,
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _retryInitialization,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white24,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Retry'),
               ),
             ]
           ],

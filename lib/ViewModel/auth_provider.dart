@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../config/app_config.dart';
 
 final supAuthProv = Provider((ref) => Supabase.instance.client.auth);
 
@@ -20,7 +21,7 @@ class AuthController {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     // Use your WEB client ID here (not Android client ID)
-    serverClientId: "381063348704-crl2r9amlaer6v747t0hsurj89g076pi.apps.googleusercontent.com",
+    serverClientId: AppConfig.googleSignInServerClientId,
   );
 
   AuthController(this.ref);

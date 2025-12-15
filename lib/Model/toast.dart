@@ -1,3 +1,5 @@
+import 'comment.dart';
+
 class Toast_feed {
   String? toast_id;
   String? user_id;
@@ -45,7 +47,7 @@ class Toast_feed {
       isliked: data['isliked'] ?? false,
       commentsList: data['toast_comments'] != null
           ? (data['toast_comments'] as List)
-          .map((comment) => Comment.fromMap(comment))
+          .map((comment) => Comment.fromToastMap(comment))
           .toList()
           : [],
     );
@@ -137,84 +139,5 @@ class Toast_feed {
 
   void incrementShares() {
     share_count++;
-  }
-}
-
-class Comment {
-  final int commentId;
-  final String toastId;
-  final String userId;
-  final String username;
-  final String profileImage;
-  final String content;
-  int likes;
-  bool uliked;
-  final DateTime createdAt;
-  final int? parentCommentId;
-
-  Comment({
-    required this.commentId,
-    required this.toastId,
-    required this.userId,
-    required this.username,
-    required this.profileImage,
-    required this.content,
-    this.likes = 0,
-    this.uliked = false,
-    required this.createdAt,
-    this.parentCommentId,
-  });
-
-  String get timeAgo => _formatTimeAgo(createdAt);
-
-  void toggleLike() {
-    if (uliked) {
-      likes = likes > 0 ? likes - 1 : 0;
-      uliked = false;
-    } else {
-      likes++;
-      uliked = true;
-    }
-  }
-
-  factory Comment.fromMap(Map<String, dynamic> map) {
-    return Comment(
-      commentId: map['comment_id'] ?? 0,
-      toastId: map['toast_id'] ?? '',
-      userId: map['user_id'] ?? '',
-      username: map['username'] ?? 'Unknown User',
-      profileImage: map['profile_pic'] ?? 'assets/plaro new logo.png',
-      content: map['content'] ?? '',
-      likes: map['like_count'] ?? 0,
-      uliked: map['uliked'] ?? false,
-      createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
-          : DateTime.now(),
-      parentCommentId: map['parent_comment_id'],
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'comment_id': commentId,
-      'toast_id': toastId,
-      'user_id': userId,
-      'username': username,
-      'profile_pic': profileImage,
-      'content': content,
-      'like_count': likes,
-      'uliked': uliked,
-      'created_at': createdAt.toIso8601String(),
-      'parent_comment_id': parentCommentId,
-    };
-  }
-
-  static String _formatTimeAgo(DateTime timestamp) {
-    final diff = DateTime.now().difference(timestamp);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
   }
 }

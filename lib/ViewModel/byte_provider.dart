@@ -5,71 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import '../Model/byte.dart';
-
-// Comment model for bytes
-class ByteComment {
-  final String commentId;
-  final String byteId;
-  final String userId;
-  final String content;
-  final String username;
-  final String? profilePic;
-  final int likeCount;
-  final bool isliked;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final String? parentCommentId;
-
-  ByteComment({
-    required this.commentId,
-    required this.byteId,
-    required this.userId,
-    required this.content,
-    required this.username,
-    this.profilePic,
-    required this.likeCount,
-    required this.isliked,
-    required this.createdAt,
-    required this.updatedAt,
-    this.parentCommentId,
-  });
-
-  factory ByteComment.fromJson(Map<String, dynamic> json) {
-    return ByteComment(
-      commentId: json['comment_id'].toString(),
-      byteId: json['byte_id'].toString(),
-      userId: json['user_id'].toString(),
-      content: json['content']?.toString() ?? '',
-      username: json['username']?.toString() ?? 'Unknown',
-      profilePic: json['profile_pic']?.toString(),
-      likeCount: json['like_count'] is int ? json['like_count'] : int.tryParse(json['like_count']?.toString() ?? '0') ?? 0,
-      isliked: json['isliked'] == true || json['isliked'] == 1,
-      createdAt: DateTime.parse(json['created_at']?.toString() ?? DateTime.now().toIso8601String()),
-      updatedAt: DateTime.parse(json['updated_at']?.toString() ?? DateTime.now().toIso8601String()),
-      parentCommentId: json['parent_comment_id']?.toString(),
-    );
-  }
-
-  ByteComment copyWith({
-    int? likeCount,
-    bool? isliked,
-    DateTime? updatedAt,
-  }) {
-    return ByteComment(
-      commentId: commentId,
-      byteId: byteId,
-      userId: userId,
-      content: content,
-      username: username,
-      profilePic: profilePic,
-      likeCount: likeCount ?? this.likeCount,
-      isliked: isliked ?? this.isliked,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      parentCommentId: parentCommentId,
-    );
-  }
-}
+import '../Model/comment.dart';
 
 // Byte create state
 class ByteCreateState {
@@ -118,7 +54,7 @@ class BytesFeedState {
   final Set<String> likingComments;
   final bool hasMore;
   final int currentPage;
-  final Map<String, List<ByteComment>> commentsByByteId;
+  final Map<String, List<Comment>> commentsByByteId;
   final Set<String> loadingComments;
 
   const BytesFeedState({
@@ -143,7 +79,7 @@ class BytesFeedState {
     Set<String>? likingComments,
     bool? hasMore,
     int? currentPage,
-    Map<String, List<ByteComment>>? commentsByByteId,
+    Map<String, List<Comment>>? commentsByByteId,
     Set<String>? loadingComments,
   }) {
     return BytesFeedState(
@@ -625,7 +561,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   }
 
   // Load comments for a byte
-  Future<List<ByteComment>> loadComments(String byteId) async {
+  Future<List<Comment>> loadComments(String byteId) async {
     if (state.loadingComments.contains(byteId)) {
       return state.commentsByByteId[byteId] ?? [];
     }
@@ -653,17 +589,19 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
           .isFilter('parent_comment_id', null)
           .order('created_at', ascending: false);
 
-      final List<ByteComment> comments = [];
+      final List<Comment> comments = [];
 
       for (var commentData in response) {
-        final String commentId = commentData['comment_id'].toString();
+        final int commentId = commentData['comment_id'] is int 
+            ? commentData['comment_id'] 
+            : int.tryParse(commentData['comment_id'].toString()) ?? 0;
         final userProfile = commentData['user_profiles'];
 
         bool isliked = false;
         try {
           final likeResponse = await _supabase
               .from('byte_comment_likes')
-              .select('like_id')
+              .select('byte_comment_like_id')
               .eq('comment_id', commentId)
               .eq('user_id', user.id)
               .maybeSingle();
@@ -673,7 +611,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
           debugPrint('Error checking comment like status: $e');
         }
 
-        final comment = ByteComment.fromJson({
+        final comment = Comment.fromByteMap({
           ...commentData,
           'username': userProfile?['username'] ?? 'Unknown',
           'profile_pic': userProfile?['profile_pic'],
@@ -683,7 +621,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         comments.add(comment);
       }
 
-      final updatedComments = Map<String, List<ByteComment>>.from(state.commentsByByteId);
+      final updatedComments = Map<String, List<Comment>>.from(state.commentsByByteId);
       updatedComments[byteId] = comments;
 
       state = state.copyWith(
@@ -703,10 +641,18 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   }
 
   // Load replies for a parent comment
-  Future<List<ByteComment>> loadReplies(String byteId, String parentCommentId) async {
+  Future<List<Comment>> loadReplies(String byteId, String parentCommentIdStr) async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return [];
+
+      // Convert IDs to int for database query
+      final byteIdInt = int.tryParse(byteId);
+      final parentCommentId = int.tryParse(parentCommentIdStr);
+      if (byteIdInt == null || parentCommentId == null) {
+        debugPrint('Error: Invalid ID format - byteId: $byteId, parentCommentId: $parentCommentIdStr');
+        return [];
+      }
 
       final response = await _supabase
           .from('byte_comments')
@@ -714,21 +660,23 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
             *,
             user_profiles!byte_comments_user_id_fkey(username, profile_pic)
           ''')
-          .eq('byte_id', byteId)
+          .eq('byte_id', byteIdInt)
           .eq('parent_comment_id', parentCommentId)
           .order('created_at', ascending: true);
 
-      final List<ByteComment> replies = [];
+      final List<Comment> replies = [];
 
       for (var replyData in response) {
-        final String commentId = replyData['comment_id'].toString();
+        final int commentId = replyData['comment_id'] is int 
+            ? replyData['comment_id'] 
+            : int.tryParse(replyData['comment_id'].toString()) ?? 0;
         final userProfile = replyData['user_profiles'];
 
         bool isliked = false;
         try {
           final likeResponse = await _supabase
               .from('byte_comment_likes')
-              .select('like_id')
+              .select('byte_comment_like_id')
               .eq('comment_id', commentId)
               .eq('user_id', user.id)
               .maybeSingle();
@@ -738,7 +686,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
           debugPrint('Error checking reply like status: $e');
         }
 
-        final reply = ByteComment.fromJson({
+        final reply = Comment.fromByteMap({
           ...replyData,
           'username': userProfile?['username'] ?? 'Unknown',
           'profile_pic': userProfile?['profile_pic'],
@@ -755,8 +703,11 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     }
   }
 
-  Future<int> getRepliesCount(String parentCommentId) async {
+  Future<int> getRepliesCount(String parentCommentIdStr) async {
     try {
+      final parentCommentId = int.tryParse(parentCommentIdStr);
+      if (parentCommentId == null) return 0;
+
       final countResponse = await _supabase
           .from('byte_comments')
           .select('comment_id')
@@ -775,11 +726,19 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       final user = _supabase.auth.currentUser;
       if (user == null) return false;
 
+      // Convert IDs to int (database expects integers)
+      final byteIdInt = int.tryParse(byteId);
+      final parentCommentIdInt = int.tryParse(parentCommentId);
+      if (byteIdInt == null || parentCommentIdInt == null) {
+        debugPrint('Error: Invalid ID format - byteId: $byteId, parentCommentId: $parentCommentId');
+        return false;
+      }
+
       await _supabase.from('byte_comments').insert({
-        'byte_id': byteId,
+        'byte_id': byteIdInt,
         'user_id': user.id,
         'content': content.trim(),
-        'parent_comment_id': parentCommentId,
+        'parent_comment_id': parentCommentIdInt,
         'like_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
@@ -799,8 +758,15 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       final user = _supabase.auth.currentUser;
       if (user == null) return false;
 
+      // Convert byteId to int (database expects integer)
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        debugPrint('Error: Invalid byteId format: $byteId');
+        return false;
+      }
+
       final insertResp = await _supabase.from('byte_comments').insert({
-        'byte_id': byteId,
+        'byte_id': byteIdInt,
         'user_id': user.id,
         'content': content.trim(),
         'like_count': 0,
@@ -815,7 +781,7 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
           .eq('user_id', user.id)
           .single();
 
-      final newComment = ByteComment.fromJson({
+      final newComment = Comment.fromByteMap({
         ...insertResp,
         'username': userProfile['username'] ?? 'Unknown',
         'profile_pic': userProfile['profile_pic'],
@@ -850,26 +816,28 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     }
   }
 
-  Future<void> toggleCommentLike(String commentId) async {
+  Future<void> toggleCommentLike(String commentIdStr) async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      if (state.likingComments.contains(commentId)) {
+      if (state.likingComments.contains(commentIdStr)) {
         return;
       }
 
       state = state.copyWith(
-        likingComments: {...state.likingComments, commentId},
+        likingComments: {...state.likingComments, commentIdStr},
       );
+      
+      final int commentId = int.tryParse(commentIdStr) ?? 0;
 
-      ByteComment? targetComment;
+      Comment? targetComment;
       String? targetByteId;
 
       for (var entry in state.commentsByByteId.entries) {
         try {
           final comment = entry.value.firstWhere(
-                (c) => c.commentId == commentId,
+                (c) => c.commentId.toString() == commentId,
           );
           targetComment = comment;
           targetByteId = entry.key;
@@ -881,19 +849,19 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
 
       if (targetComment == null || targetByteId == null) {
         state = state.copyWith(
-          likingComments: {...state.likingComments}..remove(commentId),
+          likingComments: {...state.likingComments}..remove(commentIdStr),
         );
         return;
       }
 
       // Optimistic update
       final updatedComments = state.commentsByByteId[targetByteId]!.map((comment) {
-        if (comment.commentId == commentId) {
+        if (comment.commentId.toString() == commentId) {
           return comment.copyWith(
             isliked: !comment.isliked,
-            likeCount: comment.isliked
-                ? comment.likeCount - 1
-                : comment.likeCount + 1,
+            likes: comment.isliked
+                ? comment.likes - 1
+                : comment.likes + 1,
           );
         }
         return comment;
@@ -920,14 +888,14 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       }
 
       state = state.copyWith(
-        likingComments: {...state.likingComments}..remove(commentId),
+        likingComments: {...state.likingComments}..remove(commentIdStr),
       );
     } catch (e) {
       debugPrint('Error toggling comment like: $e');
 
       // Revert on error
       state = state.copyWith(
-        likingComments: {...state.likingComments}..remove(commentId),
+        likingComments: {...state.likingComments}..remove(commentIdStr),
       );
     }
   }

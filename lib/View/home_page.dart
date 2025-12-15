@@ -230,7 +230,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     combinedFeed.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
-
+    // In your _buildCombinedFeed method, add debug logging:
+    print('DEBUG: Combined feed counts - ${combinedFeed.map((item) => '${item['type']}: ${item['data'].like_count} likes').toList()}');
     return combinedFeed;
   }
 

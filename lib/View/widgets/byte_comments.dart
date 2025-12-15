@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../ViewModel/byte_provider.dart';
+import '../../Model/comment.dart';
 
 class ByteCommentsBottomSheet extends ConsumerStatefulWidget {
   final String byteId;
@@ -23,7 +24,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
 
   bool _isLoading = true;
   bool _isSubmitting = false;
-  final Map<String, List<ByteComment>> _repliesByParent = {};
+  final Map<String, List<Comment>> _repliesByParent = {};
   final Set<String> _loadingReplies = {};
   final Set<String> _expandedComments = {};
   String? _activeReplyParentId;
@@ -357,9 +358,9 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                     ),
                     itemBuilder: (context, index) {
                       final comment = comments[index];
-                      final isLiking = likingComments.contains(comment.commentId);
-                      final isExpanded = _expandedComments.contains(comment.commentId);
-                      final replies = _repliesByParent[comment.commentId] ?? [];
+                      final isLiking = likingComments.contains(comment.commentId.toString());
+                      final isExpanded = _expandedComments.contains(comment.commentId.toString());
+                      final replies = _repliesByParent[comment.commentId.toString()] ?? [];
                       final isOwnComment = currentUserId == comment.userId;
 
                       return _buildCommentItem(
@@ -385,10 +386,10 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
   }
 
   Widget _buildCommentItem({
-    required ByteComment comment,
+    required Comment comment,
     required bool isLiking,
     required bool isExpanded,
-    required List<ByteComment> replies,
+    required List<Comment> replies,
     required bool isOwnComment,
     required String? currentUserId,
   }) {
@@ -409,10 +410,10 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                 child: CircleAvatar(
                   radius: 20,
                   backgroundColor: Colors.grey[700],
-                  backgroundImage: comment.profilePic != null && comment.profilePic!.isNotEmpty
-                      ? CachedNetworkImageProvider(comment.profilePic!)
+                  backgroundImage: comment.profileImage.isNotEmpty
+                      ? CachedNetworkImageProvider(comment.profileImage)
                       : null,
-                  child: (comment.profilePic == null || comment.profilePic!.isEmpty)
+                  child: comment.profileImage.isEmpty
                       ? Text(
                     comment.username.isNotEmpty
                         ? comment.username[0].toUpperCase()
@@ -494,7 +495,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                       children: [
                         // Like button
                         GestureDetector(
-                          onTap: isLiking ? null : () => _toggleCommentLike(comment.commentId),
+                          onTap: isLiking ? null : () => _toggleCommentLike(comment.commentId.toString()),
                           child: Row(
                             children: [
                               AnimatedSwitcher(
@@ -515,10 +516,10 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                                   key: ValueKey(comment.isliked),
                                 ),
                               ),
-                              if (comment.likeCount > 0) ...[
+                              if (comment.likes > 0) ...[
                                 const SizedBox(width: 5),
                                 Text(
-                                  '${comment.likeCount}',
+                                  '${comment.likes}',
                                   style: TextStyle(
                                     color: Colors.grey[400],
                                     fontSize: 13,
@@ -533,7 +534,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
 
                         // Reply button
                         GestureDetector(
-                          onTap: () => _startReply(comment.commentId, comment.username),
+                          onTap: () => _startReply(comment.commentId.toString(), comment.username),
                           child: Row(
                             children: [
                               Icon(Icons.reply, size: 18, color: Colors.grey[400]),
@@ -561,7 +562,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
           if (comment.parentCommentId == null)
             Padding(
               padding: const EdgeInsets.only(left: 44, top: 10),
-              child: _loadingReplies.contains(comment.commentId)
+              child: _loadingReplies.contains(comment.commentId.toString())
                   ? SizedBox(
                 width: 18,
                 height: 18,
@@ -571,7 +572,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                 ),
               )
                   : FutureBuilder<int>(
-                future: ref.read(bytesFeedProvider.notifier).getRepliesCount(comment.commentId),
+                future: ref.read(bytesFeedProvider.notifier).getRepliesCount(comment.commentId.toString()),
                 builder: (context, snapshot) {
                   final count = snapshot.data ?? 0;
                   if (count == 0 && replies.isEmpty) return const SizedBox.shrink();
@@ -579,7 +580,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                   final displayCount = replies.isNotEmpty ? replies.length : count;
 
                   return GestureDetector(
-                    onTap: () => _toggleRepliesVisibility(comment.commentId),
+                    onTap: () => _toggleRepliesVisibility(comment.commentId.toString()),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -620,7 +621,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
               child: Column(
                 children: replies.map((reply) {
                   final bytesState = ref.watch(bytesFeedProvider);
-                  final isLikingReply = bytesState.likingComments.contains(reply.commentId);
+                  final isLikingReply = bytesState.likingComments.contains(reply.commentId.toString());
                   final isOwnReply = currentUserId == reply.userId;
 
                   return _buildReplyItem(reply, isLikingReply, isOwnReply);
@@ -632,7 +633,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
     );
   }
 
-  Widget _buildReplyItem(ByteComment reply, bool isLiking, bool isOwnReply) {
+  Widget _buildReplyItem(Comment reply, bool isLiking, bool isOwnReply) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -641,10 +642,10 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
           CircleAvatar(
             radius: 16,
             backgroundColor: Colors.grey[700],
-            backgroundImage: reply.profilePic != null && reply.profilePic!.isNotEmpty
-                ? CachedNetworkImageProvider(reply.profilePic!)
+            backgroundImage: reply.profileImage.isNotEmpty
+                ? CachedNetworkImageProvider(reply.profileImage)
                 : null,
-            child: (reply.profilePic == null || reply.profilePic!.isEmpty)
+            child: reply.profileImage.isEmpty
                 ? Text(
               reply.username.isNotEmpty ? reply.username[0].toUpperCase() : 'U',
               style: const TextStyle(
@@ -713,7 +714,7 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                 const SizedBox(height: 6),
                 // Like button for reply
                 GestureDetector(
-                  onTap: isLiking ? null : () => _toggleCommentLike(reply.commentId),
+                  onTap: isLiking ? null : () => _toggleCommentLike(reply.commentId.toString()),
                   child: Row(
                     children: [
                       AnimatedSwitcher(
@@ -734,10 +735,10 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                           key: ValueKey(reply.isliked),
                         ),
                       ),
-                      if (reply.likeCount > 0) ...[
+                      if (reply.likes > 0) ...[
                         const SizedBox(width: 4),
                         Text(
-                          '${reply.likeCount}',
+                          '${reply.likes}',
                           style: TextStyle(
                             color: Colors.grey[500],
                             fontSize: 12,

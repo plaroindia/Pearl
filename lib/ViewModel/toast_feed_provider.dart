@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:plaro_3/Model/toast.dart';
+import '../Model/comment.dart';
 
 // State for toast feed
 class ToastFeedState {
@@ -78,7 +79,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
   final Map<String, List<Comment>> _commentCache = {};
   static const _cacheExpiry = Duration(minutes: 5);
 
-  // Helper method to map toast data
+  // FIXED: Helper method to map toast data with proper count mapping
   Toast_feed _mapToToastFeed(
       Map<String, dynamic> toastData,
       String userId,
@@ -86,16 +87,24 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       ) {
     final String toastId = toastData['toast_id'].toString();
 
-    return Toast_feed.fromMap({
-      ...toastData,
-      'username': toastData['user_profiles']['username'],
-      'profile_pic': toastData['user_profiles']['profile_pic'],
-      'isliked': likedToastIds.contains(toastId),
-      'toast_comments': [],
-    });
+    return Toast_feed(
+      toast_id: toastId,
+      user_id: toastData['user_id']?.toString() ?? '',
+      username: toastData['user_profiles']?['username'] ?? 'Unknown User',
+      profile_pic: toastData['user_profiles']?['profile_pic'],
+      content: toastData['content'],
+      title: toastData['title'],
+      tags: toastData['tags'] != null ? List<String>.from(toastData['tags']) : [],
+      created_at: toastData['created_at']?.toString(),
+      like_count: (toastData['like_count'] as int?) ?? 0, // FIXED: Direct mapping
+      comment_count: (toastData['comment_count'] as int?) ?? 0, // FIXED: Direct mapping
+      share_count: (toastData['share_count'] as int?) ?? 0, // FIXED: Direct mapping
+      isliked: likedToastIds.contains(toastId),
+      commentsList: [],
+    );
   }
 
-  // OPTIMIZED: Load initial posts with single efficient query
+  // FIXED: Load initial posts with proper count mapping
   Future<void> loadTosts() async {
     if (state.isLoading) return;
 
@@ -167,8 +176,6 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       final List<Toast_feed> newToasts = [];
 
       for (var toastData in toastsData) {
-        final String toastId = toastData['toast_id'].toString();
-
         final toast = _mapToToastFeed(
           toastData,
           user.id,
@@ -177,7 +184,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
         newToasts.add(toast);
 
-        _toastCache[toastId] = CachedToast(
+        _toastCache[toast.toast_id!] = CachedToast(
           toast: toast,
           timestamp: DateTime.now(),
         );
@@ -191,7 +198,7 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         lastFetchTime: DateTime.now(),
       );
 
-      print('SUCCESS: Loaded ${newToasts.length} toasts efficiently');
+      print('SUCCESS: Loaded ${newToasts.length} toasts with counts: ${newToasts.map((t) => '${t.toast_id}: ${t.like_count} likes').toList()}');
     } catch (error) {
       print('ERROR: Error loading toasts: $error');
       state = state.copyWith(
@@ -439,11 +446,11 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       }
 
       final List<Comment> comments = (response as List<dynamic>).map((commentData) {
-        return Comment.fromMap({
+        return Comment.fromToastMap({
           ...commentData,
           'username': commentData['user_profiles']['username'],
           'profile_pic': commentData['user_profiles']['profile_pic'],
-          'uliked': likedCommentIds.contains(commentData['comment_id']),
+          'uliked': likedCommentIds.contains(commentData['comment_id']), // Keep 'uliked' for toast compatibility
         });
       }).toList();
 

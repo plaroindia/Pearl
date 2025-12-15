@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/post.dart';
+import '../Model/comment.dart';
 
 // State class for post feed
 class PostFeedState {
@@ -79,7 +80,34 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
   final Map<String, List<Comment>> _commentCache = {};
   static const _cacheExpiry = Duration(minutes: 5);
 
-  // OPTIMIZED: Load initial posts with single efficient query
+  // FIXED: Proper mapping function
+  Post_feed _mapToPostFeed(Map<String, dynamic> postData, String userId, Set<int> likedPostIds) {
+    final int postId = postData['post_id'] as int;
+    final String postIdString = postId.toString();
+
+    return Post_feed(
+      post_id: postIdString,
+      user_id: postData['user_id']?.toString() ?? '',
+      username: postData['user_profiles']?['username'] ?? 'Unknown User',
+      profile_pic: postData['user_profiles']?['profile_pic'],
+      content: postData['content'],
+      title: postData['title'],
+      tags: postData['tags'] != null ? List<String>.from(postData['tags']) : [],
+      created_at: postData['created_at'] != null
+          ? DateTime.parse(postData['created_at'])
+          : null,
+      like_count: (postData['like_count'] as int?) ?? 0, // FIXED: Direct mapping
+      comment_count: (postData['comment_count'] as int?) ?? 0, // FIXED: Direct mapping
+      share_count: (postData['share_count'] as int?) ?? 0, // FIXED: Direct mapping
+      isliked: likedPostIds.contains(postId), // FIXED: Use integer comparison
+      commentsList: [],
+      media_urls: postData['media_urls'] != null
+          ? List<String>.from(postData['media_urls'])
+          : [],
+    );
+  }
+
+  // FIXED: Load initial posts with proper count mapping
   Future<void> loadPosts() async {
     if (state.isLoading) return;
 
@@ -104,23 +132,24 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
+      // FIXED: Query with proper field selection
       final response = await _supabase
           .from('post')
           .select('''
-          post_id,
-          user_id,
-          content,
-          report,
-          title,
-          tags,
-          created_at,
-          like_count,
-          comment_count,
-          share_count,
-          is_published,
-          media_urls,
-          user_profiles!inner(username, profile_pic)
-        ''')
+            post_id,
+            user_id,
+            content,
+            report,
+            title,
+            tags,
+            created_at,
+            like_count,
+            comment_count,
+            share_count,
+            is_published,
+            media_urls,
+            user_profiles!inner(username, profile_pic)
+          ''')
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
@@ -138,7 +167,8 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
-      final postIds = postsData.map((p) => p['post_id'] as int).toList();
+      // FIXED: Use integer post IDs for like checking
+      final postIds = postsData.map<int>((p) => p['post_id'] as int).toList();
 
       final userLikes = await _supabase
           .from('post_likes')
@@ -147,27 +177,16 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
           .inFilter('post_id', postIds);
 
       final likedPostIds = (userLikes as List<dynamic>)
-          .map((l) => l['post_id'] as int)
+          .map<int>((l) => l['post_id'] as int)
           .toSet();
 
       final List<Post_feed> newPosts = [];
 
       for (var postData in postsData) {
-        final int postId = postData['post_id'] as int;
-        final String postIdString = postId.toString();
-
-        final post = Post_feed.fromMap({
-          ...postData,
-          'post_id': postIdString,
-          'username': postData['user_profiles']['username'],
-          'profile_pic': postData['user_profiles']['profile_pic'],
-          'isliked': likedPostIds.contains(postId),
-          'post_comments': [],
-        });
-
+        final post = _mapToPostFeed(postData, user.id, likedPostIds);
         newPosts.add(post);
 
-        _postCache[postIdString] = CachedPost(
+        _postCache[post.post_id!] = CachedPost(
           post: post,
           timestamp: DateTime.now(),
         );
@@ -181,7 +200,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         lastFetchTime: DateTime.now(),
       );
 
-      print('SUCCESS: Loaded ${newPosts.length} posts efficiently');
+      print('SUCCESS: Loaded ${newPosts.length} posts with counts: ${newPosts.map((p) => '${p.post_id}: ${p.like_count} likes').toList()}');
     } catch (e) {
       print('ERROR: Error loading posts: $e');
       state = state.copyWith(
@@ -191,7 +210,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
-  // OPTIMIZED: Load more posts (pagination)
+  // FIXED: Load more posts
   Future<void> loadMorePosts() async {
     if (state.isLoadingMore || !state.hasMore) return;
 
@@ -207,20 +226,20 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       final response = await _supabase
           .from('post')
           .select('''
-          post_id,
-          user_id,
-          content,
-          report,
-          title,
-          tags,
-          created_at,
-          like_count,
-          comment_count,
-          share_count,
-          is_published,
-          media_urls,
-          user_profiles!inner(username, profile_pic)
-        ''')
+            post_id,
+            user_id,
+            content,
+            report,
+            title,
+            tags,
+            created_at,
+            like_count,
+            comment_count,
+            share_count,
+            is_published,
+            media_urls,
+            user_profiles!inner(username, profile_pic)
+          ''')
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
@@ -235,7 +254,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         return;
       }
 
-      final postIds = postsData.map((p) => p['post_id'] as int).toList();
+      final postIds = postsData.map<int>((p) => p['post_id'] as int).toList();
 
       final userLikes = await _supabase
           .from('post_likes')
@@ -244,7 +263,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
           .inFilter('post_id', postIds);
 
       final likedPostIds = (userLikes as List<dynamic>)
-          .map((l) => l['post_id'] as int)
+          .map<int>((l) => l['post_id'] as int)
           .toSet();
 
       final List<Post_feed> newPosts = [];
@@ -255,15 +274,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
         if (state.posts.any((p) => p.post_id == postIdString)) continue;
 
-        final post = Post_feed.fromMap({
-          ...postData,
-          'post_id': postIdString,
-          'username': postData['user_profiles']['username'],
-          'profile_pic': postData['user_profiles']['profile_pic'],
-          'isliked': likedPostIds.contains(postId),
-          'post_comments': [],
-        });
-
+        final post = _mapToPostFeed(postData, user.id, likedPostIds);
         newPosts.add(post);
 
         _postCache[postIdString] = CachedPost(
@@ -289,16 +300,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
-  // Refresh posts with cache invalidation
-  Future<void> refreshPosts() async {
-    print('DEBUG: Refreshing posts and clearing cache');
-    _postCache.clear();
-    _commentCache.clear();
-    state = const PostFeedState();
-    await loadPosts();
-  }
-
-  // OPTIMIZED: Toggles are handled by database triggers
+  // FIXED: Toggle like with proper count handling
   Future<void> toggleLike(String postId) async {
     print('DEBUG: toggleLike called for post: $postId');
 
@@ -348,7 +350,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
     try {
       if (currentlyLiked) {
-        // Unlike - trigger will handle count update
+        // Unlike
         print('DEBUG: Attempting to unlike post...');
         await _supabase
             .from('post_likes')
@@ -358,7 +360,7 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
         print('DEBUG: Unlike successful');
       } else {
-        // Like - trigger will handle count update
+        // Like
         print('DEBUG: Attempting to like post...');
         await _supabase.from('post_likes').insert({
           'post_id': postIdInt,
@@ -401,6 +403,15 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
     }
   }
 
+  // Refresh posts with cache invalidation
+  Future<void> refreshPosts() async {
+    print('DEBUG: Refreshing posts and clearing cache');
+    _postCache.clear();
+    _commentCache.clear();
+    state = const PostFeedState();
+    await loadPosts();
+  }
+
   // OPTIMIZED: Lazy load comments only when needed
   Future<List<Comment>> loadComments(String postId) async {
     if (_commentCache.containsKey(postId)) {
@@ -438,11 +449,11 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       }
 
       final List<Comment> comments = (response as List<dynamic>).map((commentData) {
-        return Comment.fromMap({
+        return Comment.fromPostMap({
           ...commentData,
           'username': commentData['user_profiles']['username'],
           'profile_pic': commentData['user_profiles']['profile_pic'],
-          'uliked': likedCommentIds.contains(commentData['comment_id']),
+          'isliked': likedCommentIds.contains(commentData['comment_id']), // Changed from 'uliked' to 'isliked'
         });
       }).toList();
 

@@ -31,10 +31,12 @@ android {
     }
 
     buildTypes {
-
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // IMPORTANT: Disable minification and shrinking for video playback
+            isMinifyEnabled = false
+            isShrinkResources = false
+
+            // Use debug signing for testing (replace with your release config later)
             signingConfig = signingConfigs.getByName("debug")
         }
     }

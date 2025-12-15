@@ -50,33 +50,59 @@ class _BytesFullScreenState extends ConsumerState<BytesFullScreen> {
 
   VideoPlayerController _getController(int index, String videoUrl) {
     if (!_controllers.containsKey(index)) {
-      _controllers[index] = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        ..initialize().then((_) {
-          if (mounted && index == _currentIndex) {
-            setState(() {});
-            _controllers[index]!.play();
-            _controllers[index]!.setLooping(true);
-          }
-        }).catchError((error) {
-          debugPrint('Error initializing video: $error');
-        });
+      debugPrint('🎥 Creating controller for index $index: $videoUrl');
+
+      final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+
+      _controllers[index] = controller;
+
+      controller.initialize().then((_) {
+        if (!mounted) return;
+
+        debugPrint('✅ Video initialized for index $index');
+        setState(() {});
+
+        if (index == _currentIndex) {
+          controller.play();
+          controller.setLooping(true);
+        }
+      }).catchError((error) {
+        debugPrint('❌ Error initializing video: $error');
+      });
     }
     return _controllers[index]!;
   }
 
   void _onPageChanged(int index) {
-    if (_controllers[_currentIndex] != null) {
-      _controllers[_currentIndex]!.pause();
-      _controllers[_currentIndex]!.seekTo(Duration.zero);
+    debugPrint('🔄 Page changed from $_currentIndex to $index');
+
+    // Pause and reset previous video
+    if (_controllers.containsKey(_currentIndex)) {
+      final prevController = _controllers[_currentIndex]!;
+      if (prevController.value.isInitialized) {
+        prevController.pause();
+        prevController.seekTo(Duration.zero);
+        debugPrint('⏸️ Paused video at index $_currentIndex');
+      }
     }
 
     setState(() {
       _currentIndex = index;
     });
 
-    if (_controllers[index] != null && _controllers[index]!.value.isInitialized) {
-      _controllers[index]!.seekTo(Duration.zero);
-      _controllers[index]!.play();
+    // Play new video if initialized
+    if (_controllers.containsKey(index)) {
+      final newController = _controllers[index]!;
+      if (newController.value.isInitialized) {
+        newController.seekTo(Duration.zero);
+        newController.play();
+        newController.setLooping(true);
+        debugPrint('▶️ Playing video at index $index');
+      } else {
+        debugPrint('⏳ Video at index $index not yet initialized');
+      }
+    } else {
+      debugPrint('❓ No controller found for index $index');
     }
   }
 
@@ -86,8 +112,10 @@ class _BytesFullScreenState extends ConsumerState<BytesFullScreen> {
       setState(() {
         if (controller.value.isPlaying) {
           controller.pause();
+          debugPrint('⏸️ Manually paused video at index $index');
         } else {
           controller.play();
+          debugPrint('▶️ Manually playing video at index $index');
         }
       });
     }
@@ -123,21 +151,22 @@ class _BytesFullScreenState extends ConsumerState<BytesFullScreen> {
         children: [
           PageView.builder(
             controller: _pageController,
-            scrollDirection: Axis.horizontal,
+            scrollDirection: Axis.vertical,
             onPageChanged: _onPageChanged,
             itemCount: widget.bytes.length,
             itemBuilder: (context, index) {
               final byte = widget.bytes[index];
+              debugPrint('🏗️ Building page for index $index: ${byte.byteId}');
+
               return ByteVideoPlayer(
                 byte: byte,
                 controller: _getController(index, byte.videoUrl),
                 isCurrentVideo: index == _currentIndex,
                 onTogglePlayPause: () => _togglePlayPause(index),
                 onLike: () async {
-                  // Toggle like in profile feed provider
                   await ref.read(profileFeedProvider.notifier).toggleByteLike(byte.byteId);
                 },
-                onSwipeUp: () => _showCommentsModal(byte),
+                onSwipeLeft: () => _showCommentsModal(byte),
                 onShare: () => _showShareModal(byte),
                 showSwipeIndicator: true,
               );
@@ -184,7 +213,7 @@ class ByteVideoPlayer extends ConsumerStatefulWidget {
   final bool isCurrentVideo;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onLike;
-  final VoidCallback onSwipeUp;
+  final VoidCallback onSwipeLeft;
   final VoidCallback onShare;
   final bool showSwipeIndicator;
 
@@ -195,7 +224,7 @@ class ByteVideoPlayer extends ConsumerStatefulWidget {
     required this.isCurrentVideo,
     required this.onTogglePlayPause,
     required this.onLike,
-    required this.onSwipeUp,
+    required this.onSwipeLeft,
     required this.onShare,
     this.showSwipeIndicator = true,
   }) : super(key: key);
@@ -218,16 +247,21 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
 
     final isLiking = feedState.likingBytes.contains(currentByte.byteId);
 
+    debugPrint('🎬 Building ByteVideoPlayer for ${currentByte.byteId} - '
+        'Initialized: ${widget.controller.value.isInitialized}, '
+        'Playing: ${widget.controller.value.isPlaying}');
+
     return GestureDetector(
-      onVerticalDragEnd: (details) {
-        // Swipe up to show comments
+      onHorizontalDragEnd: (details) {
+        // Swipe left to show comments
         if (details.primaryVelocity != null && details.primaryVelocity! < -500) {
-          widget.onSwipeUp();
+          widget.onSwipeLeft();
         }
       },
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // Video player with double tap like functionality
           ByteDoubleTapLike(
             byteId: currentByte.byteId,
             isliked: currentByte.isliked ?? false,
@@ -243,11 +277,22 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
                 ),
               )
                   : const Center(
-                child: CircularProgressIndicator(color: Colors.white),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading video...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
 
+          // Play/pause overlay
           if (widget.controller.value.isInitialized && !widget.controller.value.isPlaying)
             IgnorePointer(
               child: Center(
@@ -449,37 +494,34 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
             ),
           ),
 
-          // Swipe up indicator (only show if enabled)
+          // Swipe left indicator (only show if enabled)
           if (widget.showSwipeIndicator)
             Positioned(
-              bottom: 100,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black38,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.keyboard_arrow_up,
+              right: 20,
+              bottom: MediaQuery.of(context).size.height / 2 - 40,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.keyboard_arrow_left,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Swipe left for comments (${currentByte.commentCount})',
+                      style: const TextStyle(
                         color: Colors.white70,
-                        size: 20,
+                        fontSize: 12,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Swipe up for comments (${currentByte.commentCount})',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
