@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import '../Model/post.dart';
 import '../ViewModel/user_feed_provider.dart';
 import 'widgets/double_tap_like.dart';
+import '../Model/comment.dart';
 
 class PostFullScreen extends ConsumerStatefulWidget {
   final Post_feed post;

@@ -1,4 +1,3 @@
-// widgets/toast_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../Model/toast.dart';
@@ -7,6 +6,7 @@ import '../../ViewModel/theme_provider.dart';
 import 'comment_card.dart';
 import 'double_tap_like.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../Model/comment.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -673,7 +673,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                                     ),
                                     subtitle: Text(r.content, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                                     trailing: IconButton(
-                                      icon: Icon(r.uliked ? Icons.favorite : Icons.favorite_border, size: 16, color: r.uliked ? Colors.red : theme.dividerColor),
+                                      icon: Icon(r.isliked ? Icons.favorite : Icons.favorite_border, size: 16, color: r.isliked ? Colors.red : theme.dividerColor),
                                       onPressed: () async {
                                         await ref.read(toastFeedProvider.notifier).toggleCommentLike(r.commentId);
                                         await _loadReplies(comment.commentId);

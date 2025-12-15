@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'zoomable_image.dart';
 import 'double_tap_like.dart';
+import '../../Model/comment.dart';
 
 class _LocalVideoPlayer extends StatefulWidget {
   final File file;

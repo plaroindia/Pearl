@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../Model/toast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../Model/comment.dart';
 
 class CommentCard extends ConsumerWidget {
   final Comment comment;
@@ -50,7 +51,7 @@ class CommentCard extends ConsumerWidget {
               IconButton(
                 padding: EdgeInsets.zero,
                 icon: Icon(
-                  comment.uliked ? Icons.favorite : Icons.favorite_border,
+                  comment.isliked ? Icons.favorite : Icons.favorite_border,
                   size: 16,
                   color: Colors.blue,
                 ),

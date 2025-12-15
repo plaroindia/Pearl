@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../Model/toast.dart';
 import '../ViewModel/user_feed_provider.dart';
+import '../Model/comment.dart';
 
 class ToastFullScreen extends ConsumerStatefulWidget {
   final Toast_feed toast;
@@ -359,9 +360,9 @@ class _ToastFullScreenState extends ConsumerState<ToastFullScreen> {
                         });
                       },
                       child: Text(
-                        comment.uliked ? 'Liked' : 'Like',
+                        comment.isliked ? 'Liked' : 'Like',
                         style: TextStyle(
-                          color: comment.uliked ? Colors.blue : Colors.grey[500],
+                          color: comment.isliked ? Colors.blue : Colors.grey[500],
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -395,8 +396,8 @@ class _ToastFullScreenState extends ConsumerState<ToastFullScreen> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             icon: Icon(
-              comment.uliked ? Icons.favorite : Icons.favorite_border,
-              color: comment.uliked ? Colors.red : Colors.grey[600],
+              comment.isliked ? Icons.favorite : Icons.favorite_border,
+              color: comment.isliked ? Colors.red : Colors.grey[600],
               size: 16,
             ),
             onPressed: () {

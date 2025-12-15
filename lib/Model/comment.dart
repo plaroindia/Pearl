@@ -130,7 +130,7 @@ class Comment {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'].toString())
           : null,
-      parentCommentId: map['parent_comment_id']?.toString(),
+      parentCommentId: map['parent_comment_id']?.to(),
     );
   }
 
