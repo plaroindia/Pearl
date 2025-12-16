@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/post.dart';
 import '../ViewModel/user_feed_provider.dart';
+import '../ViewModel/post_feed_provider.dart';
+import '../ViewModel/user_provider.dart';
 import 'widgets/double_tap_like.dart';
-import '../Model/comment.dart';
+import 'widgets/content_actions.dart';
+import 'widgets/unified_comments_bottom_sheet.dart';
+import 'post_page.dart';
 
 class PostFullScreen extends ConsumerStatefulWidget {
   final Post_feed post;
@@ -17,8 +22,6 @@ class PostFullScreen extends ConsumerStatefulWidget {
 
 class _PostFullScreenState extends ConsumerState<PostFullScreen> {
   final ScrollController _scrollController = ScrollController();
-  final TextEditingController _commentController = TextEditingController();
-  final FocusNode _commentFocusNode = FocusNode();
   int _currentMediaIndex = 0;
   final Map<int, VideoPlayerController> _videoControllers = {};
 
@@ -31,8 +34,6 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _commentController.dispose();
-    _commentFocusNode.dispose();
     _disposeVideoControllers();
     super.dispose();
   }
@@ -55,7 +56,10 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
             controller.play();
             controller.setLooping(true);
           }
-        }).catchError((e) => debugPrint('init video error: $e'));
+        }).catchError((e) {
+          debugPrint('init video error: $e');
+          return null;
+        });
 
         _videoControllers[i] = controller; // <-- now here it's fine
       }
@@ -108,6 +112,7 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
   @override
   Widget build(BuildContext context) {
     final feedState = ref.watch(profileFeedProvider);
+    final currentUserId = ref.watch(currentUserIdProvider);
 
     // Find the current post from state (for real-time updates)
     final currentPost = feedState.posts.firstWhere(
@@ -116,6 +121,7 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
     );
 
     final isLiking = feedState.likingPosts.contains(currentPost.post_id);
+    final isOwner = currentUserId != null && currentUserId == currentPost.user_id;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -148,10 +154,24 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () => _showMoreOptions(context),
-          ),
+          if (currentUserId != null)
+            ContentActionMenu(
+              data: ContentActionData(
+                contentId: currentPost.post_id ?? '',
+                userId: currentPost.user_id ?? '',
+                contentType: ContentType.post,
+                isHidden: false, // TODO: Add is_hidden field to Post model
+                shareText: currentPost.content,
+                shareUrl: 'https://yourapp.com/post/${currentPost.post_id}',
+              ),
+              callbacks: ContentActionCallbacks(
+                onEdit: isOwner ? () => _handleEdit(context, ref) : null,
+                onDelete: isOwner ? () => _handleDelete(context, ref) : null,
+                onToggleHide: isOwner ? () => _handleToggleHide(context, ref) : null,
+                onShare: () => _handleShare(context),
+              ),
+              currentUserId: currentUserId,
+            ),
         ],
       ),
       body: Column(
@@ -171,81 +191,14 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                   child: _buildPostInfoSection(currentPost),
                 ),
 
-                // Divider
+                // Bottom padding
                 const SliverToBoxAdapter(
-                  child: Divider(color: Colors.grey, height: 1),
-                ),
-
-                // Comments Section Header
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      'Comments (${currentPost.commentsList.length})',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Comments List
-                if (currentPost.commentsList.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.comment_outlined,
-                              size: 48,
-                              color: Colors.grey[600],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No comments yet',
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Be the first to comment',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                        final comment = currentPost.commentsList[index];
-                        return _buildCommentCard(comment);
-                      },
-                      childCount: currentPost.commentsList.length,
-                    ),
-                  ),
-
-                // Bottom padding for comment input
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 80),
+                  child: SizedBox(height: 16),
                 ),
               ],
             ),
           ),
 
-          // Comment Input Section
-          _buildCommentInput(),
         ],
       ),
     );
@@ -440,14 +393,22 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
                 ),
               ),
               const SizedBox(width: 24),
-              const Icon(Icons.comment_outlined, color: Colors.white, size: 26),
-              const SizedBox(width: 4),
-              Text(
-                '${post.comment_count}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+              GestureDetector(
+                onTap: () => _showCommentsBottomSheet(context, ref, post.post_id!),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.comment_outlined, color: Colors.white, size: 26),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.comment_count}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
@@ -508,238 +469,100 @@ class _PostFullScreenState extends ConsumerState<PostFullScreen> {
     );
   }
 
-  Widget _buildCommentCard(Comment comment) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundImage: comment.profileImage.isNotEmpty
-                ? NetworkImage(comment.profileImage)
-                : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      comment.username,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      comment.timeAgo,
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  comment.content,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          comment.toggleLike();
-                        });
-                      },
-                      child: Text(
-                        comment.isliked ? 'Liked' : 'Like',
-                        style: TextStyle(
-                          color: comment.isliked ? Colors.blue : Colors.grey[500],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'Reply',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (comment.likes > 0) ...[
-                      const SizedBox(width: 16),
-                      Text(
-                        '${comment.likes} likes',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(
-              comment.isliked ? Icons.favorite : Icons.favorite_border,
-              color: comment.isliked ? Colors.red : Colors.grey[600],
-              size: 16,
-            ),
-            onPressed: () {
-              setState(() {
-                comment.toggleLike();
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommentInput() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: Border(
-          top: BorderSide(color: Colors.grey[800]!, width: 1),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _commentController,
-                focusNode: _commentFocusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Add a comment...',
-                  hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[850],
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(color: Colors.blue, width: 1),
-                  ),
-                ),
-                maxLines: null,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _postComment(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.send, color: Colors.blue),
-              onPressed: _postComment,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _postComment() {
-    if (_commentController.text.trim().isEmpty) return;
-
-    // TODO: Implement comment posting logic with your backend
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Comment feature coming soon!'),
-        backgroundColor: Colors.blue,
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    _commentController.clear();
-    _commentFocusNode.unfocus();
-  }
-
-  void _showMoreOptions(BuildContext context) {
+  void _showCommentsBottomSheet(BuildContext context, WidgetRef ref, String postId) {
+    final postFeedState = ref.read(postFeedProvider);
+    
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.bookmark_outline, color: Colors.white),
-              title: const Text('Save', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Save feature coming soon!'),
-                    backgroundColor: Colors.blue,
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.link, color: Colors.white),
-              title: const Text('Copy Link', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Link copied!'),
-                    backgroundColor: Colors.blue,
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.report_outlined, color: Colors.red),
-              title: const Text('Report', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Report feature coming soon!'),
-                    backgroundColor: Colors.red,
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => UnifiedCommentsBottomSheet(
+        contentId: postId,
+        title: 'Comments',
+        commentCount: null, // Will be shown from loaded comments
+        likingComments: postFeedState.likingComments,
+        callbacks: CommentSheetCallbacks(
+          loadComments: () => ref.read(postFeedProvider.notifier).loadComments(postId),
+          loadReplies: (parentCommentId) => ref.read(postFeedProvider.notifier).loadReplies(postId, int.parse(parentCommentId)),
+          getRepliesCount: (parentCommentId) => ref.read(postFeedProvider.notifier).getRepliesCount(int.parse(parentCommentId)),
+          addComment: (content) => ref.read(postFeedProvider.notifier).addComment(postId, content),
+          addReply: (parentCommentId, content) => ref.read(postFeedProvider.notifier).addReply(postId, int.parse(parentCommentId), content),
+          toggleCommentLike: (commentId) => ref.read(postFeedProvider.notifier).toggleCommentLike(int.parse(commentId)),
+          getCurrentUserId: () => Supabase.instance.client.auth.currentUser?.id,
+          getUserProfile: () async {
+            final user = Supabase.instance.client.auth.currentUser;
+            if (user == null) return null;
+            try {
+              final response = await Supabase.instance.client
+                  .from('user_profiles')
+                  .select('profile_pic')
+                  .eq('user_id', user.id)
+                  .maybeSingle();
+              return response;
+            } catch (e) {
+              debugPrint('Error fetching user profile: $e');
+              return null;
+            }
+          },
         ),
       ),
     );
+  }
+
+  void _handleEdit(BuildContext context, WidgetRef ref) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostCreateScreen(),
+        // TODO: Pass post data to edit mode when edit functionality is implemented
+      ),
+    );
+  }
+
+  void _handleDelete(BuildContext context, WidgetRef ref) async {
+    final feedState = ref.read(profileFeedProvider);
+    final post = feedState.posts.firstWhere(
+      (p) => p.post_id == widget.post.post_id,
+      orElse: () => widget.post,
+    );
+    
+    if (post.post_id == null) return;
+
+    final success = await ref.read(profileFeedProvider.notifier).deletePost(post.post_id!);
+    if (context.mounted) {
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete post'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleToggleHide(BuildContext context, WidgetRef ref) {
+    // TODO: Implement hide/unhide functionality
+    // This requires adding is_hidden field to post table and updating providers
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hide functionality coming soon'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  void _handleShare(BuildContext context) {
+    // Share functionality - uses default from ContentActionMenu (copy link)
+    // Could be enhanced to use platform share dialog
   }
 
   String _formatTimestamp(DateTime? timestamp) {

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../Model/toast.dart';
 import '../../ViewModel/toast_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart';
-import 'comment_card.dart';
 import 'double_tap_like.dart';
+import 'unified_comments_bottom_sheet.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../Model/comment.dart';
 
 class ToastCard extends ConsumerWidget {
   final Toast_feed toast;
@@ -384,323 +384,45 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class CommentsBottomSheet extends ConsumerStatefulWidget {
+// CommentsBottomSheet - Now uses unified bottom sheet
+class CommentsBottomSheet extends ConsumerWidget {
   final String toastId;
 
   const CommentsBottomSheet({Key? key, required this.toastId}) : super(key: key);
 
   @override
-  ConsumerState<CommentsBottomSheet> createState() => _CommentsBottomSheetState();
-}
-
-class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
-  final TextEditingController _commentController = TextEditingController();
-  final TextEditingController _replyController = TextEditingController();
-  final FocusNode _replyFocusNode = FocusNode();
-  List<Comment> _comments = [];
-  bool _isLoading = true;
-  bool _isSubmitting = false;
-  bool _isSubmittingReply = false;
-  final Map<int, List<Comment>> _repliesByParent = {};
-  final Set<int> _loadingReplies = {};
-  int? _activeReplyParentId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadComments();
-  }
-
-  Future<void> _loadComments() async {
-    setState(() => _isLoading = true);
-    final comments = await ref.read(toastFeedProvider.notifier).loadComments(widget.toastId);
-    setState(() {
-      _comments = comments;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _loadReplies(int parentCommentId) async {
-    setState(() { _loadingReplies.add(parentCommentId); });
-    final replies = await ref.read(toastFeedProvider.notifier).loadReplies(widget.toastId, parentCommentId);
-    if (!mounted) return;
-    setState(() {
-      _repliesByParent[parentCommentId] = replies;
-      _loadingReplies.remove(parentCommentId);
-    });
-  }
-
-  void _toggleReplies(int parentCommentId) {
-    final hasReplies = _repliesByParent[parentCommentId]?.isNotEmpty == true;
-    if (hasReplies) {
-      setState(() {
-        _repliesByParent.remove(parentCommentId);
-      });
-    } else {
-      _loadReplies(parentCommentId);
-    }
-  }
-
-  Future<void> _submitComment() async {
-    if (_commentController.text.trim().isEmpty) return;
-
-    setState(() => _isSubmitting = true);
-
-    final success = await ref.read(toastFeedProvider.notifier).addComment(
-      widget.toastId,
-      _commentController.text.trim(),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final toastFeedState = ref.read(toastFeedProvider);
+    
+    return UnifiedCommentsBottomSheet(
+      contentId: toastId,
+      title: 'Comments',
+      commentCount: null,
+      likingComments: toastFeedState.likingComments,
+      callbacks: CommentSheetCallbacks(
+        loadComments: () => ref.read(toastFeedProvider.notifier).loadComments(toastId),
+        loadReplies: (parentCommentId) => ref.read(toastFeedProvider.notifier).loadReplies(toastId, int.parse(parentCommentId)),
+        getRepliesCount: (parentCommentId) => ref.read(toastFeedProvider.notifier).getRepliesCount(int.parse(parentCommentId)),
+        addComment: (content) => ref.read(toastFeedProvider.notifier).addComment(toastId, content),
+        addReply: (parentCommentId, content) => ref.read(toastFeedProvider.notifier).addReply(toastId, int.parse(parentCommentId), content),
+        toggleCommentLike: (commentId) => ref.read(toastFeedProvider.notifier).toggleCommentLike(int.parse(commentId)),
+        getCurrentUserId: () => Supabase.instance.client.auth.currentUser?.id,
+        getUserProfile: () async {
+          final user = Supabase.instance.client.auth.currentUser;
+          if (user == null) return null;
+          try {
+            final response = await Supabase.instance.client
+                .from('user_profiles')
+                .select('profile_pic')
+                .eq('user_id', user.id)
+                .maybeSingle();
+            return response;
+          } catch (e) {
+            debugPrint('Error fetching user profile: $e');
+            return null;
+          }
+        },
+      ),
     );
-
-    if (success) {
-      _commentController.clear();
-      await _loadComments(); // Reload comments
-    }
-
-    setState(() => _isSubmitting = false);
-  }
-
-  Future<void> _submitReply(int parentCommentId, String parentUsername) async {
-    if (_replyController.text.trim().isEmpty) return;
-
-    setState(() => _isSubmittingReply = true);
-
-    final content = _replyController.text.trim().startsWith('@')
-        ? _replyController.text.trim()
-        : '@$parentUsername ${_replyController.text.trim()}';
-
-    final ok = await ref.read(toastFeedProvider.notifier).addReply(
-      widget.toastId,
-      parentCommentId,
-      content,
-    );
-
-    if (ok) {
-      _replyController.clear();
-      await _loadReplies(parentCommentId);
-    }
-
-    if (mounted) setState(() => _isSubmittingReply = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.cardTheme.color,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: theme.dividerColor.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Text(
-                  'Comments',
-                  style: TextStyle(
-                      color: theme.colorScheme.onSurface,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold
-                  ),
-                ),
-              ),
-
-              // Comment / Reply input
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  border: Border(top: BorderSide(color: theme.dividerColor)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _activeReplyParentId != null ? _replyController : _commentController,
-                        focusNode: _activeReplyParentId != null ? _replyFocusNode : null,
-                        style: TextStyle(color: theme.colorScheme.onSurface),
-                        decoration: InputDecoration(
-                          hintText: _activeReplyParentId != null ? 'Reply…' : 'Add a comment...',
-                          hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(25),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: theme.scaffoldBackgroundColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: theme.scaffoldBackgroundColor,
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      child: IconButton(
-                        icon: (_activeReplyParentId != null ? _isSubmittingReply : _isSubmitting)
-                            ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-                          ),
-                        )
-                            : Icon(Icons.send, color: theme.colorScheme.primary),
-                        onPressed: (_activeReplyParentId != null)
-                            ? (_isSubmittingReply ? null : () {
-                          final parent = _comments.firstWhere((c) => c.commentId == _activeReplyParentId);
-                          _submitReply(_activeReplyParentId!, parent.username);
-                        })
-                            : (_isSubmitting ? null : _submitComment),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Comments list
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                    child: CircularProgressIndicator(color: theme.colorScheme.primary)
-                )
-                    : _comments.isEmpty
-                    ? Center(
-                  child: Text(
-                    'No comments yet. Be the first to comment!',
-                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                  ),
-                )
-                    : ListView.builder(
-                  controller: scrollController,
-                  itemCount: _comments.length,
-                  itemBuilder: (context, index) {
-                    final comment = _comments[index];
-                    final isLoadingReplies = _loadingReplies.contains(comment.commentId);
-                    final replies = _repliesByParent[comment.commentId] ?? const <Comment>[];
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CommentCard(
-                            comment: comment,
-                            onLike: () async {
-                              await ref.read(toastFeedProvider.notifier).toggleCommentLike(comment.commentId);
-                              await _loadComments();
-                            },
-                            onReply: () {
-                              setState(() {
-                                _activeReplyParentId = comment.commentId;
-                                _replyController.text = '@${comment.username} ';
-                                _replyController.selection = TextSelection.fromPosition(
-                                  TextPosition(offset: _replyController.text.length),
-                                );
-                              });
-                              FocusScope.of(context).requestFocus(_replyFocusNode);
-                            },
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 56.0),
-                            child: FutureBuilder<int>(
-                              future: ref.read(toastFeedProvider.notifier).getRepliesCount(comment.commentId),
-                              builder: (context, snapshot) {
-                                final count = snapshot.data ?? 0;
-                                final hasRepliesLoaded = (_repliesByParent[comment.commentId] ?? const <Comment>[]).isNotEmpty;
-                                if (count <= 0) return const SizedBox.shrink();
-                                return TextButton(
-                                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                                  onPressed: () => _toggleReplies(comment.commentId),
-                                  child: Text(
-                                    hasRepliesLoaded ? 'Hide replies' : 'View replies ($count)',
-                                    style: TextStyle(color: theme.dividerColor, fontSize: 13),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          if (isLoadingReplies)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 56.0, top: 4),
-                              child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                            ),
-                          if (replies.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 56.0, top: 4),
-                              child: Column(
-                                children: replies.map((r) {
-                                  return ListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: CircleAvatar(
-                                      radius: 12,
-                                      backgroundImage: r.profileImage.isNotEmpty
-                                          ? NetworkImage(r.profileImage)
-                                          : const AssetImage('assets/plaro_logo.png') as ImageProvider,
-                                    ),
-                                    title: Row(
-                                      children: [
-                                        Text(r.username, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                                        const SizedBox(width: 6),
-                                        Text(r.timeAgo, style: TextStyle(color: theme.dividerColor, fontSize: 11)),
-                                      ],
-                                    ),
-                                    subtitle: Text(r.content, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                                    trailing: IconButton(
-                                      icon: Icon(r.isliked ? Icons.favorite : Icons.favorite_border, size: 16, color: r.isliked ? Colors.red : theme.dividerColor),
-                                      onPressed: () async {
-                                        await ref.read(toastFeedProvider.notifier).toggleCommentLike(r.commentId);
-                                        await _loadReplies(comment.commentId);
-                                      },
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    _replyController.dispose();
-    _replyFocusNode.dispose();
-    super.dispose();
   }
 }

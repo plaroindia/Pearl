@@ -5,8 +5,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../Model/byte.dart';
 import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/auth_provider.dart';
+import '../ViewModel/byte_provider.dart';
 import 'widgets/double_tap_like.dart';
 import 'widgets/byte_comments.dart';
+import 'widgets/content_actions.dart';
+import 'byte_page.dart';
 
 class BytesFullScreen extends ConsumerStatefulWidget {
   final List<Byte> bytes;
@@ -245,8 +248,6 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
       orElse: () => widget.byte,
     );
 
-    final isLiking = feedState.likingBytes.contains(currentByte.byteId);
-
     debugPrint('🎬 Building ByteVideoPlayer for ${currentByte.byteId} - '
         'Initialized: ${widget.controller.value.isInitialized}, '
         'Playing: ${widget.controller.value.isPlaying}');
@@ -312,11 +313,11 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
             ),
 
           // Bottom gradient
-          IgnorePointer(
-            child: Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
               child: Container(
                 height: 200,
                 decoration: const BoxDecoration(
@@ -334,6 +335,7 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
             ),
           ),
 
+          
           // Bottom content area
           Positioned(
             bottom: 3,
@@ -441,21 +443,30 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
                     const SizedBox(width: 10),
 
                     // More options button
-                    GestureDetector(
-                      onTap: () => _showMoreOptions(context, currentByte),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
+                    if (authState.value?.user != null)
+                      ContentActionMenu(
+                        data: ContentActionData(
+                          contentId: currentByte.byteId,
+                          userId: currentByte.userId,
+                          contentType: ContentType.byte,
+                          isHidden: false, // TODO: Add is_hidden field to Byte model
+                          shareText: currentByte.caption,
+                          shareUrl: 'https://yourapp.com/byte/${currentByte.byteId}',
                         ),
-                        child: const Icon(
-                          Icons.more_vert,
-                          color: Colors.white,
-                          size: 20,
+                        callbacks: ContentActionCallbacks(
+                          onEdit: authState.value!.user.id == currentByte.userId
+                              ? () => _handleEdit(context, ref, currentByte)
+                              : null,
+                          onDelete: authState.value!.user.id == currentByte.userId
+                              ? () => _handleDelete(context, ref, currentByte)
+                              : null,
+                          onToggleHide: authState.value!.user.id == currentByte.userId
+                              ? () => _handleToggleHide(context, ref, currentByte)
+                              : null,
+                          onShare: () => _handleShare(context, currentByte),
                         ),
+                        currentUserId: authState.value!.user.id,
                       ),
-                    ),
                   ],
                 ),
 
@@ -530,15 +541,53 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
     );
   }
 
-  void _showMoreOptions(BuildContext context, Byte byte) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+  void _handleEdit(BuildContext context, WidgetRef ref, Byte byte) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ByteCreateScreen(),
+        // TODO: Pass byte data to edit mode when edit functionality is implemented
       ),
-      builder: (context) => MoreOptionsModal(byte: byte),
     );
+  }
+
+  void _handleDelete(BuildContext context, WidgetRef ref, Byte byte) async {
+    final success = await ref.read(byteCreateProvider.notifier).deleteByte(byte.byteId);
+    if (context.mounted) {
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Byte deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Refresh feed
+        ref.read(bytesFeedProvider.notifier).refreshBytes();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete byte'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleToggleHide(BuildContext context, WidgetRef ref, Byte byte) {
+    // TODO: Implement hide/unhide functionality
+    // This requires adding is_hidden field to bytes table and updating providers
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hide functionality coming soon'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  void _handleShare(BuildContext context, Byte byte) {
+    // Share functionality - uses default from ContentActionMenu (copy link)
   }
 
   String _formatCount(int count) {

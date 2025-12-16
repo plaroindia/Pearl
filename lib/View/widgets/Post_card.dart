@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../Model/post.dart';
 import '../../ViewModel/post_feed_provider.dart';
 import '../../ViewModel/theme_provider.dart'; // Add this import
-import 'post_comment_card.dart';
+import 'unified_comments_bottom_sheet.dart';
 import 'dart:io';
 // import '../profile.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'zoomable_image.dart';
 import 'double_tap_like.dart';
-import '../../Model/comment.dart';
+import 'full_screen_image_viewer.dart';
 
 class _LocalVideoPlayer extends StatefulWidget {
   final File file;
@@ -465,13 +466,31 @@ class _PostCardState extends ConsumerState<PostCard> {
           final file = files[index];
           return _isVideoFile(file.path)
               ? _LocalVideoPlayer(file: File(file.path))
-              : ResettingInteractiveViewer(
-            boundaryMargin: const EdgeInsets.all(20),
-            minScale: 1.0,
-            maxScale: 4.0,
-            child: Image.file(
-              File(file.path),
-              fit: BoxFit.cover,
+              : GestureDetector(
+            onTap: () {
+              // For local files, extract image URLs from all non-video files
+              final imageFiles = files
+                  .where((f) => !_isVideoFile(f.path))
+                  .map((f) => f.path)
+                  .toList();
+              final currentImageIndex = imageFiles.indexOf(file.path);
+
+              // Note: FullScreenImageViewer expects URLs, not local paths
+              // You might want to upload these first or create a local variant
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Upload images to view in full screen'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: ZoomableImage(
+              minScale: 1.0,
+              maxScale: 4.0,
+              child: Image.file(
+                File(file.path),
+                fit: BoxFit.cover,
+              ),
             ),
           );
         },
@@ -491,13 +510,21 @@ class _PostCardState extends ConsumerState<PostCard> {
           isliked: widget.post.isliked,
           child: _isVideoUrl(mediaUrl)
               ? VideoPlayerWidget(videoUrl: mediaUrl)
-              : ResettingInteractiveViewer(
-            boundaryMargin: const EdgeInsets.all(20),
-            minScale: 1.0,
-            maxScale: 4.0,
-            child: CachedNetworkImage(
-              imageUrl: mediaUrl,
-              fit: BoxFit.cover,
+              : GestureDetector(
+            onTap: () {
+              // Open full-screen viewer on single tap
+              FullScreenImageViewer.show(
+                context,
+                imageUrls: [mediaUrl],
+                initialIndex: 0,
+              );
+            },
+            child: ZoomableImage(
+              minScale: 1.0,
+              maxScale: 4.0,
+              child: CachedNetworkImage(
+                imageUrl: mediaUrl,
+                fit: BoxFit.cover,
               width: double.infinity,
               memCacheWidth: 800, // Optimize memory usage
               maxWidthDiskCache: 1000, // Disk cache size
@@ -516,6 +543,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                   color: theme.dividerColor,
                   size: 50,
                 ),
+              ),
               ),
             ),
           ),
@@ -553,13 +581,24 @@ class _PostCardState extends ConsumerState<PostCard> {
                       isliked: widget.post.isliked,
                       child: _isVideoUrl(mediaUrl)
                           ? VideoPlayerWidget(videoUrl: mediaUrl)
-                          : ResettingInteractiveViewer(
-                        boundaryMargin: const EdgeInsets.all(20),
-                        minScale: 1.0,
-                        maxScale: 4.0,
-                        child: Image.network(
-                          mediaUrl,
-                          fit: BoxFit.cover,
+                          : GestureDetector(
+                        onTap: () {
+                          // Open full-screen viewer with all images, starting at current index
+                          final imageUrls = mediaUrls.where((url) => !_isVideoUrl(url)).toList();
+                          final imageIndex = imageUrls.indexOf(mediaUrl);
+
+                          FullScreenImageViewer.show(
+                            context,
+                            imageUrls: imageUrls,
+                            initialIndex: imageIndex >= 0 ? imageIndex : 0,
+                          );
+                        },
+                        child: ZoomableImage(
+                          minScale: 1.0,
+                          maxScale: 4.0,
+                          child: Image.network(
+                            mediaUrl,
+                            fit: BoxFit.cover,
                           width: double.infinity,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
@@ -574,7 +613,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                             );
                           },
                         ),
-                      ),
+                      ),),
                     ),
                   );
                 },
@@ -987,8 +1026,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> with AutomaticKee
   }
 }
 
-// Comment Sheet Widget
-class CommentSheet extends ConsumerStatefulWidget {
+// Comment Sheet Widget - Now uses unified bottom sheet
+class CommentSheet extends ConsumerWidget {
   final String postId;
 
   const CommentSheet({
@@ -997,182 +1036,38 @@ class CommentSheet extends ConsumerStatefulWidget {
   }) : super(key: key);
 
   @override
-  ConsumerState<CommentSheet> createState() => _CommentSheetState();
-}
-
-class _CommentSheetState extends ConsumerState<CommentSheet> {
-  final TextEditingController _commentController = TextEditingController();
-  List<Comment> _comments = [];
-  bool _isLoading = false;
-  bool _isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadComments();
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadComments() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    final comments = await ref.read(postFeedProvider.notifier).loadComments(widget.postId);
-
-    setState(() {
-      _comments = comments;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _submitComment() async {
-    if (_commentController.text.trim().isEmpty) return;
-
-    final success = await ref.read(postFeedProvider.notifier).addComment(
-      widget.postId,
-      _commentController.text.trim(),
-    );
-
-    if (success) {
-      _commentController.clear();
-      _loadComments(); // Reload comments
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.cardTheme.color,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: theme.dividerColor.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-              // Header
-              Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Comments',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-
-              // Comment Input
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  border: Border(top: BorderSide(color: theme.dividerColor)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        style: TextStyle(color: theme.colorScheme.onSurface),
-                        decoration: InputDecoration(
-                          hintText: 'Add a comment...',
-                          hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(25),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: theme.scaffoldBackgroundColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: theme.scaffoldBackgroundColor,
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      child: IconButton(
-                        icon: _isSubmitting
-                            ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-                          ),
-                        )
-                            : Icon(Icons.send, color: theme.colorScheme.primary),
-                        onPressed: _isSubmitting ? null : _submitComment,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Comments List
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                  child: CircularProgressIndicator(color: theme.colorScheme.primary),
-                )
-                    : _comments.isEmpty
-                    ? Center(
-                  child: Text(
-                    'No comments yet. Be the first to comment!',
-                    style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                  ),
-                )
-                    : ListView.builder(
-                  controller: scrollController,
-                  itemCount: _comments.length,
-                  itemBuilder: (context, index) {
-                    final comment = _comments[index];
-                    return CommentCard(
-                      comment: comment,
-                      postId: widget.postId,
-                      onTap: () async {
-                        await ref.read(postFeedProvider.notifier).toggleCommentLike(comment.commentId);
-                        await _loadComments(); // Refresh comments
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+  Widget build(BuildContext context, WidgetRef ref) {
+    final postFeedState = ref.read(postFeedProvider);
+    
+    return UnifiedCommentsBottomSheet(
+      contentId: postId,
+      title: 'Comments',
+      commentCount: null,
+      likingComments: postFeedState.likingComments,
+      callbacks: CommentSheetCallbacks(
+        loadComments: () => ref.read(postFeedProvider.notifier).loadComments(postId),
+        loadReplies: (parentCommentId) => ref.read(postFeedProvider.notifier).loadReplies(postId, int.parse(parentCommentId)),
+        getRepliesCount: (parentCommentId) => ref.read(postFeedProvider.notifier).getRepliesCount(int.parse(parentCommentId)),
+        addComment: (content) => ref.read(postFeedProvider.notifier).addComment(postId, content),
+        addReply: (parentCommentId, content) => ref.read(postFeedProvider.notifier).addReply(postId, int.parse(parentCommentId), content),
+        toggleCommentLike: (commentId) => ref.read(postFeedProvider.notifier).toggleCommentLike(int.parse(commentId)),
+        getCurrentUserId: () => Supabase.instance.client.auth.currentUser?.id,
+        getUserProfile: () async {
+          final user = Supabase.instance.client.auth.currentUser;
+          if (user == null) return null;
+          try {
+            final response = await Supabase.instance.client
+                .from('user_profiles')
+                .select('profile_pic')
+                .eq('user_id', user.id)
+                .maybeSingle();
+            return response;
+          } catch (e) {
+            debugPrint('Error fetching user profile: $e');
+            return null;
+          }
+        },
+      ),
     );
   }
 }

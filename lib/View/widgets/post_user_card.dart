@@ -5,7 +5,7 @@ import 'dart:io';
 import '../../ViewModel/user_feed_provider.dart';
 import '../../ViewModel/user_provider.dart';
 import 'zoomable_image.dart';
-
+import 'full_screen_image_viewer.dart';
 
 class PostProfileCard extends ConsumerWidget {
   final Post_feed post;
@@ -36,7 +36,7 @@ class PostProfileCard extends ConsumerWidget {
                 flex: 3,
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: _buildMediaPreview(),
+                  child: _buildMediaPreview(context),  // Pass context
                 ),
               ),
 
@@ -133,19 +133,29 @@ class PostProfileCard extends ConsumerWidget {
         (post.localMediaFiles != null && post.localMediaFiles!.isNotEmpty);
   }
 
-  Widget _buildMediaPreview() {
+  Widget _buildMediaPreview(BuildContext context) {  // ✅ Add BuildContext parameter
     if (post.localMediaFiles != null && post.localMediaFiles!.isNotEmpty) {
       final file = post.localMediaFiles!.first;
       return _isVideoFile(file.path)
           ? _buildVideoThumbnail(File(file.path))
-          : ResettingInteractiveViewer(
-        boundaryMargin: const EdgeInsets.all(20),
-        minScale: 1.0,
-        maxScale: 4.0,
-        child: Image.file(
-          File(file.path),
-          fit: BoxFit.cover,
-          width: double.infinity,
+          : GestureDetector(
+        onTap: () {
+          // For local files - show message or handle differently
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Upload images to view in full screen'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: ZoomableImage(
+          minScale: 1.0,
+          maxScale: 4.0,
+          child: Image.file(
+            File(file.path),
+            fit: BoxFit.cover,
+            width: double.infinity,
+          ),
         ),
       );
     } else if (post.media_urls != null && post.media_urls!.isNotEmpty) {
@@ -154,39 +164,53 @@ class PostProfileCard extends ConsumerWidget {
         children: [
           _isVideoUrl(mediaUrl)
               ? _buildNetworkVideoThumbnail(mediaUrl)
-              : ResettingInteractiveViewer(
-            boundaryMargin: const EdgeInsets.all(20),
-            minScale: 1.0,
-            maxScale: 4.0,
-            child: Image.network(
-              mediaUrl,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: Colors.grey[800],
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.blue,
-                      strokeWidth: 2,
+              : GestureDetector(
+            onTap: () {
+              // ✅ Open full-screen viewer with all images from post
+              final imageUrls = post.media_urls!
+                  .where((url) => !_isVideoUrl(url))
+                  .toList();
+              final imageIndex = imageUrls.indexOf(mediaUrl);
+
+              FullScreenImageViewer.show(
+                context,
+                imageUrls: imageUrls,
+                initialIndex: imageIndex >= 0 ? imageIndex : 0,
+              );
+            },
+            child: ZoomableImage(
+              minScale: 1.0,
+              maxScale: 4.0,
+              child: Image.network(
+                mediaUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    color: Colors.grey[800],
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.blue,
+                        strokeWidth: 2,
+                      ),
                     ),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey[800],
-                  child: const Center(
-                    child: Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey,
-                      size: 30,
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey[800],
+                    child: const Center(
+                      child: Icon(
+                        Icons.image_not_supported,
+                        color: Colors.grey,
+                        size: 30,
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
 
