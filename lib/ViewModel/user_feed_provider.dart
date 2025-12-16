@@ -146,20 +146,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       for (var postData in response) {
         final String postId = postData['post_id'].toString();
 
-        // Get like count
-        final likeCountResponse = await _supabase
-            .from('post_likes')
-            .select('*')
-            .eq('post_id', postId);
-        final int likeCount = likeCountResponse.length;
-
-        // Get comment count
-        final commentCountResponse = await _supabase
-            .from('post_comments')
-            .select('*')
-            .eq('post_id', postId);
-        final int commentCount = commentCountResponse.length;
-
         // Check if current user liked this post
         bool isLiked = false;
         final likeResponse = await _supabase
@@ -171,7 +157,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         isLiked = likeResponse != null;
 
         // Process comments - convert to proper format for Post_feed
-
         List<Map<String, dynamic>> commentMaps = [];
         if (postData['post_comments'] != null) {
           for (var commentData in postData['post_comments']) {
@@ -201,8 +186,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'post_id': postId,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          'like_count': likeCount,
-          'comment_count': commentCount,
+          // like_count and comment_count are maintained by DB triggers
           'isliked': isLiked,
           'post_comments': commentMaps,
         });
@@ -279,20 +263,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         try {
           final String toastId = toastData['toast_id'] as String;
 
-          // Get like count
-          final likeCountResponse = await _supabase
-              .from('toast_likes')
-              .select('*')
-              .eq('toast_id', toastId);
-          final int likeCount = likeCountResponse.length;
-
-          // Get comment count
-          final commentCountResponse = await _supabase
-              .from('toast_comments')
-              .select('*')
-              .eq('toast_id', toastId);
-          final int commentCount = commentCountResponse.length;
-
           // Check if current user liked this toast
           bool isLiked = false;
           final likeResponse = await _supabase
@@ -303,7 +273,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
               .maybeSingle();
           isLiked = likeResponse != null;
 
-          // Process comments
           // Process comments
           List<Map<String, dynamic>> commentMaps = [];
           if (toastData['toast_comments'] != null) {
@@ -334,8 +303,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
             'toast_id': toastId,
             'username': toastData['user_profiles']['username'],
             'profile_pic': toastData['user_profiles']['profile_pic'],
-            'like_count': likeCount,
-            'comment_count': commentCount,
+            // like_count and comment_count are maintained by DB triggers
             'isliked': isLiked,
             'toast_comments': commentMaps,
           });
@@ -406,20 +374,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         final alreadyExists = state.posts.any((p) => p.post_id == postId);
         if (alreadyExists) continue;
 
-        // Get like count
-        final likeCountResponse = await _supabase
-            .from('post_likes')
-            .select('*')
-            .eq('post_id', postId);
-        final int likeCount = likeCountResponse.length;
-
-        // Get comment count
-        final commentCountResponse = await _supabase
-            .from('post_comments')
-            .select('*')
-            .eq('post_id', postId);
-        final int commentCount = commentCountResponse.length;
-
         // Check if current user liked this post
         bool isLiked = false;
         final likeResponse = await _supabase
@@ -452,8 +406,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'post_id': postId,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          'like_count': likeCount,
-          'comment_count': commentCount,
+          // like_count and comment_count are maintained by DB triggers
           'isliked': isLiked,
           'post_comments': commentMaps,
         });
@@ -516,20 +469,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         final alreadyExists = state.toasts.any((t) => t.toast_id == toastId);
         if (alreadyExists) continue;
 
-        // Get like count
-        final likeCountResponse = await _supabase
-            .from('toast_likes')
-            .select('*')
-            .eq('toast_id', toastId);
-        final int likeCount = likeCountResponse.length;
-
-        // Get comment count
-        final commentCountResponse = await _supabase
-            .from('toast_comments')
-            .select('*')
-            .eq('toast_id', toastId);
-        final int commentCount = commentCountResponse.length;
-
         // Check if current user liked this toast
         bool isLiked = false;
         final likeResponse = await _supabase
@@ -563,8 +502,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           'toast_id': toastId,
           'username': toastData['user_profiles']['username'],
           'profile_pic': toastData['user_profiles']['profile_pic'],
-          'like_count': likeCount,
-          'comment_count': commentCount,
+          // like_count and comment_count are maintained by DB triggers
           'isliked': isLiked,
           'toast_comments': commentMaps,
         });
@@ -619,10 +557,14 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         final userProfile = byteData['user_profiles'];
 
         bool isLiked = false;
+        final byteIdInt = int.tryParse(byteId);
+        if (byteIdInt == null) {
+          continue;
+        }
         final likeResponse = await _supabase
             .from('byte_likes')
             .select('byte_like_id')
-            .eq('byte_id', byteId)
+            .eq('byte_id', byteIdInt)
             .eq('user_id', user)
             .maybeSingle();
         isLiked = likeResponse != null;
@@ -685,10 +627,14 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         if (alreadyExists) continue;
 
         bool isLiked = false;
+        final byteIdInt = int.tryParse(byteId);
+        if (byteIdInt == null) {
+          continue;
+        }
         final likeResponse = await _supabase
             .from('byte_likes')
             .select('byte_like_id')
-            .eq('byte_id', byteId)
+            .eq('byte_id', byteIdInt)
             .eq('user_id', user)
             .maybeSingle();
         isLiked = likeResponse != null;
@@ -728,11 +674,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
     final currentByte = state.bytes[byteIndex];
     final currentlyLiked = currentByte.isliked ?? false;
-    final currentLikeCount = currentByte.likeCount;
 
+    // Optimistic: toggle isliked only, counters are maintained by DB triggers
     final newBytes = [...state.bytes];
     newBytes[byteIndex] = currentByte.copyWith(
-      likeCount: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
       isliked: !currentlyLiked,
     );
 
@@ -742,28 +687,25 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     );
 
     try {
+      // Ensure we use integer byte_id for DB operations
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        throw Exception('Invalid byteId: $byteId');
+      }
+
       if (currentlyLiked) {
         await _supabase
             .from('byte_likes')
             .delete()
-            .eq('byte_id', byteId)
+            .eq('byte_id', byteIdInt)
             .eq('user_id', user.id);
 
-        await _supabase
-            .from('bytes')
-            .update({'like_count': currentLikeCount - 1})
-            .eq('byte_id', byteId);
       } else {
         await _supabase.from('byte_likes').insert({
-          'byte_id': byteId,
+          'byte_id': byteIdInt,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
-
-        await _supabase
-            .from('bytes')
-            .update({'like_count': currentLikeCount + 1})
-            .eq('byte_id', byteId);
       }
 
       state = state.copyWith(
@@ -807,11 +749,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
     final currentPost = state.posts[postIndex];
     final currentlyLiked = currentPost.isliked;
-    final currentLikeCount = currentPost.like_count;
 
+    // Optimistic: toggle isliked only, counts handled by DB triggers
     final newPosts = [...state.posts];
     newPosts[postIndex] = currentPost.copyWith(
-      like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
       isliked: !currentlyLiked,
     );
 
@@ -821,28 +762,26 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     );
 
     try {
+      // Use integer post_id for DB operations
+      final postIdInt = int.tryParse(postId);
+      if (postIdInt == null) {
+        throw Exception('Invalid postId: $postId');
+      }
+
       if (currentlyLiked) {
         await _supabase
             .from('post_likes')
             .delete()
-            .eq('post_id', postId)
+            .eq('post_id', postIdInt)
             .eq('user_id', user.id);
 
-        await _supabase
-            .from('post')
-            .update({'like_count': currentLikeCount - 1})
-            .eq('post_id', postId);
       } else {
         await _supabase.from('post_likes').insert({
-          'post_id': postId,
+          'post_id': postIdInt,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
 
-        await _supabase
-            .from('post')
-            .update({'like_count': currentLikeCount + 1})
-            .eq('post_id', postId);
       }
 
       state = state.copyWith(
@@ -876,11 +815,10 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
     final currentToast = state.toasts[toastIndex];
     final currentlyLiked = currentToast.isliked;
-    final currentLikeCount = currentToast.like_count;
 
+    // Optimistic: toggle isliked only, counts handled by DB triggers
     final newToasts = [...state.toasts];
     newToasts[toastIndex] = currentToast.copyWith(
-      like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
       isliked: !currentlyLiked,
     );
 

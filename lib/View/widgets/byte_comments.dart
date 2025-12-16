@@ -1,10 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../ViewModel/byte_provider.dart';
 import '../../Model/comment.dart';
+import 'package:collection/collection.dart';
 
 class ByteCommentsBottomSheet extends ConsumerStatefulWidget {
   final String byteId;
@@ -21,7 +21,6 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
   final FocusNode _commentFocusNode = FocusNode();
   final FocusNode _replyFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-
   bool _isLoading = true;
   bool _isSubmitting = false;
   final Map<String, List<Comment>> _repliesByParent = {};
@@ -33,7 +32,12 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
   @override
   void initState() {
     super.initState();
-    _loadComments();
+    // Schedule the load after the first frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadComments();
+      }
+    });
   }
 
   @override
@@ -65,12 +69,33 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
   }
 
   Future<void> _loadComments() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
-    await ref.read(bytesFeedProvider.notifier).loadComments(widget.byteId);
-    if (mounted) {
-      setState(() => _isLoading = false);
+
+    try {
+      // ✅ Call loadComments and wait for it to complete
+      final comments = await ref.read(bytesFeedProvider.notifier).loadComments(widget.byteId);
+
+      debugPrint('✅ Loaded ${comments.length} comments for byte ${widget.byteId}');
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e, stack) {
+      debugPrint('❌ Error loading comments: $e\n$stack');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load comments: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
+
 
   Future<void> _loadReplies(String parentCommentId) async {
     if (_loadingReplies.contains(parentCommentId)) return;
@@ -239,7 +264,12 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
   @override
   Widget build(BuildContext context) {
     final bytesState = ref.watch(bytesFeedProvider);
-    final comments = bytesState.commentsByByteId[widget.byteId] ?? [];
+    final comments = ref.watch(bytesFeedProvider.select(
+            (state) => state.commentsByByteId[widget.byteId] ?? []
+    ));
+
+    debugPrint('🎨 Building comments UI - ${comments.length} comments available');
+
     final likingComments = bytesState.likingComments;
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
@@ -288,13 +318,19 @@ class _ByteCommentsBottomSheetState extends ConsumerState<ByteCommentsBottomShee
                         color: Colors.grey[800],
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        '${comments.length}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final bytesState = ref.watch(bytesFeedProvider);
+                          final currentByte = bytesState.bytes.firstWhereOrNull(
+                                (b) => b.byteId == widget.byteId,
+                          );
+                          final count = currentByte?.commentCount ?? comments.length;
+
+                          return Text(
+                            '$count',
+                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+                          );
+                        },
                       ),
                     ),
                   ],

@@ -485,30 +485,28 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   }
 
   Future<void> toggleLike(String byteId) async {
-    if (state.likingBytes.contains(byteId)) {
-      return;
-    }
+    if (state.likingBytes.contains(byteId)) return;
 
     final user = _supabase.auth.currentUser;
     if (user == null) {
+      debugPrint('❌ No authenticated user for like');
       return;
     }
 
     final byteIndex = state.bytes.indexWhere((byte) => byte.byteId == byteId);
     if (byteIndex == -1) {
+      debugPrint('❌ Byte not found: $byteId');
       return;
     }
 
     final currentByte = state.bytes[byteIndex];
     final currentlyliked = currentByte.isliked ?? false;
-    final currentLikeCount = currentByte.likeCount;
 
-    // Optimistic update
+    debugPrint('🔄 Toggling like for byte $byteId, currently liked: $currentlyliked');
+
+    // ✅ Optimistic UI update - only isLiked, not count
     final newBytes = [...state.bytes];
-    newBytes[byteIndex] = currentByte.copyWith(
-      likeCount: currentlyliked ? currentLikeCount - 1 : currentLikeCount + 1,
-      isliked: !currentlyliked,
-    );
+    newBytes[byteIndex] = currentByte.copyWith(isliked: !currentlyliked);
 
     state = state.copyWith(
       bytes: newBytes,
@@ -516,129 +514,246 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
     );
 
     try {
-      if (currentlyliked) {
-        await _supabase
-            .from('byte_likes')
-            .delete()
-            .eq('byte_id', byteId)
-            .eq('user_id', user.id);
-
-        await _supabase
-            .from('bytes')
-            .update({'like_count': currentLikeCount - 1})
-            .eq('byte_id', byteId);
-      } else {
-        await _supabase.from('byte_likes').insert({
-          'byte_id': byteId,
-          'user_id': user.id,
-          'liked_at': DateTime.now().toIso8601String(),
-        });
-
-        await _supabase
-            .from('bytes')
-            .update({'like_count': currentLikeCount + 1})
-            .eq('byte_id', byteId);
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        throw Exception('Invalid byteId: $byteId');
       }
+
+      // ✅ Check if like already exists to avoid conflicts
+      final existingLike = await _supabase
+          .from('byte_likes')
+          .select('byte_like_id')
+          .eq('byte_id', byteIdInt)
+          .eq('user_id', user.id)
+          .maybeSingle()
+          .catchError((e) {
+        debugPrint('❌ Error checking existing like: $e');
+        return null;
+      });
+
+      if (currentlyliked) {
+        // Unlike: Delete the like
+        if (existingLike != null) {
+          await _supabase
+              .from('byte_likes')
+              .delete()
+              .eq('byte_id', byteIdInt)
+              .eq('user_id', user.id);
+          debugPrint('✅ Removed like from byte $byteId');
+        }
+      } else {
+        // Like: Add new like if not already exists
+        if (existingLike == null) {
+          await _supabase.from('byte_likes').insert({
+            'byte_id': byteIdInt,
+            'user_id': user.id,
+            'liked_at': DateTime.now().toIso8601String(),
+          });
+          debugPrint('✅ Added like to byte $byteId');
+        }
+      }
+
+      // ✅ Wait for trigger to update count
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // ✅ Force refresh the specific byte
+      await _reloadSingleByte(byteId, byteIndex);
 
       state = state.copyWith(
         likingBytes: {...state.likingBytes}..remove(byteId),
       );
-    } catch (error) {
-      debugPrint('Error toggling like: $error');
 
-      // Revert optimistic update
+      debugPrint('✅ Like operation completed for byte $byteId');
+
+    } catch (error, stackTrace) {
+      debugPrint('❌ Error in toggleLike: $error');
+      debugPrint('Stack trace: $stackTrace');
+
+      // ✅ Revert optimistic update
       final revertedBytes = [...state.bytes];
-      final currentByteIndex = revertedBytes.indexWhere((byte) => byte.byteId == byteId);
-      if (currentByteIndex != -1) {
-        revertedBytes[currentByteIndex] = currentByte;
-      }
+      revertedBytes[byteIndex] = currentByte.copyWith(isliked: currentlyliked);
 
       state = state.copyWith(
         bytes: revertedBytes,
         likingBytes: {...state.likingBytes}..remove(byteId),
+        error: 'Failed to update like: ${error.toString()}',
       );
+    }
+  }
+
+  Future<void> _reloadSingleByte(String byteId, int index) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        debugPrint('❌ Invalid byteId in reload: $byteId');
+        return;
+      }
+
+      debugPrint('🔄 Reloading byte $byteId from database...');
+
+      final response = await _supabase
+          .from('bytes')
+          .select('''
+            *,
+            user_profiles!bytes_user_id_fkey(username, profile_pic)
+          ''')
+          .eq('byte_id', byteIdInt)
+          .single();
+
+      // Check like status
+      final isliked = await _supabase
+          .from('byte_likes')
+          .select('byte_like_id')
+          .eq('byte_id', byteIdInt)
+          .eq('user_id', user.id)
+          .maybeSingle()
+          .then((result) => result != null)
+          .catchError((e) {
+        debugPrint('❌ Error checking like status: $e');
+        return false;
+      });
+
+      final updatedByte = Byte.fromJson({
+        ...response,
+        'byte_id': response['byte_id'],
+        'username': response['user_profiles']?['username'],
+        'profile_pic': response['user_profiles']?['profile_pic'],
+        'isliked': isliked,
+      });
+
+      final newBytes = [...state.bytes];
+      if (index < newBytes.length) {
+        newBytes[index] = updatedByte;
+        state = state.copyWith(bytes: newBytes);
+        debugPrint('✅ Byte $byteId reloaded successfully');
+      }
+    } catch (error) {
+      debugPrint('❌ Error reloading byte $byteId: $error');
     }
   }
 
   // Load comments for a byte
   Future<List<Comment>> loadComments(String byteId) async {
+    // Return cached comments immediately if available
+    final cachedComments = state.commentsByByteId[byteId];
+    if (cachedComments != null && cachedComments.isNotEmpty) {
+      debugPrint('📦 Returning ${cachedComments.length} cached comments');
+      return cachedComments;
+    }
+
     if (state.loadingComments.contains(byteId)) {
+      debugPrint('⏳ Already loading comments for $byteId');
       return state.commentsByByteId[byteId] ?? [];
     }
 
-    state = state.copyWith(
-      loadingComments: {...state.loadingComments, byteId},
-    );
+    // ✅ Schedule state update for next frame to avoid build-time modification
+    Future.microtask(() {
+      state = state.copyWith(
+        loadingComments: {...state.loadingComments, byteId},
+      );
+    });
 
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
-        state = state.copyWith(
-          loadingComments: {...state.loadingComments}..remove(byteId),
-        );
+        Future.microtask(() {
+          state = state.copyWith(
+            loadingComments: {...state.loadingComments}..remove(byteId),
+          );
+        });
         return [];
       }
+
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        debugPrint('Error: Invalid byteId: $byteId');
+        Future.microtask(() {
+          state = state.copyWith(
+            loadingComments: {...state.loadingComments}..remove(byteId),
+          );
+        });
+        return [];
+      }
+
+      debugPrint('🔄 Loading comments for byte $byteId...');
 
       final response = await _supabase
           .from('byte_comments')
           .select('''
-            *,
-            user_profiles!byte_comments_user_id_fkey(username, profile_pic)
-          ''')
-          .eq('byte_id', byteId)
+          *,
+          user_profiles!fk_byte_comment_user(username, profile_pic)
+        ''')
+          .eq('byte_id', byteIdInt)
           .isFilter('parent_comment_id', null)
           .order('created_at', ascending: false);
+
+      debugPrint('✅ Fetched ${response.length} raw comment records');
 
       final List<Comment> comments = [];
 
       for (var commentData in response) {
-        final int commentId = commentData['comment_id'] is int 
-            ? commentData['comment_id'] 
-            : int.tryParse(commentData['comment_id'].toString()) ?? 0;
-        final userProfile = commentData['user_profiles'];
-
-        bool isliked = false;
         try {
-          final likeResponse = await _supabase
-              .from('byte_comment_likes')
-              .select('byte_comment_like_id')
-              .eq('comment_id', commentId)
-              .eq('user_id', user.id)
-              .maybeSingle();
+          final int commentId = commentData['comment_id'] is int
+              ? commentData['comment_id']
+              : int.tryParse(commentData['comment_id'].toString()) ?? 0;
+          final userProfile = commentData['user_profiles'];
 
-          isliked = likeResponse != null;
-        } catch (e) {
-          debugPrint('Error checking comment like status: $e');
+          bool isliked = false;
+          try {
+            final likeResponse = await _supabase
+                .from('byte_comment_likes')
+                .select('byte_comment_like_id')
+                .eq('comment_id', commentId)
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            isliked = likeResponse != null;
+          } catch (e) {
+            debugPrint('Error checking comment like status: $e');
+          }
+
+          final comment = Comment.fromByteMap({
+            ...commentData,
+            'username': userProfile?['username'] ?? 'Unknown',
+            'profile_pic': userProfile?['profile_pic'],
+            'isliked': isliked,
+          });
+
+          comments.add(comment);
+          debugPrint('✅ Processed comment ${comment.commentId}');
+        } catch (e, stack) {
+          debugPrint('❌ Error processing comment: $e\n$stack');
+          continue;
         }
-
-        final comment = Comment.fromByteMap({
-          ...commentData,
-          'username': userProfile?['username'] ?? 'Unknown',
-          'profile_pic': userProfile?['profile_pic'],
-          'isliked': isliked,
-        });
-
-        comments.add(comment);
       }
 
-      final updatedComments = Map<String, List<Comment>>.from(state.commentsByByteId);
-      updatedComments[byteId] = comments;
+      // ✅ Update state after build completes
+      Future.microtask(() {
+        final updatedComments = Map<String, List<Comment>>.from(state.commentsByByteId);
+        updatedComments[byteId] = comments;
 
-      state = state.copyWith(
-        commentsByByteId: updatedComments,
-        loadingComments: {...state.loadingComments}..remove(byteId),
-      );
+        state = state.copyWith(
+          commentsByByteId: updatedComments,
+          loadingComments: {...state.loadingComments}..remove(byteId),
+        );
+      });
 
-      debugPrint('Fetched ${comments.length} comments for byte $byteId');
+      debugPrint('✅ Successfully loaded ${comments.length} comments for byte $byteId');
       return comments;
     } catch (e, stack) {
-      debugPrint('Error loading comments: $e\n$stack');
-      state = state.copyWith(
-        loadingComments: {...state.loadingComments}..remove(byteId),
-      );
+      debugPrint('❌ Error loading comments: $e\n$stack');
+      Future.microtask(() {
+        state = state.copyWith(
+          loadingComments: {...state.loadingComments}..remove(byteId),
+        );
+      });
       return state.commentsByByteId[byteId] ?? [];
     }
   }
+
 
   // Load replies for a parent comment
   Future<List<Comment>> loadReplies(String byteId, String parentCommentIdStr) async {
@@ -657,8 +772,8 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       final response = await _supabase
           .from('byte_comments')
           .select('''
-            *,
-            user_profiles!byte_comments_user_id_fkey(username, profile_pic)
+          *,
+          user_profiles!fk_byte_comment_user(username, profile_pic)
           ''')
           .eq('byte_id', byteIdInt)
           .eq('parent_comment_id', parentCommentId)
@@ -667,8 +782,8 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       final List<Comment> replies = [];
 
       for (var replyData in response) {
-        final int commentId = replyData['comment_id'] is int 
-            ? replyData['comment_id'] 
+        final int commentId = replyData['comment_id'] is int
+            ? replyData['comment_id']
             : int.tryParse(replyData['comment_id'].toString()) ?? 0;
         final userProfile = replyData['user_profiles'];
 
@@ -734,6 +849,13 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         return false;
       }
 
+      if (content.trim().isEmpty) {
+        debugPrint('❌ Reply content is empty');
+        return false;
+      }
+
+      debugPrint('📝 Adding reply to comment $parentCommentId on byte $byteId');
+
       await _supabase.from('byte_comments').insert({
         'byte_id': byteIdInt,
         'user_id': user.id,
@@ -744,10 +866,23 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      debugPrint('Added reply to comment $parentCommentId');
+      // ✅ Wait for trigger to update counts
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // ✅ Refresh comments
+      await loadComments(byteId);
+
+      // ✅ Also reload the byte
+      final byteIndex = state.bytes.indexWhere((b) => b.byteId == byteId);
+      if (byteIndex != -1) {
+        await _reloadSingleByte(byteId, byteIndex);
+      }
+
+      debugPrint('✅ Added reply to comment $parentCommentId');
       return true;
-    } catch (e) {
-      debugPrint('Error adding reply: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error adding reply: $e');
+      debugPrint('Stack trace: $stackTrace');
       return false;
     }
   }
@@ -756,16 +891,25 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   Future<bool> addComment(String byteId, String content) async {
     try {
       final user = _supabase.auth.currentUser;
-      if (user == null) return false;
-
-      // Convert byteId to int (database expects integer)
-      final byteIdInt = int.tryParse(byteId);
-      if (byteIdInt == null) {
-        debugPrint('Error: Invalid byteId format: $byteId');
+      if (user == null) {
+        debugPrint('❌ No user authenticated');
         return false;
       }
 
-      final insertResp = await _supabase.from('byte_comments').insert({
+      final byteIdInt = int.tryParse(byteId);
+      if (byteIdInt == null) {
+        debugPrint('❌ Invalid byteId format: $byteId');
+        return false;
+      }
+
+      if (content.trim().isEmpty) {
+        debugPrint('❌ Comment content is empty');
+        return false;
+      }
+
+      debugPrint('💬 Adding comment to byte $byteId: ${content.trim()}');
+
+      await _supabase.from('byte_comments').insert({
         'byte_id': byteIdInt,
         'user_id': user.id,
         'content': content.trim(),
@@ -773,45 +917,25 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         'parent_comment_id': null,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
-      }).select().single();
-
-      final userProfile = await _supabase
-          .from('user_profiles')
-          .select('username, profile_pic')
-          .eq('user_id', user.id)
-          .single();
-
-      final newComment = Comment.fromByteMap({
-        ...insertResp,
-        'username': userProfile['username'] ?? 'Unknown',
-        'profile_pic': userProfile['profile_pic'],
-        'isliked': false,
       });
 
-      final currentComments = state.commentsByByteId[byteId] ?? [];
-      final updatedComments = [newComment, ...currentComments];
+      // ✅ Wait for trigger to update the byte's comment_count
+      await Future.delayed(const Duration(milliseconds: 100));
 
-      state = state.copyWith(
-        commentsByByteId: {
-          ...state.commentsByByteId,
-          byteId: updatedComments,
-        },
-      );
+      // ✅ Refresh comments list
+      await loadComments(byteId);
 
-      // Update comment count
+      // ✅ Refresh byte to get updated comment_count
       final byteIndex = state.bytes.indexWhere((b) => b.byteId == byteId);
       if (byteIndex != -1) {
-        final updatedBytes = [...state.bytes];
-        updatedBytes[byteIndex] = updatedBytes[byteIndex].copyWith(
-          commentCount: updatedBytes[byteIndex].commentCount + 1,
-        );
-        state = state.copyWith(bytes: updatedBytes);
+        await _reloadSingleByte(byteId, byteIndex);
       }
 
-      debugPrint('Added comment to byte $byteId');
+      debugPrint('✅ Comment added successfully to byte $byteId');
       return true;
-    } catch (e) {
-      debugPrint('Error adding comment: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error adding comment: $e');
+      debugPrint('Stack trace: $stackTrace');
       return false;
     }
   }
@@ -819,25 +943,39 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
   Future<void> toggleCommentLike(String commentIdStr) async {
     try {
       final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
-      if (state.likingComments.contains(commentIdStr)) {
+      if (user == null) {
+        debugPrint('❌ No user for comment like');
         return;
       }
 
+      if (state.likingComments.contains(commentIdStr)) {
+        debugPrint('⏳ Already liking comment $commentIdStr');
+        return;
+      }
+
+      // Add to liking set
       state = state.copyWith(
         likingComments: {...state.likingComments, commentIdStr},
       );
-      
-      final int commentId = int.tryParse(commentIdStr) ?? 0;
 
+      final int commentId = int.tryParse(commentIdStr) ?? 0;
+      if (commentId == 0) {
+        debugPrint('❌ Invalid commentId: $commentIdStr');
+        state = state.copyWith(
+          likingComments: {...state.likingComments}..remove(commentIdStr),
+        );
+        return;
+      }
+
+      // Find the comment and byte
       Comment? targetComment;
       String? targetByteId;
 
       for (var entry in state.commentsByByteId.entries) {
         try {
           final comment = entry.value.firstWhere(
-                (c) => c.commentId.toString() == commentId,
+                (c) => c.commentId.toString() == commentIdStr,
+            orElse: () => throw Exception('Not found'),
           );
           targetComment = comment;
           targetByteId = entry.key;
@@ -848,21 +986,20 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
       }
 
       if (targetComment == null || targetByteId == null) {
+        debugPrint('❌ Comment $commentIdStr not found in cache');
         state = state.copyWith(
           likingComments: {...state.likingComments}..remove(commentIdStr),
         );
         return;
       }
 
-      // Optimistic update
+      final currentlyliked = targetComment.isliked;
+      debugPrint('🔄 Toggling comment like: $commentIdStr, currently liked: $currentlyliked');
+
+      // ✅ Optimistic UI update (only isliked, not count)
       final updatedComments = state.commentsByByteId[targetByteId]!.map((comment) {
-        if (comment.commentId.toString() == commentId) {
-          return comment.copyWith(
-            isliked: !comment.isliked,
-            likes: comment.isliked
-                ? comment.likes - 1
-                : comment.likes + 1,
-          );
+        if (comment.commentId.toString() == commentIdStr) {
+          return comment.copyWith(isliked: !currentlyliked);
         }
         return comment;
       }).toList();
@@ -874,26 +1011,56 @@ class BytesFeedNotifier extends StateNotifier<BytesFeedState> {
         },
       );
 
-      if (targetComment.isliked) {
-        await _supabase
-            .from('byte_comment_likes')
-            .delete()
-            .eq('comment_id', commentId)
-            .eq('user_id', user.id);
+      // Check if like already exists
+      final existingLike = await _supabase
+          .from('byte_comment_likes')
+          .select('byte_comment_like_id')
+          .eq('comment_id', commentId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+          .catchError((e) {
+        debugPrint('❌ Error checking existing like: $e');
+        return null;
+      });
+
+      if (currentlyliked) {
+        // Unlike
+        if (existingLike != null) {
+          await _supabase
+              .from('byte_comment_likes')
+              .delete()
+              .eq('comment_id', commentId)
+              .eq('user_id', user.id);
+          debugPrint('✅ Removed like from comment $commentIdStr');
+        }
       } else {
-        await _supabase.from('byte_comment_likes').insert({
-          'comment_id': commentId,
-          'user_id': user.id,
-        });
+        // Like
+        if (existingLike == null) {
+          await _supabase.from('byte_comment_likes').insert({
+            'comment_id': commentId,
+            'user_id': user.id,
+          });
+          debugPrint('✅ Added like to comment $commentIdStr');
+        }
       }
+
+      // ✅ Wait for trigger to update comment like_count
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // ✅ Reload comments to get updated like counts
+      await loadComments(targetByteId);
 
       state = state.copyWith(
         likingComments: {...state.likingComments}..remove(commentIdStr),
       );
-    } catch (e) {
-      debugPrint('Error toggling comment like: $e');
 
-      // Revert on error
+      debugPrint('✅ Comment like toggled successfully for $commentIdStr');
+
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error toggling comment like: $e');
+      debugPrint('Stack trace: $stackTrace');
+
+      // Revert optimistic update on error
       state = state.copyWith(
         likingComments: {...state.likingComments}..remove(commentIdStr),
       );

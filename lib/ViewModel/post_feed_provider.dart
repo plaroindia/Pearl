@@ -302,37 +302,21 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
 
   // FIXED: Toggle like with proper count handling
   Future<void> toggleLike(String postId) async {
-    print('DEBUG: toggleLike called for post: $postId');
-
-    if (state.likingPosts.contains(postId)) {
-      print('DEBUG: Already liking this post, returning');
-      return;
-    }
+    if (state.likingPosts.contains(postId)) return;
 
     final user = _supabase.auth.currentUser;
-    if (user == null) {
-      print('ERROR: User not authenticated');
-      return;
-    }
+    if (user == null) return;
 
     final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
-    if (postIndex == -1) {
-      print('ERROR: Post not found in current state');
-      return;
-    }
+    if (postIndex == -1) return;
 
     final currentPost = state.posts[postIndex];
     final currentlyLiked = currentPost.isliked;
-    final currentLikeCount = currentPost.like_count;
-
     final int postIdInt = int.parse(postId);
 
-    print('DEBUG: Current like status: $currentlyLiked, count: $currentLikeCount');
-
-    // OPTIMISTIC UPDATE: Update UI immediately
+    // Optimistic: toggle isLiked only
     final newPosts = [...state.posts];
     newPosts[postIndex] = currentPost.copyWith(
-      like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
       isliked: !currentlyLiked,
     );
 
@@ -346,47 +330,31 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
       timestamp: DateTime.now(),
     );
 
-    print('DEBUG: Optimistic update applied - UI updated immediately');
-
     try {
       if (currentlyLiked) {
-        // Unlike
-        print('DEBUG: Attempting to unlike post...');
         await _supabase
             .from('post_likes')
             .delete()
             .eq('post_id', postIdInt)
             .eq('user_id', user.id);
-
-        print('DEBUG: Unlike successful');
       } else {
-        // Like
-        print('DEBUG: Attempting to like post...');
         await _supabase.from('post_likes').insert({
           'post_id': postIdInt,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
-
-        print('DEBUG: Like successful');
       }
 
-      print('SUCCESS: Like operation completed successfully');
+      // Reload post to get trigger-updated count
+      await _reloadSinglePost(postId, postIndex);
 
       state = state.copyWith(
         likingPosts: {...state.likingPosts}..remove(postId),
       );
-
-      print('DEBUG: Loading indicator removed, optimistic update kept');
     } catch (error) {
-      print('ERROR: Error in toggleLike: $error');
-
-      // REVERT OPTIMISTIC UPDATE on error
+      // Revert
       final revertedPosts = [...state.posts];
-      final currentPostIndex = revertedPosts.indexWhere((post) => post.post_id == postId);
-      if (currentPostIndex != -1) {
-        revertedPosts[currentPostIndex] = currentPost;
-      }
+      revertedPosts[postIndex] = currentPost;
 
       state = state.copyWith(
         posts: revertedPosts,
@@ -398,10 +366,61 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         post: currentPost,
         timestamp: DateTime.now(),
       );
-
-      print('ERROR: Optimistic update reverted due to error');
     }
   }
+
+// Reload single post
+  Future<void> _reloadSinglePost(String postId, int index) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final int postIdInt = int.parse(postId);
+
+    final response = await _supabase
+        .from('post')
+        .select('''
+        post_id,
+        user_id,
+        content,
+        report,
+        title,
+        tags,
+        created_at,
+        like_count,
+        comment_count,
+        share_count,
+        is_published,
+        media_urls,
+        user_profiles!inner(username, profile_pic)
+      ''')
+        .eq('post_id', postIdInt)
+        .single();
+
+    final userLikes = await _supabase
+        .from('post_likes')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .eq('post_id', postIdInt);
+
+    final isLiked = (userLikes as List).isNotEmpty;
+
+    final updatedPost = _mapToPostFeed(
+      response,
+      user.id,
+      isLiked ? {postIdInt} : {},
+    );
+
+    final newPosts = [...state.posts];
+    newPosts[index] = updatedPost;
+
+    state = state.copyWith(posts: newPosts);
+
+    _postCache[postId] = CachedPost(
+      post: updatedPost,
+      timestamp: DateTime.now(),
+    );
+  }
+
 
   // Refresh posts with cache invalidation
   Future<void> refreshPosts() async {
@@ -482,21 +501,10 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Optimistic update for UI
+      // Reload post
       final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
       if (postIndex != -1) {
-        final currentCount = state.posts[postIndex].comment_count;
-
-        final updatedPosts = [...state.posts];
-        updatedPosts[postIndex] = state.posts[postIndex].copyWith(
-          comment_count: currentCount + 1,
-        );
-        state = state.copyWith(posts: updatedPosts);
-
-        _postCache[postId] = CachedPost(
-          post: updatedPosts[postIndex],
-          timestamp: DateTime.now(),
-        );
+        await _reloadSinglePost(postId, postIndex);
       }
 
       _commentCache.remove(postId);
@@ -586,21 +594,10 @@ class PostFeedNotifier extends StateNotifier<PostFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Optimistic update for UI
+      // Reload post
       final postIndex = state.posts.indexWhere((post) => post.post_id == postId);
       if (postIndex != -1) {
-        final currentCount = state.posts[postIndex].comment_count;
-
-        final updatedPosts = [...state.posts];
-        updatedPosts[postIndex] = state.posts[postIndex].copyWith(
-          comment_count: currentCount + 1,
-        );
-        state = state.copyWith(posts: updatedPosts);
-
-        _postCache[postId] = CachedPost(
-          post: updatedPosts[postIndex],
-          timestamp: DateTime.now(),
-        );
+        await _reloadSinglePost(postId, postIndex);
       }
 
       return true;

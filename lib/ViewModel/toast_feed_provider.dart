@@ -311,35 +311,20 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
 
   // OPTIMIZED: Toggles are handled by database triggers
   Future<void> toggleLike(String toastId) async {
-    print('DEBUG: toggleLike called for toast: $toastId');
-
-    if (state.likingPosts.contains(toastId)) {
-      print('DEBUG: Already liking this toast, returning');
-      return;
-    }
+    if (state.likingPosts.contains(toastId)) return;
 
     final user = _supabase.auth.currentUser;
-    if (user == null) {
-      print('ERROR: User not authenticated');
-      return;
-    }
+    if (user == null) return;
 
     final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
-    if (toastIndex == -1) {
-      print('ERROR: Toast not found in current state');
-      return;
-    }
+    if (toastIndex == -1) return;
 
     final currentToast = state.posts[toastIndex];
     final currentlyLiked = currentToast.isliked;
-    final currentLikeCount = currentToast.like_count;
 
-    print('DEBUG: Current like status: $currentlyLiked, count: $currentLikeCount');
-
-    // OPTIMISTIC UPDATE: Update UI immediately
+    // ✅ Optimistic: toggle isLiked only (NO count change)
     final newToasts = [...state.posts];
     newToasts[toastIndex] = currentToast.copyWith(
-      like_count: currentlyLiked ? currentLikeCount - 1 : currentLikeCount + 1,
       isliked: !currentlyLiked,
     );
 
@@ -353,47 +338,31 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
       timestamp: DateTime.now(),
     );
 
-    print('DEBUG: Optimistic update applied - UI updated immediately');
-
     try {
       if (currentlyLiked) {
-        // Unlike - trigger will handle count update
-        print('DEBUG: Attempting to unlike toast...');
         await _supabase
             .from('toast_likes')
             .delete()
             .eq('toast_id', toastId)
             .eq('user_id', user.id);
-
-        print('DEBUG: Unlike successful');
       } else {
-        // Like - trigger will handle count update
-        print('DEBUG: Attempting to like toast...');
         await _supabase.from('toast_likes').insert({
           'toast_id': toastId,
           'user_id': user.id,
           'liked_at': DateTime.now().toIso8601String(),
         });
-
-        print('DEBUG: Like successful');
       }
 
-      print('SUCCESS: Like operation completed successfully');
+      // ✅ Reload toast to get trigger-updated count
+      await _reloadSingleToast(toastId, toastIndex);
 
       state = state.copyWith(
         likingPosts: {...state.likingPosts}..remove(toastId),
       );
-
-      print('DEBUG: Loading indicator removed, optimistic update kept');
     } catch (error) {
-      print('ERROR: Error in toggleLike: $error');
-
-      // REVERT OPTIMISTIC UPDATE on error
+      // Revert optimistic update
       final revertedToasts = [...state.posts];
-      final currentToastIndex = revertedToasts.indexWhere((toast) => toast.toast_id == toastId);
-      if (currentToastIndex != -1) {
-        revertedToasts[currentToastIndex] = currentToast;
-      }
+      revertedToasts[toastIndex] = currentToast;
 
       state = state.copyWith(
         posts: revertedToasts,
@@ -405,9 +374,55 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         toast: currentToast,
         timestamp: DateTime.now(),
       );
-
-      print('ERROR: Optimistic update reverted due to error');
     }
+  }
+
+  // Reload single toast after mutation
+  Future<void> _reloadSingleToast(String toastId, int index) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final response = await _supabase
+        .from('toasts')
+        .select('''
+        toast_id,
+        user_id,
+        title,
+        content,
+        tags,
+        created_at,
+        is_published,
+        like_count,
+        comment_count,
+        share_count,
+        user_profiles!inner(username, profile_pic)
+      ''')
+        .eq('toast_id', toastId)
+        .single();
+
+    final userLikes = await _supabase
+        .from('toast_likes')
+        .select('toast_id')
+        .eq('user_id', user.id)
+        .eq('toast_id', toastId);
+
+    final isLiked = (userLikes as List).isNotEmpty;
+
+    final updatedToast = _mapToToastFeed(
+      response,
+      user.id,
+      isLiked ? {toastId} : {},
+    );
+
+    final newToasts = [...state.posts];
+    newToasts[index] = updatedToast;
+
+    state = state.copyWith(posts: newToasts);
+
+    _toastCache[toastId] = CachedToast(
+      toast: updatedToast,
+      timestamp: DateTime.now(),
+    );
   }
 
   // OPTIMIZED: Lazy load comments only when needed
@@ -477,21 +492,10 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Optimistic update for UI
+      //  Reload toast to get trigger-updated count
       final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
       if (toastIndex != -1) {
-        final currentCount = state.posts[toastIndex].comment_count;
-
-        final updatedToasts = [...state.posts];
-        updatedToasts[toastIndex] = state.posts[toastIndex].copyWith(
-          comment_count: currentCount + 1,
-        );
-        state = state.copyWith(posts: updatedToasts);
-
-        _toastCache[toastId] = CachedToast(
-          toast: updatedToasts[toastIndex],
-          timestamp: DateTime.now(),
-        );
+        await _reloadSingleToast(toastId, toastIndex);
       }
 
       _commentCache.remove(toastId);
@@ -578,21 +582,10 @@ class ToastFeedNotifier extends StateNotifier<ToastFeedState> {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Optimistic update for UI
+      //  Reload toast to get trigger-updated count
       final toastIndex = state.posts.indexWhere((toast) => toast.toast_id == toastId);
       if (toastIndex != -1) {
-        final currentCount = state.posts[toastIndex].comment_count;
-
-        final updatedToasts = [...state.posts];
-        updatedToasts[toastIndex] = state.posts[toastIndex].copyWith(
-          comment_count: currentCount + 1,
-        );
-        state = state.copyWith(posts: updatedToasts);
-
-        _toastCache[toastId] = CachedToast(
-          toast: updatedToasts[toastIndex],
-          timestamp: DateTime.now(),
-        );
+        await _reloadSingleToast(toastId, toastIndex);
       }
 
       return true;
