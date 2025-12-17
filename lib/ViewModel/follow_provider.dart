@@ -83,6 +83,8 @@ class FollowNotifier extends StateNotifier<FollowState> {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const int _pageSize = 20;
   static const _cacheExpiry = Duration(minutes: 5);
+  final Map<String, DateTime> _lastToggleTime = {};
+  static const Duration _debounceDelay = Duration(milliseconds: 500);
 
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
@@ -258,13 +260,13 @@ class FollowNotifier extends StateNotifier<FollowState> {
     }
   }
 
-  // OPTIMIZED: Toggle follow with optimistic updates
+  // OPTIMIZED: Toggle follow with optimistic updates + cache invalidation
   Future<void> toggleFollow(String targetUserId) async {
     if (_currentUserId == null || _currentUserId == targetUserId) return;
 
     // Prevent multiple simultaneous requests
     if (state.processingFollowRequests.contains(targetUserId)) {
-      debugPrint(' Already processing follow request for $targetUserId');
+      debugPrint('⏳ Already processing follow request for $targetUserId');
       return;
     }
 
@@ -282,7 +284,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
     // Update counts optimistically
     _updateUserProfilesInLists(targetUserId, isCurrentlyFollowing ? -1 : 1);
 
-    debugPrint(' Optimistic update: ${isCurrentlyFollowing ? 'Unfollowed' : 'Followed'} $targetUserId');
+    debugPrint('✅ Optimistic update: ${isCurrentlyFollowing ? 'Unfollowed' : 'Followed'} $targetUserId');
 
     try {
       if (isCurrentlyFollowing) {
@@ -293,23 +295,30 @@ class FollowNotifier extends StateNotifier<FollowState> {
             .eq('follower_id', _currentUserId!)
             .eq('followee_id', targetUserId);
 
+        debugPrint('✅ Unfollowed $targetUserId');
+
         await _updateFollowerCount(targetUserId, -1);
         await _updateFollowingCount(_currentUserId!, -1);
       } else {
         // Follow
-        await _supabase
-            .from('user_follows')
-            .insert({
+        await _supabase.from('user_follows').insert({
           'follower_id': _currentUserId!,
           'followee_id': targetUserId,
           'followed_at': DateTime.now().toIso8601String(),
         });
 
+        debugPrint('✅ Followed $targetUserId');
+
         await _updateFollowerCount(targetUserId, 1);
         await _updateFollowingCount(_currentUserId!, 1);
       }
 
-      debugPrint(' Follow toggle successful');
+      // Invalidate cache after follow action
+      state = state.copyWith(
+        lastFollowersUpdate: null,
+        lastFollowingUpdate: null,
+      );
+      debugPrint('✅ Follow toggle successful, cache invalidated');
 
       // Remove from processing
       final updatedProcessingSet = Set<String>.from(state.processingFollowRequests);
@@ -319,8 +328,10 @@ class FollowNotifier extends StateNotifier<FollowState> {
         processingFollowRequests: updatedProcessingSet,
         error: null,
       );
+
+      return;
     } catch (e) {
-      debugPrint(' Error toggling follow: $e');
+      debugPrint('❌ Error toggling follow: $e');
 
       // REVERT optimistic update
       state = state.copyWith(
@@ -341,6 +352,47 @@ class FollowNotifier extends StateNotifier<FollowState> {
       state = state.copyWith(
         processingFollowRequests: updatedProcessingSet,
       );
+
+      // Rethrow for caller to handle
+      rethrow;
+    }
+  }
+
+  // Debounced toggle to prevent rapid-fire clicks
+  Future<void> toggleFollowWithDebounce(String targetUserId) async {
+    final now = DateTime.now();
+    final lastTime = _lastToggleTime[targetUserId];
+
+    if (lastTime != null && now.difference(lastTime) < _debounceDelay) {
+      debugPrint('⏳ Debouncing follow toggle for $targetUserId');
+      return;
+    }
+
+    _lastToggleTime[targetUserId] = now;
+    await toggleFollow(targetUserId);
+  }
+
+  /// Global refresh to sync follow status across app
+  Future<void> refreshFollowStatusGlobally(String targetUserId) async {
+    if (_currentUserId == null) return;
+    try {
+      final response = await _supabase
+          .from('user_follows')
+          .select('follower_id')
+          .eq('follower_id', _currentUserId!)
+          .eq('followee_id', targetUserId)
+          .maybeSingle();
+
+      final isFollowing = response != null;
+      state = state.copyWith(
+        followingStatus: {
+          ...state.followingStatus,
+          targetUserId: isFollowing,
+        },
+      );
+      debugPrint('✅ Refreshed follow status for $targetUserId: $isFollowing');
+    } catch (e) {
+      debugPrint('❌ Error refreshing follow status: $e');
     }
   }
 
@@ -377,9 +429,26 @@ class FollowNotifier extends StateNotifier<FollowState> {
         'user_id': userId,
         'increment_by': increment,
       });
+      debugPrint('✅ Updated follower count via RPC');
     } catch (e) {
-      debugPrint('RPC not available, skipping count update: $e');
-      // Non-critical - count will sync on next profile fetch
+      debugPrint('⚠️ RPC not available, using direct update: $e');
+      try {
+        await _supabase
+            .from('user_profiles')
+            .update({
+              'followers_count': _supabase.rpc('GREATEST', params: {
+                'a': 0,
+                'b': '(followers_count + $increment)',
+              }),
+            })
+            .eq('user_id', userId);
+        debugPrint('✅ Updated follower count via direct update');
+      } catch (directError) {
+        debugPrint('❌ Failed to update follower count: $directError');
+        state = state.copyWith(
+          error: 'Failed to update follower count. Please refresh.',
+        );
+      }
     }
   }
 
@@ -390,9 +459,26 @@ class FollowNotifier extends StateNotifier<FollowState> {
         'user_id': userId,
         'increment_by': increment,
       });
+      debugPrint('✅ Updated following count via RPC');
     } catch (e) {
-      debugPrint(' RPC not available, skipping count update: $e');
-      // Non-critical - count will sync on next profile fetch
+      debugPrint('⚠️ RPC not available, using direct update: $e');
+      try {
+        await _supabase
+            .from('user_profiles')
+            .update({
+              'following_count': _supabase.rpc('GREATEST', params: {
+                'a': 0,
+                'b': '(following_count + $increment)',
+              }),
+            })
+            .eq('user_id', userId);
+        debugPrint('✅ Updated following count via direct update');
+      } catch (directError) {
+        debugPrint('❌ Failed to update following count: $directError');
+        state = state.copyWith(
+          error: 'Failed to update following count. Please refresh.',
+        );
+      }
     }
   }
 

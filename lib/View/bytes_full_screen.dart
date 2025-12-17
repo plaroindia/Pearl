@@ -10,6 +10,7 @@ import 'widgets/double_tap_like.dart';
 import 'widgets/byte_comments.dart';
 import 'widgets/content_actions.dart';
 import 'byte_page.dart';
+import 'widgets/follow_button.dart';
 
 class BytesFullScreen extends ConsumerStatefulWidget {
   final List<Byte> bytes;
@@ -382,20 +383,9 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
 
                     // Follow button (if not own profile)
                     if (authState.value?.user != null && authState.value!.user.id != currentByte.userId)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 1.5),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Follow',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      FollowButton(
+                        targetUserId: currentByte.userId,
+                        compact: true,
                       ),
 
                     const SizedBox(width: 10),
@@ -508,29 +498,40 @@ class _ByteVideoPlayerState extends ConsumerState<ByteVideoPlayer> {
           // Swipe left indicator (only show if enabled)
           if (widget.showSwipeIndicator)
             Positioned(
-              right: 20,
-              bottom: MediaQuery.of(context).size.height / 2 - 40,
+              right: 15,
+              bottom: MediaQuery.of(context).size.height / 2 - 380,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.black38,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Column(
                   children: [
-                    const Icon(
-                      Icons.keyboard_arrow_left,
-                      color: Colors.white70,
-                      size: 20,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.keyboard_arrow_left,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chat_bubble_outline,color: Colors.white70,
+                          size: 20,),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Swipe left for comments (${currentByte.commentCount})',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        const SizedBox(width: 26),
+                        Text(
+                          '${currentByte.commentCount}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

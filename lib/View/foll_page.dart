@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../Model/user_profile.dart';
 import '../ViewModel/follow_provider.dart';
 import 'widgets/Profile_card.dart';
+import 'profile.dart';
 
 class FollowPage extends ConsumerStatefulWidget {
   final String userId; // The user whose followers/following we're viewing
@@ -357,9 +358,15 @@ class _FollowPageState extends ConsumerState<FollowPage>
           return ProfileCard(
             user: user,
             onTap: () {
-              // Navigate to user profile
-              print('Navigate to user profile: ${user.username}');
-              // Navigator.pushNamed(context, '/user_profile', arguments: user);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OtherProfileScreen(
+                    userId: user.user_id,
+                    initialUserData: user,
+                  ),
+                ),
+              );
             },
           );
         },
@@ -491,9 +498,15 @@ class _FollowPageState extends ConsumerState<FollowPage>
           return ProfileCard(
             user: user,
             onTap: () {
-              // Navigate to user profile
-              print('Navigate to user profile: ${user.username}');
-              // Navigator.pushNamed(context, '/user_profile', arguments: user);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OtherProfileScreen(
+                    userId: user.user_id,
+                    initialUserData: user,
+                  ),
+                ),
+              );
             },
           );
         },

@@ -43,8 +43,8 @@ class UserProfile {
       study: json['study'],
       location: json['location'],
       streakCount: json['streak_count'],
-      followersCount: json['followers_count'],
-      followingCount: json['following_count'],
+      followersCount: json['followers_count'] as int? ?? 0,
+      followingCount: json['following_count'] as int? ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,

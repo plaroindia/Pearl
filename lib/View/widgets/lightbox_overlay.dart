@@ -11,6 +11,7 @@ import 'toast_card.dart';
 import '../../ViewModel/auth_provider.dart';
 import 'double_tap_like.dart';
 import 'byte_comments.dart';
+import 'follow_button.dart';
 
 class LightboxOverlay extends ConsumerStatefulWidget {
   const LightboxOverlay({super.key});
@@ -368,20 +369,9 @@ class _LightboxBytePlayerState extends ConsumerState<_LightboxBytePlayer> {
 
                     // Follow button (if not own profile)
                     if (authState.value?.user != null && authState.value!.user.id != widget.byte.userId)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 1.5),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Follow',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      FollowButton(
+                        targetUserId: widget.byte.userId,
+                        compact: true,
                       ),
 
                     const SizedBox(width: 10),

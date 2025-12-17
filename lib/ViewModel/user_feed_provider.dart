@@ -11,7 +11,7 @@ class ProfileFeedState {
   final List<Byte> bytes;
   final bool isLoadingPosts;
   final bool isLoadingToasts;
-  final bool isLoadingBytes;
+  final bool isLoadingBytes;  
   final bool isLoadingMorePosts;
   final bool isLoadingMoreToasts;
   final bool isLoadingMoreBytes;
@@ -663,6 +663,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       );
     }
   }// Toggle like for user's byte
+  
   Future<void> toggleByteLike(String byteId) async {
     if (state.bytes.isEmpty || state.likingBytes.contains(byteId)) return;
 

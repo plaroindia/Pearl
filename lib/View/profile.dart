@@ -8,19 +8,17 @@ import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
 import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/follow_provider.dart';
-import 'widgets/post_user_card.dart';
-import 'widgets/toast_user_card.dart';
 import '../Model/byte.dart';
 import '../Model/toast.dart';
 import '../Model/post.dart';
 import '../Model/user_profile.dart';
 import '../View/foll_page.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../ViewModel/lightbox_provider.dart';
 import 'widgets/lightbox_overlay.dart';
 import '../View/post_full_screen.dart' as post_screen;
 import '../View/toast_full_screen.dart' as toast_screen;
 import '../View/bytes_full_screen.dart';
+import 'widgets/follow_button.dart';
 
 class OtherProfileScreen extends ConsumerStatefulWidget {
   final String? userId;
@@ -191,7 +189,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
       }
       setState(() => _isInitialized = true);
     } catch (e) {
-      print('❌ Error loading profile: $e');
+      print(' Error loading profile: $e');
       setState(() => _isInitialized = true);
     }
   }
@@ -208,12 +206,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     await ref.read(profileFeedProvider.notifier).refreshUserContent(targetUserId);
     await _loadUserProfile();
     _fadeController.forward();
-  }
-
-  Future<void> _toggleFollow() async {
-    if (!isOwnProfile) {
-      await ref.read(followProvider.notifier).toggleFollow(targetUserId);
-    }
   }
 
   void _openChat() {
@@ -682,36 +674,15 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         ],
       );
     } else {
-      final isFollowing = followState?.followingStatus[targetUserId] ?? false;
-      final isProcessing =
-          followState?.processingFollowRequests.contains(targetUserId) ?? false;
-
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isFollowing ? Colors.grey[800] : Colors.blue,
-              foregroundColor: Colors.white,
-              side: BorderSide(
-                width: 2.0,
-                color: isFollowing ? Colors.grey : Colors.blue,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-            ),
-            onPressed: isProcessing ? null : _toggleFollow,
-            child: isProcessing
-                ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-                : Text(isFollowing ? "Following" : "Follow"),
+          FollowButton(
+            targetUserId: targetUserId,
+            compact: false,
+            onFollowSuccess: () {
+              ref.read(setProfileProvider.notifier).getUserProfile(targetUserId);
+            },
           ),
           const SizedBox(width: 30.0),
           ElevatedButton(
@@ -1454,7 +1425,9 @@ class ProfileBytesGrid extends ConsumerWidget {
 
   Widget _buildOptimizedByteCard(Byte byte, BuildContext context) {
     // Use thumbnailUrl if available, otherwise fallback to videoUrl or empty
-    final thumbnailUrl = byte.thumbnailUrl ?? byte.videoUrl ?? '';
+    final thumbnailCandidate = byte.thumbnailUrl;
+    final thumbnailUrl =
+        (thumbnailCandidate != null && thumbnailCandidate.isNotEmpty) ? thumbnailCandidate : byte.videoUrl;
 
     return GestureDetector(
       onTap: () => onByteTap(byte),
