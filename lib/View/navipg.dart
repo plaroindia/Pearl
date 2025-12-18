@@ -77,7 +77,7 @@ class _navCardState extends ConsumerState<navCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.person_off, color: Colors.grey[400], size: 64),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'Please log in to view profile',
               style: TextStyle(
@@ -86,7 +86,7 @@ class _navCardState extends ConsumerState<navCard> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
                 // Navigate to login screen
@@ -432,7 +432,7 @@ class _NotificationsScreen extends State<NotificationsScreen> {
                 backgroundImage: AssetImage('assets/plaro_logo.png'),
                 radius: 15.0,
               ),
-              SizedBox(width: 13.0),
+              const SizedBox(width: 13.0),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -444,7 +444,7 @@ class _NotificationsScreen extends State<NotificationsScreen> {
                       letterSpacing: 2.0,
                     ),
                   ),
-                  SizedBox(height: 3.0),
+                  const SizedBox(height: 3.0),
                   Text(
                     "Note",
                     style: TextStyle(
@@ -457,7 +457,7 @@ class _NotificationsScreen extends State<NotificationsScreen> {
               ),
             ],
           ),
-          SizedBox(width: 30.0),
+          const SizedBox(width: 30.0),
           Text(
             "Time",
             style: TextStyle(

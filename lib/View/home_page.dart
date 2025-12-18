@@ -99,7 +99,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         await ref.read(setProfileProvider.notifier).getUserProfile(user.id);
       }
     } catch (e) {
-      print('Error loading user profile: $e');
+      debugPrint('Error loading user profile: $e');
     } finally {
       if (mounted) {
         setState(() => _isInitialized = true);
@@ -174,7 +174,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _refreshFeed() async {
-    print('🔄 Refreshing feeds with cache invalidation...');
+    debugPrint('🔄 Refreshing feeds with cache invalidation...');
 
     setState(() {
       _feedsInitialized = false;
@@ -189,9 +189,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
       setState(() => _feedsInitialized = true);
 
-      print('✅ Feeds refreshed successfully with fresh data');
+      debugPrint('✅ Feeds refreshed successfully with fresh data');
     } catch (e) {
-      print('❌ Error refreshing feeds: $e');
+      debugPrint('❌ Error refreshing feeds: $e');
       setState(() => _feedsInitialized = true);
     }
   }
@@ -230,8 +230,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     combinedFeed.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
-    // In your _buildCombinedFeed method, add debug logging:
-    print('DEBUG: Combined feed counts - ${combinedFeed.map((item) => '${item['type']}: ${item['data'].like_count} likes').toList()}');
+    // Debug logging for combined feed
+    debugPrint('DEBUG: Combined feed counts - ${combinedFeed.map((item) => '${item['type']}: ${item['data'].like_count} likes').toList()}');
     return combinedFeed;
   }
 
@@ -429,32 +429,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 profile?.username ??
                                     session?.user.email ??
                                     'No user',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onPrimary,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                               ),
-                              loading: () => const Text(
+                              loading: () => Text(
                                 'Loading...',
-                                style: TextStyle(color: Colors.white70),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)),
                               ),
                               error: (error, stack) => Text(
                                 session?.user.email ?? 'Error loading user',
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
                                 textAlign: TextAlign.center,
                               ),
                             );
                           },
-                          loading: () => const Text(
+                          loading: () => Text(
                             'Loading...',
-                            style: TextStyle(color: Colors.white70),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)),
                           ),
-                          error: (error, stack) => const Text(
+                          error: (error, stack) => Text(
                             'Error loading user',
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
                           ),
                         );
                       },

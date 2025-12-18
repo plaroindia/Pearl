@@ -49,7 +49,7 @@ class EventCard extends StatelessWidget {
                     children: [
                       RichText(
                         text: _highlightText(event.title, searchQuery, colorScheme.onSurface),
-                        maxLines: 1  ,
+                        maxLines: 1,
                         overflow: TextOverflow.fade,
 
                       ),

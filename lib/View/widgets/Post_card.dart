@@ -942,7 +942,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> with AutomaticKee
         }
       });
     } catch (error) {
-      print('Error initializing video: $error');
+      debugPrint('Error initializing video: $error');
       if (mounted) {
         setState(() {
           _isInitialized = false;

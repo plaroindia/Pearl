@@ -95,12 +95,16 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
   void didUpdateWidget(OtherProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.userId != widget.userId) {
+      // Clear everything
+      ref.read(profileFeedProvider.notifier).clearFeed();
+      if (!isOwnProfile) ref.read(followProvider.notifier).clear();
+
       setState(() {
         _isInitialized = false;
-        _loadedTabs.clear();
-        _loadedTabs.add(0);
+        _loadedTabs.clear(); // Clear loaded tabs tracking
+        _tabController.index = 0; // Reset to first tab
       });
-      _clearProvidersState();
+
       _fadeController.reset();
       _loadUserProfile();
       _fadeController.forward();
@@ -109,6 +113,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
 
   void _clearProvidersState() {
     if (!isOwnProfile) ref.read(followProvider.notifier).clear();
+    ref.read(profileFeedProvider.notifier).clearFeed();
   }
 
   // OPTIMIZATION: Tab change listener for background preloading
@@ -137,22 +142,17 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
 
     switch (tabIndex) {
       case 0:
-        if (ref.read(profileFeedProvider).posts.isEmpty) {
-          notifier.loadUserPosts(targetUserId); // No await here either
-        }
+        notifier.loadUserPosts(targetUserId); // Remove isEmpty check
         break;
       case 1:
-        if (ref.read(profileFeedProvider).toasts.isEmpty) {
-          notifier.loadUserToasts(targetUserId);
-        }
+        notifier.loadUserToasts(targetUserId); // Remove isEmpty check
         break;
       case 2:
-        if (ref.read(profileFeedProvider).bytes.isEmpty) {
-          notifier.loadUserBytes(targetUserId);
-        }
+        notifier.loadUserBytes(targetUserId); // Remove isEmpty check
         break;
     }
   }
+
   void _onPostsScroll() {
     if (_postsScrollController.position.pixels >=
         _postsScrollController.position.maxScrollExtent - 300) {

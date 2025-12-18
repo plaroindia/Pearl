@@ -16,6 +16,7 @@ class ProfileFeedState {
   final bool isLoadingMoreToasts;
   final bool isLoadingMoreBytes;
   final String? error;
+  final String? loadedUserId;
   final Set<String> likingPosts;
   final Set<String> likingToasts;
   final Set<String> likingBytes;
@@ -37,6 +38,7 @@ class ProfileFeedState {
     this.isLoadingMoreToasts = false,
     this.isLoadingMoreBytes = false,
     this.error,
+    this.loadedUserId,
     this.likingPosts = const {},
     this.likingToasts = const {},
     this.likingBytes = const {},
@@ -59,9 +61,11 @@ class ProfileFeedState {
     bool? isLoadingMoreToasts,
     bool? isLoadingMoreBytes,
     String? error,
+    String? loadedUserId,
     Set<String>? likingPosts,
     Set<String>? likingToasts,
     Set<String>? likingBytes,
+
     bool? hasMorePosts,
     bool? hasMoreToasts,
     bool? hasMoreBytes,
@@ -80,6 +84,7 @@ class ProfileFeedState {
       isLoadingMoreToasts: isLoadingMoreToasts ?? this.isLoadingMoreToasts,
       isLoadingMoreBytes: isLoadingMoreBytes ?? this.isLoadingMoreBytes,
       error: error,
+      loadedUserId: loadedUserId ?? this.loadedUserId,
       likingPosts: likingPosts ?? this.likingPosts,
       likingToasts: likingToasts ?? this.likingToasts,
       likingBytes: likingBytes ?? this.likingBytes,
@@ -107,6 +112,13 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
   // Load user's posts
   Future<void> loadUserPosts(final UserId) async {
+    if (state.loadedUserId != null && state.loadedUserId != UserId) {
+      state = state.copyWith(
+        posts: [],
+        loadedUserId: UserId,
+      );
+    }
+
     if (state.isLoadingPosts) return;
 
     state = state.copyWith(isLoadingPosts: true, error: null);
@@ -210,6 +222,13 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
   // Load user's toasts
   Future<void> loadUserToasts(final UserId) async {
+    if (state.loadedUserId != null && state.loadedUserId != UserId) {
+      state = state.copyWith(
+        toasts: [],
+        loadedUserId: UserId,
+      );
+    }
+
     if (state.isLoadingToasts) return;
 
     state = state.copyWith(isLoadingToasts: true, error: null);
@@ -526,6 +545,12 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
 
   // Load user's bytes
   Future<void> loadUserBytes(final UserId) async {
+    if (state.loadedUserId != null && state.loadedUserId != UserId) {
+      state = state.copyWith(
+        bytes: [],
+        loadedUserId: UserId,
+      );
+    }
     if (state.isLoadingBytes) return;
 
     state = state.copyWith(isLoadingBytes: true, error: null);

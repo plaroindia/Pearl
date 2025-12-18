@@ -66,7 +66,7 @@ class AppThemes {
     useMaterial3: true,
     scaffoldBackgroundColor: Colors.white,
     colorScheme: const ColorScheme.light(
-      primary: Colors.black87,
+      primary: Color(0xFF2196F3),
       secondary: Colors.blueAccent,
       surface: Colors.white,
       background: Colors.white,

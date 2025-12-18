@@ -188,11 +188,11 @@ class ToastCard extends ConsumerWidget {
                   color: toast.isliked ? Colors.red : theme.dividerColor,
                   isLoading: isLiking,
                   onPressed: isLiking ? null : () {
-                    print('🔵 Like button pressed for toast: ${toast.toast_id}');
+                    debugPrint('🔵 Like button pressed for toast: ${toast.toast_id}');
                     if (toast.toast_id != null) {
                       ref.read(toastFeedProvider.notifier).toggleLike(toast.toast_id!);
                     } else {
-                      print('🔴 Toast ID is null!');
+                      debugPrint('🔴 Toast ID is null!');
                     }
                   },
                 ),
