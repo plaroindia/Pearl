@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Model/post.dart' as post_model;
-import '../Model/toast.dart' as toast_model;
 import '../Model/byte.dart';
 
 // State class for profile feed
 class ProfileFeedState {
   final List<post_model.Post_feed> posts;
-  final List<toast_model.Toast_feed> toasts;
   final List<Byte> bytes;
   final bool isLoadingPosts;
   final bool isLoadingToasts;
@@ -29,7 +27,6 @@ class ProfileFeedState {
 
   const ProfileFeedState({
     this.posts = const [],
-    this.toasts = const [],
     this.bytes = const [],
     this.isLoadingPosts = false,
     this.isLoadingToasts = false,
@@ -52,7 +49,6 @@ class ProfileFeedState {
 
   ProfileFeedState copyWith({
     List<post_model.Post_feed>? posts,
-    List<toast_model.Toast_feed>? toasts,
     List<Byte>? bytes,
     bool? isLoadingPosts,
     bool? isLoadingToasts,
@@ -75,7 +71,6 @@ class ProfileFeedState {
   }) {
     return ProfileFeedState(
       posts: posts ?? this.posts,
-      toasts: toasts ?? this.toasts,
       bytes: bytes ?? this.bytes,
       isLoadingPosts: isLoadingPosts ?? this.isLoadingPosts,
       isLoadingToasts: isLoadingToasts ?? this.isLoadingToasts,
@@ -220,138 +215,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     }
   }
 
-  // Load user's toasts
-  Future<void> loadUserToasts(final UserId) async {
-    if (state.loadedUserId != null && state.loadedUserId != UserId) {
-      state = state.copyWith(
-        toasts: [],
-        loadedUserId: UserId,
-      );
-    }
-
-    if (state.isLoadingToasts) return;
-
-    state = state.copyWith(isLoadingToasts: true, error: null);
-
-    try {
-      final user = UserId;
-      if (user == null) {
-        state = state.copyWith(
-          isLoadingToasts: false,
-          error: 'User not authenticated',
-        );
-        return;
-      }
-
-      print('Loading toasts for user: ${user}');
-
-      final response = await _supabase
-          .from('toasts')
-          .select('''
-      *,
-      user_profiles!inner(username, profile_pic),
-      toast_comments(
-        comment_id,
-        user_id,
-        content,
-        like_count,
-        created_at
-      )
-    ''')
-          .eq('user_id', user)
-          .eq('is_published', true)
-          .order('created_at', ascending: false)
-          .range(0, _pageSize - 1);
-
-      print('Toast response: $response');
-
-      if (response.isEmpty) {
-        print('No toasts found for user');
-        state = state.copyWith(
-          toasts: [],
-          isLoadingToasts: false,
-          hasMoreToasts: false,
-          currentToastPage: 1,
-        );
-        return;
-      }
-
-      final List<toast_model.Toast_feed> newToasts = [];
-
-      for (var toastData in response) {
-        try {
-          final String toastId = toastData['toast_id'] as String;
-
-          // Check if current user liked this toast
-          bool isLiked = false;
-          final likeResponse = await _supabase
-              .from('toast_likes')
-              .select('toast_like_id')
-              .eq('toast_id', toastId)
-              .eq('user_id', user)
-              .maybeSingle();
-          isLiked = likeResponse != null;
-
-          // Process comments
-          List<Map<String, dynamic>> commentMaps = [];
-          if (toastData['toast_comments'] != null) {
-            for (var commentData in toastData['toast_comments']) {
-              // Fetch user profile for each comment
-              final commentUserId = commentData['user_id'];
-              final userProfileResponse = await _supabase
-                  .from('user_profiles')
-                  .select('username, profile_pic')
-                  .eq('user_id', commentUserId)
-                  .maybeSingle();
-
-              commentMaps.add({
-                'comment_id': commentData['comment_id'],
-                'toast_id': toastId,
-                'user_id': commentData['user_id'],
-                'content': commentData['content'],
-                'like_count': commentData['like_count'] ?? 0,
-                'created_at': commentData['created_at'],
-                'username': userProfileResponse?['username'] ?? 'Unknown',
-                'profile_pic': userProfileResponse?['profile_pic'] ?? '',
-                'uliked': false,
-              });
-            }
-          }
-          final toast = toast_model.Toast_feed.fromMap({
-            ...toastData,
-            'toast_id': toastId,
-            'username': toastData['user_profiles']['username'],
-            'profile_pic': toastData['user_profiles']['profile_pic'],
-            // like_count and comment_count are maintained by DB triggers
-            'isliked': isLiked,
-            'toast_comments': commentMaps,
-          });
-
-          newToasts.add(toast);
-        } catch (e) {
-          print('Error processing toast: $e');
-          continue;
-        }
-      }
-
-      state = state.copyWith(
-        toasts: newToasts,
-        isLoadingToasts: false,
-        hasMoreToasts: newToasts.length == _pageSize,
-        currentToastPage: 1,
-      );
-
-      print('Successfully loaded ${newToasts.length} toasts');
-
-    } catch (e) {
-      print('Error loading toasts: $e');
-      state = state.copyWith(
-        isLoadingToasts: false,
-        error: 'Failed to load toasts: $e',
-      );
-    }
-  }
-
   // Load more posts (pagination)
   Future<void> loadMoreUserPosts(final UserId) async {
     if (state.isLoadingMorePosts || !state.hasMorePosts) return;
@@ -443,102 +306,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       state = state.copyWith(
         isLoadingMorePosts: false,
         error: 'Failed to load more posts: $e',
-      );
-    }
-  }
-
-  // Load more toasts (pagination)
-  Future<void> loadMoreUserToasts(final UserId) async {
-    if (state.isLoadingMoreToasts || !state.hasMoreToasts) return;
-
-    final user = UserId;
-    if (user == null) return;
-
-    state = state.copyWith(isLoadingMoreToasts: true, error: null);
-
-    try {
-      final startRange = state.currentToastPage * _pageSize;
-      final endRange = startRange + _pageSize - 1;
-
-      final response = await _supabase
-          .from('toasts')
-          .select('''
-            *,
-            user_profiles!inner(username, profile_pic),
-            toast_comments(
-              comment_id,
-              user_id,
-              content,
-              like_count,
-              created_at,
-              user_profiles!toast_comments_user_id_fkey(username, profile_pic)
-            )
-          ''')
-          .eq('user_id', user)
-          .eq('is_published', true)
-          .order('created_at', ascending: false)
-          .range(startRange, endRange);
-
-      final List<toast_model.Toast_feed> newToasts = [];
-
-      for (var toastData in response) {
-        final String toastId = toastData['toast_id'].toString();
-
-        // Avoid duplicates
-        final alreadyExists = state.toasts.any((t) => t.toast_id == toastId);
-        if (alreadyExists) continue;
-
-        // Check if current user liked this toast
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('toast_likes')
-            .select('toast_like_id')
-            .eq('toast_id', toastId)
-            .eq('user_id', user)
-            .maybeSingle();
-        isLiked = likeResponse != null;
-
-        // Process comments
-        List<Map<String, dynamic>> commentMaps = [];
-        if (toastData['toast_comments'] != null) {
-          for (var commentData in toastData['toast_comments']) {
-            commentMaps.add({
-              'comment_id': commentData['comment_id'],
-              'toast_id': toastId,
-              'user_id': commentData['user_id'],
-              'content': commentData['content'],
-              'like_count': commentData['like_count'] ?? 0,
-              'created_at': commentData['created_at'],
-              'username': commentData['user_profiles']['username'],
-              'profile_pic': commentData['user_profiles']['profile_pic'],
-              'uliked': false,
-            });
-          }
-        }
-
-        final toast = toast_model.Toast_feed.fromMap({
-          ...toastData,
-          'toast_id': toastId,
-          'username': toastData['user_profiles']['username'],
-          'profile_pic': toastData['user_profiles']['profile_pic'],
-          // like_count and comment_count are maintained by DB triggers
-          'isliked': isLiked,
-          'toast_comments': commentMaps,
-        });
-
-        newToasts.add(toast);
-      }
-
-      state = state.copyWith(
-        toasts: [...state.toasts, ...newToasts],
-        isLoadingMoreToasts: false,
-        hasMoreToasts: newToasts.length == _pageSize,
-        currentToastPage: state.currentToastPage + 1,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isLoadingMoreToasts: false,
-        error: 'Failed to load more toasts: $e',
       );
     }
   }
@@ -758,7 +525,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     state = const ProfileFeedState();
     await Future.wait([
       loadUserPosts(UserId),
-      loadUserToasts(UserId),
       loadUserBytes(UserId),
     ]);
   }
@@ -829,66 +595,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
     }
   }
 
-  // Toggle like for user's toast
-  Future<void> toggleToastLike(String toastId) async {
-    if (state.toasts.isEmpty || state.likingToasts.contains(toastId)) return;
-
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-
-    final toastIndex = state.toasts.indexWhere((toast) => toast.toast_id == toastId);
-    if (toastIndex == -1) return;
-
-    final currentToast = state.toasts[toastIndex];
-    final currentlyLiked = currentToast.isliked;
-
-    // Optimistic: toggle isliked only, counts handled by DB triggers
-    final newToasts = [...state.toasts];
-    newToasts[toastIndex] = currentToast.copyWith(
-      isliked: !currentlyLiked,
-    );
-
-    state = state.copyWith(
-      toasts: newToasts,
-      likingToasts: {...state.likingToasts, toastId},
-    );
-
-    try {
-      if (currentlyLiked) {
-        await _supabase
-            .from('toast_likes')
-            .delete()
-            .eq('toast_id', toastId)
-            .eq('user_id', user.id);
-      } else {
-        await _supabase.from('toast_likes').insert({
-          'toast_id': toastId,
-          'user_id': user.id,
-          'liked_at': DateTime.now().toIso8601String(),
-        });
-      }
-
-      state = state.copyWith(
-        likingToasts: {...state.likingToasts}..remove(toastId),
-      );
-
-    } catch (error) {
-      print('Error toggling toast like: $error');
-
-      final revertedToasts = [...state.toasts];
-      final currentToastIndex = revertedToasts.indexWhere((toast) => toast.toast_id == toastId);
-      if (currentToastIndex != -1) {
-        revertedToasts[currentToastIndex] = currentToast;
-      }
-
-      state = state.copyWith(
-        toasts: revertedToasts,
-        likingToasts: {...state.likingToasts}..remove(toastId),
-        error: 'Failed to update toast like: ${error.toString()}',
-      );
-    }
-  }
-
   // Delete user's post
   Future<bool> deletePost(String postId) async {
     final user = _supabase.auth.currentUser;
@@ -907,28 +613,6 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       return true;
     } catch (e) {
       state = state.copyWith(error: 'Failed to delete post: $e');
-      return false;
-    }
-  }
-
-  // Delete user's toast
-  Future<bool> deleteToast(String toastId) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return false;
-
-    try {
-      await _supabase
-          .from('toasts')
-          .delete()
-          .eq('toast_id', toastId)
-          .eq('user_id', user.id);
-
-      final updatedToasts = state.toasts.where((toast) => toast.toast_id != toastId).toList();
-      state = state.copyWith(toasts: updatedToasts);
-
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: 'Failed to delete toast: $e');
       return false;
     }
   }

@@ -9,14 +9,14 @@ import '../ViewModel/auth_provider.dart';
 import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/follow_provider.dart';
 import '../Model/byte.dart';
-import '../Model/toast.dart';
+//import '../Model/toast.dart';
 import '../Model/post.dart';
 import '../Model/user_profile.dart';
 import '../View/foll_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'widgets/lightbox_overlay.dart';
 import '../View/post_full_screen.dart' as post_screen;
-import '../View/toast_full_screen.dart' as toast_screen;
+//import '../View/toast_full_screen.dart' as toast_screen;
 import '../View/bytes_full_screen.dart';
 import 'widgets/follow_button.dart';
 
@@ -60,7 +60,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _postsScrollController.addListener(_onPostsScroll);
-    _toastsScrollController.addListener(_onToastsScroll);
     _bytesScrollController.addListener(_onBytesScroll);
 
     // Initialize fade animation
@@ -145,9 +144,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
         notifier.loadUserPosts(targetUserId); // Remove isEmpty check
         break;
       case 1:
-        notifier.loadUserToasts(targetUserId); // Remove isEmpty check
-        break;
-      case 2:
         notifier.loadUserBytes(targetUserId); // Remove isEmpty check
         break;
     }
@@ -160,12 +156,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     }
   }
 
-  void _onToastsScroll() {
-    if (_toastsScrollController.position.pixels >=
-        _toastsScrollController.position.maxScrollExtent - 300) {
-      ref.read(profileFeedProvider.notifier).loadMoreUserToasts(targetUserId);
-    }
-  }
 
   void _onBytesScroll() {
     if (_bytesScrollController.position.pixels >=
@@ -276,7 +266,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
                 physics: const BouncingScrollPhysics(),
                 children: [
                   _buildPostsTab(feedState),
-                  _buildToastsTab(feedState),
                   _buildBytesTab(feedState),
                 ],
               ),
@@ -706,51 +695,42 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     return Container(
       color: Colors.black,
       child: TabBar(
-        isScrollable: true,
         controller: _tabController,
+        isScrollable: false,
+        tabAlignment: TabAlignment.fill,
         indicator: UnderlineTabIndicator(
           borderSide: BorderSide(width: 2, color: Colors.blue[400]!),
-          insets: const EdgeInsets.symmetric(horizontal: 16.0),
+          insets: const EdgeInsets.symmetric(horizontal: 24),
         ),
-        indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.blue,
         unselectedLabelColor: Colors.grey,
-        physics: const BouncingScrollPhysics(),
         tabs: [
-          Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.view_array_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text('Posts (${feedState.posts.length})'),
-              ],
-            ),
+          _tabItem(
+            Icons.view_array_outlined,
+            'Posts (${feedState.posts.length})',
           ),
-          Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.campaign_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text('Toasts (${feedState.toasts.length})'),
-              ],
-            ),
-          ),
-          Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.video_library_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text('Bytes (${feedState.bytes.length})'),
-              ],
-            ),
+          _tabItem(
+            Icons.video_library_outlined,
+            'Bytes (${feedState.bytes.length})',
           ),
         ],
       ),
     );
   }
+
+  Tab _tabItem(IconData icon, String text) {
+    return Tab(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(text),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildPostsTab(ProfileFeedState feedState) {
     final isLoading = feedState.isLoadingPosts && feedState.posts.isEmpty;
@@ -800,53 +780,6 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     );
   }
 
-  Widget _buildToastsTab(ProfileFeedState feedState) {
-    final isLoading = feedState.isLoadingToasts && feedState.toasts.isEmpty;
-    final isEmpty = feedState.toasts.isEmpty && !feedState.isLoadingToasts;
-
-    if (isLoading) {
-      return _buildGridSkeleton();
-    }
-
-    if (isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.campaign_outlined,
-        title: isOwnProfile ? 'No toasts yet' : 'No toasts to show',
-        subtitle: isOwnProfile
-            ? 'Your toasts will appear here'
-            : 'This user hasn\'t shared any toasts yet',
-      );
-    }
-
-    return AnimatedOpacity(
-      opacity: _isInitialized ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: ProfileToastsGrid(
-        toasts: feedState.toasts,
-        scrollController: _toastsScrollController,
-        onToastTap: (toast) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => toast_screen.ToastFullScreen(toast: toast),
-            ),
-          );
-        },
-        onLike: (toastId) {
-          ref.read(profileFeedProvider.notifier).toggleToastLike(toastId);
-        },
-        onDelete: isOwnProfile
-            ? (toastId) {
-          _showDeleteConfirmation('toast', () {
-            ref.read(profileFeedProvider.notifier).deleteToast(toastId);
-          });
-        }
-            : null,
-        isLoadingMore: feedState.isLoadingMoreToasts,
-        hasMore: feedState.hasMoreToasts,
-      ),
-    );
-  }
 
   Widget _buildBytesTab(ProfileFeedState feedState) {
     final isLoading = feedState.isLoadingBytes && feedState.bytes.isEmpty;
@@ -1147,168 +1080,6 @@ class ProfilePostsGrid extends ConsumerWidget {
             color: Colors.grey[800],
             child: const Icon(Icons.image, color: Colors.grey, size: 40),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorBanner(String error, WidgetRef ref) {
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.red.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                error,
-                style: const TextStyle(color: Colors.red, fontSize: 12),
-              ),
-            ),
-            IconButton(
-              onPressed: () =>
-                  ref.read(profileFeedProvider.notifier).clearError(),
-              icon: const Icon(Icons.close, color: Colors.red, size: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return const SliverToBoxAdapter(
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEndMessage(String message) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: Text(
-            message,
-            style: const TextStyle(color: Colors.grey, fontSize: 14),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// OPTIMIZED: ProfileToastsGrid with cached images
-class ProfileToastsGrid extends ConsumerWidget {
-  final List<Toast_feed> toasts;
-  final ScrollController scrollController;
-  final Function(Toast_feed) onToastTap;
-  final Function(String) onLike;
-  final Function(String)? onDelete;
-  final bool isLoadingMore;
-  final bool hasMore;
-
-  const ProfileToastsGrid({
-    Key? key,
-    required this.toasts,
-    required this.scrollController,
-    required this.onToastTap,
-    required this.onLike,
-    this.onDelete,
-    required this.isLoadingMore,
-    required this.hasMore,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final feedState = ref.watch(profileFeedProvider);
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: CustomScrollView(
-        controller: scrollController,
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          if (feedState.error != null) _buildErrorBanner(feedState.error!, ref),
-          SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.9,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                final toast = toasts[index];
-                return _buildOptimizedToastCard(toast);
-              },
-              childCount: toasts.length,
-            ),
-          ),
-          if (isLoadingMore) _buildLoadingIndicator(),
-          if (!hasMore && toasts.isNotEmpty) _buildEndMessage('No more toasts'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOptimizedToastCard(Toast_feed toast) {
-    return GestureDetector(
-      onTap: () => onToastTap(toast),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
-        ),
-        child: Stack(
-          children: [
-            // Text content container
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Toast content
-                  Text(
-                    toast.content ?? 'No content',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-            // Toast icon in corner
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Icon(
-                Icons.campaign,
-                color: Colors.blue.withOpacity(0.7),
-                size: 20,
-              ),
-            ),
-          ],
         ),
       ),
     );

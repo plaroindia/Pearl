@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:plaro_3/View/allcourses_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
-import '../ViewModel/toast_feed_provider.dart';
 import '../ViewModel/post_feed_provider.dart';
-import 'widgets/toast_card.dart';
 import 'widgets/post_card.dart';
 import 'search_page.dart';
 import '../ViewModel/theme_provider.dart';
@@ -72,14 +69,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
     _lastLoadMoreTime = now;
 
-    final toastFeedState = ref.read(toastFeedProvider);
     final postFeedState = ref.read(postFeedProvider);
 
     final futures = <Future>[];
 
-    if (toastFeedState.hasMore && !toastFeedState.isLoadingMore) {
-      futures.add(ref.read(toastFeedProvider.notifier).loadMorePosts());
-    }
 
     if (postFeedState.hasMore && !postFeedState.isLoadingMore) {
       futures.add(ref.read(postFeedProvider.notifier).loadMorePosts());
@@ -110,24 +103,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Future<void> _initializeFeeds() async {
     if (_feedsInitialized) return;
 
-    final toastFeedState = ref.read(toastFeedProvider);
     final postFeedState = ref.read(postFeedProvider);
 
     final futures = <Future>[];
-
-    final bool shouldLoadToasts = toastFeedState.posts.isEmpty &&
-        (toastFeedState.lastFetchTime == null ||
-            DateTime.now().difference(toastFeedState.lastFetchTime!) >
-                Duration(minutes: 5));
 
     final bool shouldLoadPosts = postFeedState.posts.isEmpty &&
         (postFeedState.lastFetchTime == null ||
             DateTime.now().difference(postFeedState.lastFetchTime!) >
                 Duration(minutes: 5));
 
-    if (shouldLoadToasts && !toastFeedState.isLoading) {
-      futures.add(ref.read(toastFeedProvider.notifier).loadTosts());
-    }
 
     if (shouldLoadPosts && !postFeedState.isLoading) {
       futures.add(ref.read(postFeedProvider.notifier).loadPosts());
@@ -183,7 +167,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     try {
       await Future.wait([
-        ref.read(toastFeedProvider.notifier).refreshPosts(),
         ref.read(postFeedProvider.notifier).refreshPosts(),
       ]);
 
@@ -196,23 +179,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
-  List<Map<String, dynamic>> _getCombinedFeed(toastFeedState, postFeedState) {
+  List<Map<String, dynamic>> _getCombinedFeed(postFeedState) {
     final List<Map<String, dynamic>> combinedFeed = [];
 
-    for (final toast in toastFeedState.posts) {
-      DateTime timestamp;
-      try {
-        timestamp = DateTime.parse(toast.created_at);
-      } catch (e) {
-        timestamp = DateTime.now();
-      }
-
-      combinedFeed.add({
-        'type': 'toast',
-        'data': toast,
-        'timestamp': timestamp,
-      });
-    }
 
     for (final post in postFeedState.posts) {
       DateTime timestamp;
@@ -235,15 +204,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return combinedFeed;
   }
 
-  bool _shouldInitializeFeeds(toastFeedState, postFeedState) {
-    final bool hasCachedData = toastFeedState.posts.isNotEmpty ||
-        postFeedState.posts.isNotEmpty;
-    final bool isCacheFresh = toastFeedState.lastFetchTime != null &&
-        DateTime.now().difference(toastFeedState.lastFetchTime!) <
-            Duration(minutes: 5);
-
-    return !hasCachedData || !isCacheFresh;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +211,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final authState = ref.watch(authStateProvider);
     final profileState = ref.watch(setProfileProvider);
-    final toastFeedState = ref.watch(toastFeedProvider);
     final postFeedState = ref.watch(postFeedProvider);
     final themeMode = ref.watch(themeNotifierProvider);
 
@@ -262,10 +221,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_shouldInitializeFeeds(toastFeedState, postFeedState) &&
-          !_feedsInitialized) {
         _initializeFeeds();
-      }
     });
 
     return Scaffold(
@@ -329,7 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             );
           }
 
-          return _buildCombinedFeed(toastFeedState, postFeedState);
+          return _buildCombinedFeed(postFeedState);
         },
         loading: () => _buildSkeletonLoader(),
         error: (error, stack) => Center(
@@ -554,12 +510,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildCombinedFeed(dynamic toastFeedState, dynamic postFeedState) {
-    final combinedFeed = _getCombinedFeed(toastFeedState, postFeedState);
-    final hasError = toastFeedState.error != null || postFeedState.error != null;
-    final isLoading = toastFeedState.isLoading || postFeedState.isLoading;
-    final isLoadingMore = toastFeedState.isLoadingMore ||
-        postFeedState.isLoadingMore;
+  Widget _buildCombinedFeed(dynamic postFeedState) {
+    final combinedFeed = _getCombinedFeed(postFeedState);
+    final hasError =  postFeedState.error != null;
+    final isLoading =  postFeedState.isLoading;
+    final isLoadingMore = postFeedState.isLoadingMore;
     final isEmpty = combinedFeed.isEmpty;
 
     // OPTIMIZATION: Show cached data immediately while loading
@@ -591,9 +546,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   borderRadius: BorderRadius.circular(8),
                   child: InkWell(
                     onTap: () {
-                      if (toastFeedState.error != null) {
-                        ref.read(toastFeedProvider.notifier).clearError();
-                      }
                       if (postFeedState.error != null) {
                         ref.read(postFeedProvider.notifier).clearError();
                       }
@@ -610,7 +562,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              toastFeedState.error ??
                                   postFeedState.error ??
                                   'Unknown error',
                               style: const TextStyle(
@@ -645,22 +596,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   return AnimatedOpacity(
                     opacity: 1.0,
                     duration: const Duration(milliseconds: 200),
-                    child: type == 'toast'
-                        ? ToastCard(
-                      toast: data,
-                      onTap: () {},
-                      onUserInfo: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => OtherProfileScreen(
-                              userId: data.user_id,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                        : PostCard(
+                    child: PostCard(
                       post: data,
                       onTap: () {},
                       onUserInfo: () {

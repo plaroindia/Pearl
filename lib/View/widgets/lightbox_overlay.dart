@@ -4,10 +4,8 @@ import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../ViewModel/lightbox_provider.dart';
 import '../../Model/post.dart';
-import '../../Model/toast.dart';
 import '../../Model/byte.dart';
 import 'Post_card.dart';
-import 'toast_card.dart';
 import '../../ViewModel/auth_provider.dart';
 import 'double_tap_like.dart';
 import 'byte_comments.dart';
@@ -156,14 +154,6 @@ class _LightboxOverlayState extends ConsumerState<LightboxOverlay> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: PostCard(post: post, onTap: () {}, onUserInfo: () {}),
-                ),
-              );
-            case LightboxType.toast:
-              final toast = item.data as Toast_feed;
-              return SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: ToastCard(toast: toast, onTap: () {}, onUserInfo: () {}),
                 ),
               );
             case LightboxType.byte:

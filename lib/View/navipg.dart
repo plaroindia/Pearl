@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/View/post_page.dart';
 import 'home_page.dart';
 import 'profile.dart';
-import 'toast_page.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/follow_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'byte_page.dart';
 import 'byte_viewer.dart';
-import '../View/course_page.dart';
+
 
 void main() => runApp(MaterialApp(home: navCard()));
 
@@ -182,7 +181,7 @@ class CreateModalSheet extends StatefulWidget {
 
 class _CreateModalSheetState extends State<CreateModalSheet> {
   int _selectedIndex = 0;
-  final List<String> _options = ['Text', 'Post', 'Byte'];
+  final List<String> _options = ['Post', 'Byte'];
 
   void _onOptionSelected(int index) {
     setState(() {
@@ -194,22 +193,15 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
   void _navigateToPage(int index) {
     // Close modal first
     Navigator.pop(context);
-
     // Handle navigation based on selection
     switch (index) {
-      case 0: // Text
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ToastPage()),
-        );
-        break;
-      case 1: // Post
+      case 0: // Post
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => PostCreateScreen()),
         );
         break;
-      case 2: // Byte
+      case 1: // Byte
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => ByteCreateScreen()),
@@ -224,15 +216,6 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
     }
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature coming soon!'),
-        backgroundColor: Colors.blue,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -295,30 +278,25 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: List.generate(
                       _options.length,
-                          (index) => Padding(
-                        padding: const EdgeInsets.only(right: 24),
+                          (index) => Expanded(
                         child: GestureDetector(
                           onTap: () => _onOptionSelected(index),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Option Icon
                               Container(
                                 width: isTablet ? 60 : 50,
                                 height: isTablet ? 60 : 50,
                                 decoration: BoxDecoration(
-                                  color:
-                                  _selectedIndex == index
+                                  color: _selectedIndex == index
                                       ? Colors.blue
                                       : Colors.grey[800],
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color:
-                                    _selectedIndex == index
+                                    color: _selectedIndex == index
                                         ? Colors.blue
                                         : Colors.grey[700]!,
                                     width: 2,
@@ -326,25 +304,21 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
                                 ),
                                 child: Icon(
                                   _getOptionIcon(index),
-                                  color:
-                                  _selectedIndex == index
+                                  color: _selectedIndex == index
                                       ? Colors.white
                                       : Colors.grey[400],
                                   size: isTablet ? 28 : 24,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              // Option Label
                               Text(
                                 _options[index],
                                 style: TextStyle(
-                                  color:
-                                  _selectedIndex == index
+                                  color: _selectedIndex == index
                                       ? Colors.blue
                                       : Colors.grey[400],
                                   fontSize: isTablet ? 16 : 14,
-                                  fontWeight:
-                                  _selectedIndex == index
+                                  fontWeight: _selectedIndex == index
                                       ? FontWeight.w600
                                       : FontWeight.w500,
                                 ),
@@ -356,6 +330,7 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
                     ),
                   ),
                 ),
+
 
                 // Selected Option Indicator
                 Container(
@@ -389,14 +364,10 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
 
   IconData _getOptionIcon(int index) {
     switch (index) {
-      case 0: // Text
-        return Icons.text_fields;
-      case 1: // Post
+      case 0: // Post
         return Icons.add_box_outlined;
-      case 2: // Byte
+      case 1: // Byte
         return Icons.video_library_outlined;
-      case 3: // Course
-        return Icons.school_outlined;
       default:
         return Icons.add;
     }

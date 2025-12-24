@@ -1,9 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../Model/post.dart';
-import '../Model/toast.dart';
 import '../Model/byte.dart';
 
-enum LightboxType { post, toast, byte }
+enum LightboxType { post, byte }
 
 class LightboxItem {
   final LightboxType type;
@@ -45,13 +44,6 @@ class LightboxNotifier extends StateNotifier<LightboxState> {
     );
   }
 
-  void openToasts(List<Toast_feed> toasts, int index) {
-    state = LightboxState(
-      items: toasts.map((t) => LightboxItem(type: LightboxType.toast, data: t)).toList(),
-      initialIndex: index,
-      isOpen: true,
-    );
-  }
 
   void openBytes(List<Byte> bytes, int index) {
     state = LightboxState(

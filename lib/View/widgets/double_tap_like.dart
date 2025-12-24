@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../ViewModel/post_feed_provider.dart';
-import '../../ViewModel/toast_feed_provider.dart';
 import '../../ViewModel/byte_provider.dart';
 
 /// A reusable widget that wraps content with double tap to like functionality
@@ -178,37 +177,6 @@ class PostDoubleTapLike extends ConsumerWidget {
   }
 }
 
-/// A specialized version for toasts with built-in provider integration
-class ToastDoubleTapLike extends ConsumerWidget {
-  final Widget child;
-  final String toastId;
-  final bool isliked;
-  final bool isLoading;
-
-  const ToastDoubleTapLike({
-    super.key,
-    required this.child,
-    required this.toastId,
-    this.isliked = false,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final feedState = ref.watch(toastFeedProvider);
-    final isCurrentlyLoading = feedState.likingPosts.contains(toastId);
-
-    return DoubleTapLike(
-      onTap: null,
-      onDoubleTap: () {
-        ref.read(toastFeedProvider.notifier).toggleLike(toastId);
-      },
-      isLoading: isCurrentlyLoading,
-      isliked: isliked,
-      child: child,
-    );
-  }
-}
 
 /// A specialized version for bytes with enhanced gesture handling
 class ByteDoubleTapLike extends StatefulWidget {
@@ -369,10 +337,6 @@ class CommentDoubleTapLike extends ConsumerWidget {
         final feedState = ref.watch(postFeedProvider);
         currentlyLoading = feedState.likingComments.contains(commentId);
         break;
-      case 'toast':
-        final feedState = ref.watch(toastFeedProvider);
-        currentlyLoading = feedState.likingComments.contains(commentId);
-        break;
       case 'byte':
         final feedState = ref.watch(bytesFeedProvider);
         currentlyLoading = feedState.likingComments.contains(commentId);
@@ -386,9 +350,6 @@ class CommentDoubleTapLike extends ConsumerWidget {
         switch (parentType) {
           case 'post':
             ref.read(postFeedProvider.notifier).toggleCommentLike(int.parse(commentId));
-            break;
-          case 'toast':
-            ref.read(toastFeedProvider.notifier).toggleCommentLike(int.parse(commentId));
             break;
           case 'byte':
             ref.read(bytesFeedProvider.notifier).toggleCommentLike(commentId);
