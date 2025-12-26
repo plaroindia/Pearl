@@ -201,11 +201,9 @@ class PostCreateNotifier extends StateNotifier<PostCreateState> {
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      final response = await _supabase
+      await _supabase
           .from('post')
-          .insert(postData)
-          .select()
-          .single();
+          .insert(postData);
 
       state = state.copyWith(
         isLoading: false,

@@ -9,7 +9,7 @@ class ProfileFeedState {
   final List<Byte> bytes;
   final bool isLoadingPosts;
   final bool isLoadingToasts;
-  final bool isLoadingBytes;  
+  final bool isLoadingBytes;
   final bool isLoadingMorePosts;
   final bool isLoadingMoreToasts;
   final bool isLoadingMoreBytes;
@@ -105,7 +105,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const int _pageSize = 12;
 
-  // Load user's posts
+// Load user's posts
   Future<void> loadUserPosts(final UserId) async {
     if (state.loadedUserId != null && state.loadedUserId != UserId) {
       state = state.copyWith(
@@ -342,28 +342,34 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
 
+      // Batch like check: extract all byte IDs
+      final byteIds = (response as List)
+          .map((b) => b['byte_id'] as int)
+          .toList();
+
+      // Single batched query for all likes
+      final likedBytes = await _supabase
+          .from('byte_likes')
+          .select('byte_id')
+          .eq('user_id', user)
+          .inFilter('byte_id', byteIds);
+
+      final likedByteIds = (likedBytes as List)
+          .map((l) => l['byte_id'] as int)
+          .toSet();
+
       final List<Byte> newBytes = [];
 
       for (var byteData in response) {
-        final String byteId = byteData['byte_id'].toString();
+        final int byteId = byteData['byte_id'] as int;
+        final String byteIdString = byteId.toString();
         final userProfile = byteData['user_profiles'];
 
-        bool isLiked = false;
-        final byteIdInt = int.tryParse(byteId);
-        if (byteIdInt == null) {
-          continue;
-        }
-        final likeResponse = await _supabase
-            .from('byte_likes')
-            .select('byte_like_id')
-            .eq('byte_id', byteIdInt)
-            .eq('user_id', user)
-            .maybeSingle();
-        isLiked = likeResponse != null;
+        final bool isLiked = likedByteIds.contains(byteId);
 
         final byte = Byte.fromJson({
           ...byteData,
-          'byte_id': byteId,
+          'byte_id': byteIdString,
           'username': userProfile?['username'],
           'profile_pic': userProfile?['profile_pic'],
           'isliked': isLiked,
@@ -377,6 +383,8 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         isLoadingBytes: false,
         hasMoreBytes: newBytes.length == _pageSize,
         currentBytePage: 1,
+        error: null,
+        loadedUserId: UserId,
       );
     } catch (e) {
       state = state.copyWith(
@@ -409,31 +417,36 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
           .order('created_at', ascending: false)
           .range(startRange, endRange);
 
+      // Batch like check: extract all byte IDs
+      final byteIds = (response as List)
+          .map((b) => b['byte_id'] as int)
+          .toList();
+
+      // Single batched query for all likes
+      final likedBytes = await _supabase
+          .from('byte_likes')
+          .select('byte_id')
+          .eq('user_id', user)
+          .inFilter('byte_id', byteIds);
+
+      final likedByteIds = (likedBytes as List)
+          .map((l) => l['byte_id'] as int)
+          .toSet();
+
       final List<Byte> newBytes = [];
 
       for (var byteData in response) {
-        final String byteId = byteData['byte_id'].toString();
+        final int byteId = byteData['byte_id'] as int;
+        final String byteIdString = byteId.toString();
         final userProfile = byteData['user_profiles'];
 
-        final alreadyExists = state.bytes.any((b) => b.byteId == byteId);
-        if (alreadyExists) continue;
+        if (state.bytes.any((b) => b.byteId == byteIdString)) continue;
 
-        bool isLiked = false;
-        final byteIdInt = int.tryParse(byteId);
-        if (byteIdInt == null) {
-          continue;
-        }
-        final likeResponse = await _supabase
-            .from('byte_likes')
-            .select('byte_like_id')
-            .eq('byte_id', byteIdInt)
-            .eq('user_id', user)
-            .maybeSingle();
-        isLiked = likeResponse != null;
+        final bool isLiked = likedByteIds.contains(byteId);
 
         final byte = Byte.fromJson({
           ...byteData,
-          'byte_id': byteId,
+          'byte_id': byteIdString,
           'username': userProfile?['username'],
           'profile_pic': userProfile?['profile_pic'],
           'isliked': isLiked,
@@ -447,6 +460,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         isLoadingMoreBytes: false,
         hasMoreBytes: newBytes.length == _pageSize,
         currentBytePage: state.currentBytePage + 1,
+        error: null,
       );
     } catch (e) {
       state = state.copyWith(
@@ -455,7 +469,7 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       );
     }
   }// Toggle like for user's byte
-  
+
   Future<void> toggleByteLike(String byteId) async {
     if (state.bytes.isEmpty || state.likingBytes.contains(byteId)) return;
 

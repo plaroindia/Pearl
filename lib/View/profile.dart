@@ -9,14 +9,12 @@ import '../ViewModel/auth_provider.dart';
 import '../ViewModel/user_feed_provider.dart';
 import '../ViewModel/follow_provider.dart';
 import '../Model/byte.dart';
-//import '../Model/toast.dart';
 import '../Model/post.dart';
 import '../Model/user_profile.dart';
 import '../View/foll_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'widgets/lightbox_overlay.dart';
 import '../View/post_full_screen.dart' as post_screen;
-//import '../View/toast_full_screen.dart' as toast_screen;
 import '../View/bytes_full_screen.dart';
 import 'widgets/follow_button.dart';
 
@@ -58,7 +56,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _postsScrollController.addListener(_onPostsScroll);
     _bytesScrollController.addListener(_onBytesScroll);
 
@@ -125,7 +123,7 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     }
 
     // Preload adjacent tab
-    final nextTab = (currentTab + 1) % 3;
+    final nextTab = (currentTab + 1) % 2;
     if (!_loadedTabs.contains(nextTab)) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_loadedTabs.contains(nextTab)) {
@@ -695,42 +693,41 @@ class _OtherProfileScreen extends ConsumerState<OtherProfileScreen>
     return Container(
       color: Colors.black,
       child: TabBar(
+        isScrollable: true,
         controller: _tabController,
-        isScrollable: false,
-        tabAlignment: TabAlignment.fill,
         indicator: UnderlineTabIndicator(
           borderSide: BorderSide(width: 2, color: Colors.blue[400]!),
-          insets: const EdgeInsets.symmetric(horizontal: 24),
+          insets: const EdgeInsets.symmetric(horizontal: 16.0),
         ),
+        indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.blue,
         unselectedLabelColor: Colors.grey,
+        physics: const BouncingScrollPhysics(),
         tabs: [
-          _tabItem(
-            Icons.view_array_outlined,
-            'Posts (${feedState.posts.length})',
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.view_array_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('Posts (${feedState.posts.length})'),
+              ],
+            ),
           ),
-          _tabItem(
-            Icons.video_library_outlined,
-            'Bytes (${feedState.bytes.length})',
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.video_library_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('Bytes (${feedState.bytes.length})'),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-
-  Tab _tabItem(IconData icon, String text) {
-    return Tab(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 6),
-          Text(text),
-        ],
-      ),
-    );
-  }
-
 
   Widget _buildPostsTab(ProfileFeedState feedState) {
     final isLoading = feedState.isLoadingPosts && feedState.posts.isEmpty;
@@ -1198,7 +1195,7 @@ class ProfileBytesGrid extends ConsumerWidget {
     // Use thumbnailUrl if available, otherwise fallback to videoUrl or empty
     final thumbnailCandidate = byte.thumbnailUrl;
     final thumbnailUrl =
-        (thumbnailCandidate != null && thumbnailCandidate.isNotEmpty) ? thumbnailCandidate : byte.videoUrl;
+    (thumbnailCandidate != null && thumbnailCandidate.isNotEmpty) ? thumbnailCandidate : byte.videoUrl;
 
     return GestureDetector(
       onTap: () => onByteTap(byte),
