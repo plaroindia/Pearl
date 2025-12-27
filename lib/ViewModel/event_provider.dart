@@ -84,66 +84,132 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
   Future<void> loadEvents() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Fetch events with organizer information and registrations
+      print('🔍 Starting to load events...');
+
+      // Fetch events with organizer information
       final response = await _supabase
           .from('events')
           .select('''
             *,
-            user_profiles!organizer_id (
+            user_profiles!events_organizer_id_fkey (
               username,
               profile_pic
-            ),
-            event_registrations (
-              user_id
             )
           ''')
           .order('created_at', ascending: false);
 
+      print('📦 Received ${(response as List).length} events from database');
+
+      if ((response as List).isEmpty) {
+        print('⚠️ No events found in database');
+        state = state.copyWith(
+          trendingEvents: [],
+          upcomingHackathons: [],
+          trendingCompetitions: [],
+          isLoading: false,
+        );
+        return;
+      }
+
+      // Get current user's registrations separately
+      final userId = _supabase.auth.currentUser?.id;
+      Set<int> userRegistrations = {};
+
+      if (userId != null) {
+        try {
+          final registrations = await _supabase
+              .from('event_registrations')
+              .select('event_id')
+              .eq('user_id', userId);
+
+          userRegistrations = (registrations as List)
+              .map<int>((reg) => reg['event_id'] as int)
+              .toSet();
+
+          print('✅ User registered for ${userRegistrations.length} events');
+        } catch (e) {
+          print('⚠️ Could not fetch user registrations: $e');
+        }
+      }
+
       final List<Event> allEvents = [];
 
-      for (final eventData in response) {
-        final event = _mapEventFromDatabase(eventData);
-        allEvents.add(event);
+      for (final eventData in (response as List)) {
+        try {
+          final eventId = eventData['event_id'] as int;
+          final isRegistered = userRegistrations.contains(eventId);
+
+          final event = _mapEventFromDatabase(eventData, isRegistered);
+          allEvents.add(event);
+        } catch (e) {
+          print('❌ Error mapping event: $e');
+          print('Event data: $eventData');
+        }
       }
+
+      print('✅ Mapped ${allEvents.length} events successfully');
 
       // Categorize events
       final now = DateTime.now();
-      final trending = allEvents.where((e) =>
-      e.startDate.isAfter(now) &&
-          e.startDate.difference(now).inDays <= 30
-      ).toList();
 
-      final hackathons = allEvents.where((e) =>
-      e.category?.toLowerCase().contains('hackathon') == true ||
-          e.tags.any((tag) => tag.toLowerCase().contains('hackathon'))
-      ).toList();
+      final trending = allEvents.where((e) {
+        return e.startDate.isAfter(now) &&
+            e.startDate.difference(now).inDays <= 30;
+      }).toList();
 
-      final competitions = allEvents.where((e) =>
-      e.category?.toLowerCase().contains('competition') == true ||
-          e.tags.any((tag) => tag.toLowerCase().contains('competition'))
-      ).toList();
+      final hackathons = allEvents.where((e) {
+        final categoryLower = e.category?.toLowerCase() ?? '';
+        return categoryLower.contains('hackathon') ||
+            categoryLower.contains('hack') ||
+            e.tags.any((tag) => tag.toLowerCase().contains('hackathon'));
+      }).toList();
+
+      final competitions = allEvents.where((e) {
+        final categoryLower = e.category?.toLowerCase() ?? '';
+        return categoryLower.contains('competition') ||
+            categoryLower.contains('compete') ||
+            e.tags.any((tag) => tag.toLowerCase().contains('competition'));
+      }).toList();
+
+      print('📊 Categorized events:');
+      print('   - Trending: ${trending.length}');
+      print('   - Hackathons: ${hackathons.length}');
+      print('   - Competitions: ${competitions.length}');
 
       state = state.copyWith(
         trendingEvents: trending,
         upcomingHackathons: hackathons,
         trendingCompetitions: competitions,
         isLoading: false,
+        error: null,
       );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+
+      print('✅ Events loaded successfully!');
+    } catch (e, stackTrace) {
+      print('❌ Error loading events: $e');
+      print('Stack trace: $stackTrace');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load events: ${e.toString()}',
+      );
     }
   }
 
-  Event _mapEventFromDatabase(Map<String, dynamic> data) {
-    final userId = _supabase.auth.currentUser?.id;
-
-    // Check if user is registered for this event
-    bool isRegistered = false;
-    if (userId != null && data['event_registrations'] != null) {
-      isRegistered = (data['event_registrations'] as List)
-          .any((reg) => reg['user_id'] == userId);
+  double _parseCoordinate(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
     }
+    return 0.0;
+  }
 
+  Event _mapEventFromDatabase(Map<String, dynamic> data, [bool isRegistered = false]) {
     // Create tags from category
     final List<String> tags = [];
     if (data['category'] != null) {
@@ -152,18 +218,34 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
 
     // Add additional tags based on category type
     final category = data['category']?.toLowerCase() ?? '';
-    if (category.contains('hackathon')) tags.add('Hackathon');
-    if (category.contains('competition')) tags.add('Competition');
+    if (category.contains('hackathon') || category.contains('hack')) tags.add('Hackathon');
+    if (category.contains('competition') || category.contains('compete')) tags.add('Competition');
     if (category.contains('workshop')) tags.add('Workshop');
     if (category.contains('tech')) tags.add('Technology');
+    if (category.contains('business')) tags.add('Business');
+    if (category.contains('gaming') || category.contains('game')) tags.add('Gaming');
+
+    // Safely extract organizer information
+    String organizerName = 'Unknown Organizer';
+    String organizerPic = '';
+
+    try {
+      if (data['user_profiles'] != null) {
+        final profiles = data['user_profiles'];
+        organizerName = profiles['username'] ?? 'Unknown Organizer';
+        organizerPic = profiles['profile_pic'] ?? '';
+      }
+    } catch (e) {
+      print('⚠️ Error extracting organizer info: $e');
+    }
 
     return Event(
       eventId: data['event_id'].toString(),
       organizerId: data['organizer_id'] ?? '',
       title: data['title'] ?? '',
       description: data['description'] ?? '',
-      organizationName: data['user_profiles']?['username'] ?? 'Unknown Organizer',
-      organizationLogo: data['user_profiles']?['profile_pic'] ?? '',
+      organizationName: organizerName,
+      organizationLogo: organizerPic,
       tags: tags,
       startDate: DateTime.parse(data['start_time']),
       endDate: DateTime.parse(data['end_time']),
@@ -171,9 +253,9 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
       minTeamSize: category.contains('hackathon') ? 2 : 1,
       maxTeamSize: category.contains('hackathon') ? 5 : 1,
       isRegistered: isRegistered,
-      challenges: [], // Add challenges table if needed
-      latitude: 0.0, // Add to schema if location features needed
-      longitude: 0.0,
+      challenges: [],
+      latitude: _parseCoordinate(data['latitude']),
+      longitude: _parseCoordinate(data['longitude']),
       category: data['category'],
       location: data['location'],
       registrationDeadline: data['registration_deadline'] != null
@@ -244,29 +326,50 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
 
   Future<List<Event>> getEventsByCategory(String category) async {
     try {
+      print('🔍 Fetching events for category: $category');
+
       final response = await _supabase
           .from('events')
           .select('''
             *,
-            user_profiles!organizer_id (
+            user_profiles!events_organizer_id_fkey (
               username,
               profile_pic
-            ),
-            event_registrations (
-              user_id
             )
           ''')
           .eq('category', category)
           .order('start_time', ascending: true);
 
+      // Get user registrations
+      final userId = _supabase.auth.currentUser?.id;
+      Set<int> userRegistrations = {};
+
+      if (userId != null) {
+        try {
+          final registrations = await _supabase
+              .from('event_registrations')
+              .select('event_id')
+              .eq('user_id', userId);
+
+          userRegistrations = (registrations as List)
+              .map<int>((reg) => reg['event_id'] as int)
+              .toSet();
+        } catch (e) {
+          print('⚠️ Could not fetch user registrations: $e');
+        }
+      }
+
       final List<Event> events = [];
-      for (final eventData in response) {
-        final event = _mapEventFromDatabase(eventData);
+      for (final eventData in (response as List)) {
+        final eventId = eventData['event_id'] as int;
+        final isRegistered = userRegistrations.contains(eventId);
+        final event = _mapEventFromDatabase(eventData, isRegistered);
         events.add(event);
       }
 
       return events;
     } catch (e) {
+      print('❌ Error fetching events by category: $e');
       state = state.copyWith(error: e.toString());
       return [];
     }
@@ -277,29 +380,30 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return [];
 
+      print('🔍 Fetching events created by user: $userId');
+
       final response = await _supabase
           .from('events')
           .select('''
             *,
-            user_profiles!organizer_id (
+            user_profiles!events_organizer_id_fkey (
               username,
               profile_pic
-            ),
-            event_registrations (
-              user_id
             )
           ''')
           .eq('organizer_id', userId)
           .order('created_at', ascending: false);
 
       final List<Event> events = [];
-      for (final eventData in response) {
-        final event = _mapEventFromDatabase(eventData);
+      for (final eventData in (response as List)) {
+        // User is the organizer, so always registered
+        final event = _mapEventFromDatabase(eventData, true);
         events.add(event);
       }
 
       return events;
     } catch (e) {
+      print('❌ Error fetching user created events: $e');
       state = state.copyWith(error: e.toString());
       return [];
     }
@@ -310,32 +414,54 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return [];
 
-      final response = await _supabase
+      print('🔍 Fetching events user is registered for: $userId');
+
+      // Get event IDs user is registered for
+      final registrations = await _supabase
           .from('event_registrations')
-          .select('''
-            events (
-              *,
-              user_profiles!organizer_id (
-                username,
-                profile_pic
-              ),
-              event_registrations (
-                user_id
-              )
-            )
-          ''')
+          .select('event_id')
           .eq('user_id', userId);
 
+      if ((registrations as List).isEmpty) {
+        print('ℹ️ User has no registrations');
+        return [];
+      }
+
+      final eventIds = (registrations as List).map<int>((reg) => reg['event_id'] as int).toList();
+      print('📋 User registered for ${eventIds.length} events');
+
       final List<Event> events = [];
-      for (final regData in response) {
-        if (regData['events'] != null) {
-          final event = _mapEventFromDatabase(regData['events']);
+
+      // Fetch each event individually (most compatible approach)
+      for (final eventId in eventIds) {
+        try {
+          final response = await _supabase
+              .from('events')
+              .select('''
+                *,
+                user_profiles!events_organizer_id_fkey (
+                  username,
+                  profile_pic
+                )
+              ''')
+              .eq('event_id', eventId)
+              .single();
+
+          final event = _mapEventFromDatabase(response, true);
           events.add(event);
+        } catch (e) {
+          print('⚠️ Error fetching event $eventId: $e');
+          // Continue with other events
         }
       }
 
+      // Sort by start time
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+
+      print('✅ Fetched ${events.length} registered events');
       return events;
     } catch (e) {
+      print('❌ Error fetching user registered events: $e');
       state = state.copyWith(error: e.toString());
       return [];
     }
@@ -361,6 +487,7 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
       await loadEvents();
       return true;
     } catch (e) {
+      print('❌ Error registering for event: $e');
       state = state.copyWith(error: e.toString());
       return false;
     }
@@ -384,6 +511,7 @@ class EventFeedNotifier extends StateNotifier<EventFeedState> {
       await loadEvents();
       return true;
     } catch (e) {
+      print('❌ Error unregistering from event: $e');
       state = state.copyWith(error: e.toString());
       return false;
     }
@@ -401,6 +529,20 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
 
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  double _parseCoordinate(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
   }
 
   Event _mapEventFromDatabase(Map<String, dynamic> data) {
@@ -440,9 +582,9 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
       minTeamSize: category.contains('hackathon') ? 2 : 1,
       maxTeamSize: category.contains('hackathon') ? 5 : 1,
       isRegistered: isRegistered,
-      challenges: [], // Add challenges table if needed
-      latitude: 0.0, // Add to schema if location features needed
-      longitude: 0.0,
+      challenges: [],
+      latitude: _parseCoordinate(data['latitude']),
+      longitude: _parseCoordinate(data['longitude']),
       category: data['category'],
       location: data['location'],
       registrationDeadline: data['registration_deadline'] != null
@@ -469,10 +611,19 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      // Get public URL
-      final publicUrl = _supabase.storage
+      // Get public URL and ensure HTTPS
+      String publicUrl = _supabase.storage
           .from('event-banners')
           .getPublicUrl(fileName);
+      
+      // Ensure URL has HTTPS scheme
+      if (!publicUrl.startsWith('https://')) {
+        if (publicUrl.startsWith('http://')) {
+          publicUrl = publicUrl.replaceFirst('http://', 'https://');
+        } else {
+          publicUrl = 'https://$publicUrl';
+        }
+      }
 
       state = state.copyWith(isUploading: false, uploadProgress: 1.0);
       return publicUrl;
@@ -490,17 +641,22 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
     required DateTime startTime,
     required DateTime endTime,
     DateTime? registrationDeadline,
+    double? latitude,
+    double? longitude,
     String? contactName,
     String? contactEmail,
     String? contactPhone,
   }) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+      print('🎯 Creating event: $title');
 
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) {
         throw Exception('User not authenticated');
       }
+
+      print('👤 User ID: $userId');
 
       // Insert event with proper field mapping
       final eventResponse = await _supabase
@@ -511,10 +667,12 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
         'description': description,
         'category': category,
         'location': location,
+        'latitude': latitude ?? 0.0,
+        'longitude': longitude ?? 0.0,
         'start_time': startTime.toIso8601String(),
         'end_time': endTime.toIso8601String(),
         'registration_deadline': registrationDeadline?.toIso8601String(),
-        'banner_url': null, // Will be updated if banner is uploaded
+        'banner_url': null,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       })
@@ -522,13 +680,16 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
           .single();
 
       final eventId = eventResponse['event_id'].toString();
+      print('✅ Event created with ID: $eventId');
 
       // Upload banner image if provided
       String? bannerUrl;
       if (state.bannerImage != null) {
+        print('📸 Banner image found, starting upload...');
         bannerUrl = await _uploadBannerImage(state.bannerImage!, eventId);
 
         if (bannerUrl != null) {
+          print('🖼️ Updating event with banner URL...');
           await _supabase
               .from('events')
               .update({
@@ -536,13 +697,19 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
             'updated_at': DateTime.now().toIso8601String(),
           })
               .eq('event_id', eventId);
+          print('✅ Banner URL updated in database');
+        } else {
+          print('⚠️ Banner upload failed, continuing without banner');
         }
+      } else {
+        print('ℹ️ No banner image provided');
       }
 
       // Insert contact information if provided
       if (contactName?.isNotEmpty == true ||
           contactEmail?.isNotEmpty == true ||
           contactPhone?.isNotEmpty == true) {
+        print('📞 Adding contact information...');
         await _supabase
             .from('event_contacts')
             .insert({
@@ -552,16 +719,20 @@ class EventCreateNotifier extends StateNotifier<EventCreateState> {
           'phone': contactPhone ?? '',
           'role': 'Organizer',
         });
+        print('✅ Contact information added');
       }
 
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, bannerImage: null);
+      print('🎉 Event creation completed successfully!');
       return true;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error creating event: $e');
+      print('Stack trace: $stackTrace');
       state = state.copyWith(isLoading: false, error: e.toString());
       return false;
     }
   }
-
+  
   Future<bool> updateEvent({
     required String eventId,
     required String title,

@@ -34,6 +34,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   DateTime? _registrationDeadline;
   File? _bannerImage;
   bool _isLoading = false;
+  double? _latitude;
+  double? _longitude;
 
   final List<String> _categories = [
     'Technology',
@@ -258,6 +260,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     });
 
     try {
+      // Set banner image in provider BEFORE creating event
+      if (_bannerImage != null) {
+        ref.read(eventCreateProvider.notifier).setBannerImage(_bannerImage);
+      }
+
       // Combine date and time
       final startDateTime = DateTime(
         _startDate!.year,
@@ -294,6 +301,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         startTime: startDateTime,
         endTime: endDateTime,
         registrationDeadline: _registrationDeadline,
+        latitude: _latitude,
+        longitude: _longitude,
         contactName: _contactNameController.text.isNotEmpty ? _contactNameController.text : null,
         contactEmail: _contactEmailController.text.isNotEmpty ? _contactEmailController.text : null,
         contactPhone: _contactPhoneController.text.isNotEmpty ? _contactPhoneController.text : null,
@@ -528,6 +537,82 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   }
                   return null;
                 },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Coordinates Section
+              _buildSectionHeader('Event Coordinates (Optional)'),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Latitude', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white)),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            hintText: 'e.g., 12.9716',
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            filled: true,
+                            fillColor: Colors.grey[850],
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey[700]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: Colors.blue),
+                            ),
+                          ),
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (value) {
+                            setState(() {
+                              _latitude = double.tryParse(value);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Longitude', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white)),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            hintText: 'e.g., 77.5946',
+                            hintStyle: const TextStyle(color: Colors.grey),
+                            filled: true,
+                            fillColor: Colors.grey[850],
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey[700]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: Colors.blue),
+                            ),
+                          ),
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (value) {
+                            setState(() {
+                              _longitude = double.tryParse(value);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 24),

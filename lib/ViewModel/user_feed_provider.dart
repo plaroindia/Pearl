@@ -131,71 +131,50 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       final response = await _supabase
           .from('post')
           .select('''
-    post_id,
-    user_id,
-    content,
-    media_urls,
-    like_count,
-    comment_count,
-    share_count,
-    created_at,
-    is_published,
-    user_profiles(username, profile_pic),
-    post_comments(comment_id, user_id, content, like_count, created_at)
-  ''')
+          post_id,
+          user_id,
+          content,
+          media_urls,
+          like_count,
+          comment_count,
+          share_count,
+          created_at,
+          is_published,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
 
+      // Batch like check
+      final postIds = (response as List)
+          .map((p) => p['post_id'] as int)
+          .toList();
+
+      final likedPosts = await _supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user)
+          .inFilter('post_id', postIds);
+
+      final likedPostIds = (likedPosts as List)
+          .map((l) => l['post_id'] as int)
+          .toSet();
+
       final List<post_model.Post_feed> newPosts = [];
 
       for (var postData in response) {
-        final String postId = postData['post_id'].toString();
-
-        // Check if current user liked this post
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('post_likes')
-            .select('like_id')
-            .eq('post_id', postId)
-            .eq('user_id', user)
-            .maybeSingle();
-        isLiked = likeResponse != null;
-
-        // Process comments - convert to proper format for Post_feed
-        List<Map<String, dynamic>> commentMaps = [];
-        if (postData['post_comments'] != null) {
-          for (var commentData in postData['post_comments']) {
-            // Fetch user profile for each comment
-            final commentUserId = commentData['user_id'];
-            final userProfileResponse = await _supabase
-                .from('user_profiles')
-                .select('username, profile_pic')
-                .eq('user_id', commentUserId)
-                .maybeSingle();
-
-            commentMaps.add({
-              'comment_id': commentData['comment_id'],
-              'user_id': commentData['user_id'],
-              'content': commentData['content'],
-              'like_count': commentData['like_count'] ?? 0,
-              'created_at': commentData['created_at'],
-              'username': userProfileResponse?['username'] ?? 'Unknown',
-              'profile_pic': userProfileResponse?['profile_pic'] ?? '',
-              'isliked': false,
-            });
-          }
-        }
+        final int postId = postData['post_id'] as int;
+        final bool isLiked = likedPostIds.contains(postId);
 
         final post = post_model.Post_feed.fromMap({
           ...postData,
-          'post_id': postId,
+          'post_id': postId.toString(),
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          // like_count and comment_count are maintained by DB triggers
           'isliked': isLiked,
-          'post_comments': commentMaps,
+          'post_comments': [],  // Empty - load lazily
         });
 
         newPosts.add(post);
@@ -206,8 +185,11 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         isLoadingPosts: false,
         hasMorePosts: newPosts.length == _pageSize,
         currentPostPage: 1,
+        error: null,
+        loadedUserId: UserId,
       );
     } catch (e) {
+      print('❌ Error loading posts: $e');
       state = state.copyWith(
         isLoadingPosts: false,
         error: 'Failed to load posts: $e',
@@ -231,66 +213,54 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
       final response = await _supabase
           .from('post')
           .select('''
-            *,
-            user_profiles!inner(username, profile_pic),
-            post_comments(
-              comment_id,
-              user_id,
-              content,
-              like_count,
-              created_at,
-              user_profiles!post_comments_user_id_fkey(username, profile_pic)
-            )
-          ''')
+          post_id,
+          user_id,
+          content,
+          media_urls,
+          like_count,
+          comment_count,
+          share_count,
+          created_at,
+          is_published,
+          user_profiles!inner(username, profile_pic)
+        ''')
           .eq('user_id', user)
           .eq('is_published', true)
           .order('created_at', ascending: false)
           .range(startRange, endRange);
 
+      // Batch like check
+      final postIds = (response as List)
+          .map((p) => p['post_id'] as int)
+          .toList();
+
+      final likedPosts = await _supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user)
+          .inFilter('post_id', postIds);
+
+      final likedPostIds = (likedPosts as List)
+          .map((l) => l['post_id'] as int)
+          .toSet();
+
       final List<post_model.Post_feed> newPosts = [];
 
       for (var postData in response) {
-        final String postId = postData['post_id'].toString();
+        final int postId = postData['post_id'] as int;
+        final String postIdString = postId.toString();
 
-        // Avoid duplicates
-        final alreadyExists = state.posts.any((p) => p.post_id == postId);
-        if (alreadyExists) continue;
+        if (state.posts.any((p) => p.post_id == postIdString)) continue;
 
-        // Check if current user liked this post
-        bool isLiked = false;
-        final likeResponse = await _supabase
-            .from('post_likes')
-            .select('like_id')
-            .eq('post_id', postId)
-            .eq('user_id', user)
-            .maybeSingle();
-        isLiked = likeResponse != null;
-
-        // Process comments
-        List<Map<String, dynamic>> commentMaps = [];
-        if (postData['post_comments'] != null) {
-          for (var commentData in postData['post_comments']) {
-            commentMaps.add({
-              'comment_id': commentData['comment_id'],
-              'user_id': commentData['user_id'],
-              'content': commentData['content'],
-              'like_count': commentData['like_count'] ?? 0,
-              'created_at': commentData['created_at'],
-              'username': commentData['user_profiles']['username'],
-              'profile_pic': commentData['user_profiles']['profile_pic'],
-              'isliked': false,
-            });
-          }
-        }
+        final bool isLiked = likedPostIds.contains(postId);
 
         final post = post_model.Post_feed.fromMap({
           ...postData,
-          'post_id': postId,
+          'post_id': postIdString,
           'username': postData['user_profiles']['username'],
           'profile_pic': postData['user_profiles']['profile_pic'],
-          // like_count and comment_count are maintained by DB triggers
           'isliked': isLiked,
-          'post_comments': commentMaps,
+          'post_comments': [],  // Empty comments - load lazily when needed
         });
 
         newPosts.add(post);
@@ -301,8 +271,11 @@ class ProfileFeedNotifier extends StateNotifier<ProfileFeedState> {
         isLoadingMorePosts: false,
         hasMorePosts: newPosts.length == _pageSize,
         currentPostPage: state.currentPostPage + 1,
+        error: null,
+        loadedUserId: UserId,
       );
     } catch (e) {
+      print('❌ Error loading more posts: $e');
       state = state.copyWith(
         isLoadingMorePosts: false,
         error: 'Failed to load more posts: $e',

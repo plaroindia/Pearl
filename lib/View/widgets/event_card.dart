@@ -38,63 +38,83 @@ class EventCard extends StatelessWidget {
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 0, maxHeight: 180),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RichText(
-                        text: _highlightText(event.title, searchQuery, colorScheme.onSurface),
-                        maxLines: 1,
-                        overflow: TextOverflow.fade,
-
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        event.organizationName,
-                        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "${event.startDate.toLocal().toString().split(' ')[0]}",
-                        style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withOpacity(0.7)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.vertical,
-                            physics: const ClampingScrollPhysics(),
-                            child: Wrap(
-                              spacing: 4,
-                              children: event.tags
-                                  .take(3)
-                                  .map((tag) => Chip(
-                                label: Text(
-                                  tag,
-                                  style: TextStyle(fontSize: 10, color: colorScheme.onSurface),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ))
-                                  .toList(),
-                            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Banner Image Section (if available)
+              if (event.bannerUrl != null && event.bannerUrl!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  height: 120,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey[300],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      event.bannerUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, color: Colors.grey),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RichText(
+                      text: _highlightText(event.title, searchQuery, colorScheme.onSurface),
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      event.organizationName,
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "${event.startDate.toLocal().toString().split(' ')[0]}",
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withOpacity(0.7)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          physics: const ClampingScrollPhysics(),
+                          child: Wrap(
+                            spacing: 4,
+                            children: event.tags
+                                .take(3)
+                                .map((tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: TextStyle(fontSize: 10, color: colorScheme.onSurface),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
+                                .toList(),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

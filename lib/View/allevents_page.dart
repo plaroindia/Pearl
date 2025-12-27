@@ -14,10 +14,11 @@ class AllEventsPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(eventFeedProvider);
-    // Use ref.watch on the notifier to ensure rebuilds when filtered lists change
-    final notifier = ref.watch(eventFeedProvider.notifier);
+    // Only watch the state, not the notifier - prevents rebuild triggers from notifier methods
+    final notifier = ref.read(eventFeedProvider.notifier);
 
     final searchQuery = state.searchQuery;
+    // Categories are derived from watched state, computed only when state changes
     final categories = [
       {'title': 'Trending', 'events': notifier.filteredTrendingEvents},
       {'title': 'Hackathons', 'events': notifier.filteredUpcomingHackathons},
@@ -103,6 +104,10 @@ class _AnimatedCategoryListState extends State<_AnimatedCategoryList> with Ticke
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
+  }
+
+  void _initializeAnimations() {
     _controllers = List.generate(widget.categories.length, (i) {
       return AnimationController(
         vsync: this,
@@ -118,10 +123,24 @@ class _AnimatedCategoryListState extends State<_AnimatedCategoryList> with Ticke
     _runStaggeredAnimations();
   }
 
+  @override
+  void didUpdateWidget(_AnimatedCategoryList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only reinitialize if category count changed
+    if (oldWidget.categories.length != widget.categories.length) {
+      for (final c in _controllers) {
+        c.dispose();
+      }
+      _initializeAnimations();
+    }
+  }
+
   Future<void> _runStaggeredAnimations() async {
     for (int i = 0; i < _controllers.length; i++) {
       await Future.delayed(const Duration(milliseconds: 120));
-      _controllers[i].forward();
+      if (mounted) {
+        _controllers[i].forward();
+      }
     }
   }
 

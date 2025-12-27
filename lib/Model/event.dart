@@ -82,8 +82,8 @@ class Event {
           .map((e) => Challenge.fromMap(e))
           .toList()
           : [],
-      latitude: (map['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (map['longitude'] as num?)?.toDouble() ?? 0.0,
+      latitude: _parseCoordinate(map['latitude']),
+      longitude: _parseCoordinate(map['longitude']),
       category: map['category'],
       location: map['location'],
       registrationDeadline: map['registration_deadline'] != null
@@ -173,5 +173,17 @@ class Event {
 
   String get duration {
     return "${startDate.day}/${startDate.month} - ${endDate.day}/${endDate.month}";
+  }
+
+  // Helper method to safely parse coordinates
+  static double _parseCoordinate(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed ?? 0.0;
+    }
+    return 0.0;
   }
 }

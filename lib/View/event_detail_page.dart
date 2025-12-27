@@ -14,17 +14,21 @@ class EventDetailPage extends StatefulWidget {
 }
 
 class _EventDetailPageState extends State<EventDetailPage> {
-  Completer<GoogleMapController> _controller = Completer();
+  late final Completer<GoogleMapController> _controller;
   late Set<Marker> _markers;
 
   @override
   void initState() {
     super.initState();
+    _controller = Completer();
     print("Event coordinates: ${widget.event.latitude}, ${widget.event.longitude}");
     _initializeMarkers();
   }
 
   void _initializeMarkers() {
+    // NOTE: Database currently has no latitude/longitude columns
+    // All events will show coordinates 0.0, 0.0 until schema is updated
+    // See SCHEMA_MISMATCH_REPORT.md for migration instructions
     _markers = {
       Marker(
         markerId: const MarkerId('event_location'),
@@ -65,6 +69,57 @@ class _EventDetailPageState extends State<EventDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Banner Image Section
+              if (widget.event.bannerUrl != null && widget.event.bannerUrl!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  height: 250,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.event.bannerUrl!,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                              size: 48,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              if (widget.event.bannerUrl != null && widget.event.bannerUrl!.isNotEmpty)
+                const SizedBox(height: 24),
               // Details Section
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
