@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:plaro_3/View/taiken_list_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../ViewModel/setProfileProvider.dart';
 import '../ViewModel/auth_provider.dart';
@@ -441,6 +442,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 );
               },
             ),
+
+            ListTile(
+              leading: Icon(
+                Icons.event_note,
+                color: Theme.of(context).iconTheme.color,
+              ),
+              title: Text(
+                'Taikens',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onBackground,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const TaikensListPage()
+                  ),
+                );
+              },
+            ),
+
 
             ListTile(
               leading: Icon(

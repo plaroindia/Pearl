@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/View/post_page.dart';
+import 'package:plaro_3/View/taiken_create_page.dart';
 import 'home_page.dart';
 import 'profile.dart';
 import '../ViewModel/setProfileProvider.dart';
@@ -181,7 +182,7 @@ class CreateModalSheet extends StatefulWidget {
 
 class _CreateModalSheetState extends State<CreateModalSheet> {
   int _selectedIndex = 0;
-  final List<String> _options = ['Post', 'Byte'];
+  final List<String> _options = ['Post', 'Byte','Taiken'];
 
   void _onOptionSelected(int index) {
     setState(() {
@@ -207,12 +208,12 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
           MaterialPageRoute(builder: (context) => ByteCreateScreen()),
         );
         break;
-      // case 3: // Course
-      //   Navigator.push(
-      //     context,
-      //     MaterialPageRoute(builder: (context) => CourseCreateScreen()),
-      //   );
-      //   break;
+      case 2: // Taiken
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => TaikenCreatePage()),
+        );
+        break;
     }
   }
 
@@ -368,6 +369,8 @@ class _CreateModalSheetState extends State<CreateModalSheet> {
         return Icons.add_box_outlined;
       case 1: // Byte
         return Icons.video_library_outlined;
+      case 2: // Taiken
+        return Icons.school_outlined;
       default:
         return Icons.add;
     }
