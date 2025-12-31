@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEARL Agent - Career Readiness AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-6 mb-8">
+            <h1 class="text-3xl font-bold mb-2">🤖 PEARL Agent</h1>
+            <p class="text-blue-100">AI-Powered Career Readiness Assistant</p>
+        </div>
+
+        <!-- Status Bar -->
+        <div id="status" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+            <p class="text-blue-800 font-medium" id="statusText"></p>
+        </div>
+
+        <!-- Step 1: JD Input -->
+        <div id="step1" class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📄 Step 1: Paste Job Description</h2>
+            <textarea 
+                id="jdInput" 
+                class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Paste the job description here...
+
+Example:
+Backend Developer Intern
+Required Skills: Python, Django, REST APIs, SQL, Git
+Experience: 0-1 years
+Responsibilities: Build REST APIs, maintain database schemas..."
+            ></textarea>
+            <button 
+                onclick="analyzeJD()"
+                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition"
+            >
+                🔍 Analyze Job Description
+            </button>
+        </div>
+
+        <!-- Step 2: Skill Gaps -->
+        <div id="step2" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+            <h2 class="text-xl font-bold mb-4">📊 Your Skill Analysis</h2>
+            <div id="skillGaps"></div>
+            <button 
+                onclick="generateRoadmap()"
+                class="mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition"
+            >
+                🗺️ Generate Learning Roadmap
+            </button>
+        </div>
+
+        <!-- Step 3: Roadmap -->
+        <div id="step3" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+            <h2 class="text-xl font-bold mb-4">🗺️ Your Personalized Roadmap</h2>
+            <div id="roadmapContent"></div>
+            <button 
+                onclick="getPracticeTask()"
+                class="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition"
+            >
+                🎯 Get Practice Task
+            </button>
+        </div>
+
+        <!-- Step 4: Practice Task -->
+        <div id="step4" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+            <h2 class="text-xl font-bold mb-4">🎯 Practice Challenge</h2>
+            <div id="taskContent"></div>
+            <textarea 
+                id="taskSubmission" 
+                class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mt-4"
+                placeholder="Write your solution here..."
+            ></textarea>
+            <button 
+                onclick="submitTask()"
+                class="mt-4 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition"
+            >
+                ✅ Submit Solution
+            </button>
+        </div>
+
+        <!-- Step 5: Results -->
+        <div id="step5" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <h2 class="text-xl font-bold mb-4">🎉 Evaluation Results</h2>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let sessionId = null;
+        let taskId = null;
+
+        function showStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+            
+            statusText.textContent = message;
+            statusEl.classList.remove('hidden');
+            
+            if (isError) {
+                statusEl.className = 'mb-6 p-4 bg-red-50 border border-red-200 rounded-lg';
+                statusText.className = 'text-red-800 font-medium';
+            } else {
+                statusEl.className = 'mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg';
+                statusText.className = 'text-blue-800 font-medium';
+            }
+        }
+
+        async function analyzeJD() {
+            const jdText = document.getElementById('jdInput').value;
+            if (!jdText.trim()) {
+                alert('Please paste a job description');
+                return;
+            }
+
+            showStatus('🔄 Analyzing job description...');
+
+            try {
+                const response = await fetch(`${API_URL}/agent/analyze-jd`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jd_text: jdText })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail?.message || errorData.detail || 'Analysis failed');
+                }
+
+                const data = await response.json();
+                
+                // Validate response structure
+                if (!data.session_id || !data.parsed_jd || !data.skill_gaps) {
+                    throw new Error('Invalid response from server. Check console.');
+                }
+                
+                console.log('Analysis response:', data);
+                sessionId = data.session_id;
+
+                // Display skill gaps
+                let gapsHTML = `
+                    <div class="mb-4">
+                        <h3 class="font-bold text-lg mb-2">Target Role: ${data.parsed_jd.role}</h3>
+                        <p class="text-gray-600 mb-4">Overall Readiness: ${(data.skill_gaps.overall_readiness * 100).toFixed(0)}%</p>
+                    </div>
+                    <div class="space-y-3">
+                `;
+
+                data.skill_gaps.gaps.forEach(gap => {
+                    const color = gap.gap_severity === 'high' ? 'red' : gap.gap_severity === 'medium' ? 'yellow' : 'green';
+                    gapsHTML += `
+                        <div class="border border-${color}-300 bg-${color}-50 p-4 rounded-lg">
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold">${gap.skill}</span>
+                                <span class="px-3 py-1 bg-${color}-200 text-${color}-800 rounded-full text-sm">
+                                    ${gap.gap_severity} gap
+                                </span>
+                            </div>
+                            <div class="mt-2 text-sm text-gray-700">
+                                Current: ${(gap.current_level * 100).toFixed(0)}% | 
+                                Required: ${(gap.required_level * 100).toFixed(0)}% | 
+                                Est. ${gap.learning_weeks} weeks
+                            </div>
+                        </div>
+                    `;
+                });
+
+                gapsHTML += '</div>';
+                document.getElementById('skillGaps').innerHTML = gapsHTML;
+                document.getElementById('step2').classList.remove('hidden');
+                showStatus('✅ Analysis complete!');
+            } catch (error) {
+                console.error('Analysis error:', error);
+                showStatus(`❌ Error: ${error.message}`, true);
+            }
+        }
+
+        async function generateRoadmap() {
+            showStatus('🔄 Generating personalized roadmap...');
+
+            try {
+                const response = await fetch(`${API_URL}/agent/generate-roadmap/${sessionId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                
+                let roadmapHTML = `<p class="text-gray-600 mb-4">${data.roadmap.total_weeks}-week plan</p><div class="space-y-4">`;
+
+                data.roadmap.weeks.forEach(week => {
+                    roadmapHTML += `
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h3 class="font-bold text-lg mb-2">Week ${week.week}: ${week.title}</h3>
+                            <p class="text-gray-700 mb-3">${week.milestone}</p>
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                ${week.skills_focus.map(s => `<span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">${s}</span>`).join('')}
+                            </div>
+                            <div class="text-sm text-gray-600">
+                                <strong>Resources:</strong>
+                                ${week.retrieved_resources.map(r => `<div>📚 ${r.title} (${r.type})</div>`).join('')}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                roadmapHTML += '</div>';
+                document.getElementById('roadmapContent').innerHTML = roadmapHTML;
+                document.getElementById('step3').classList.remove('hidden');
+                showStatus('✅ Roadmap generated!');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function getPracticeTask() {
+            showStatus('🔄 Generating practice task...');
+
+            try {
+                const response = await fetch(`${API_URL}/agent/next-task/${sessionId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                taskId = data.task_id;
+
+                let taskHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-bold">Skill: ${data.task.skill_focus}</span>
+                                <span class="px-3 py-1 bg-purple-200 text-purple-800 rounded-full text-sm">
+                                    ${data.task.difficulty}
+                                </span>
+                            </div>
+                            <p class="text-sm text-gray-600">⏱️ ${data.task.estimated_time}</p>
+                        </div>
+                        <div class="prose max-w-none">
+                            <h4 class="font-bold mb-2">Task Description:</h4>
+                            <p>${data.task.description}</p>
+                            <h4 class="font-bold mt-4 mb-2">Expected Output:</h4>
+                            <p>${data.task.expected_output}</p>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('taskContent').innerHTML = taskHTML;
+                document.getElementById('step4').classList.remove('hidden');
+                showStatus('✅ Task ready!');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function submitTask() {
+            const submission = document.getElementById('taskSubmission').value;
+            if (!submission.trim()) {
+                alert('Please write your solution');
+                return;
+            }
+
+            showStatus('🔄 Evaluating submission...');
+
+            try {
+                const response = await fetch(`${API_URL}/agent/submit-task`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task_id: taskId,
+                        submission: submission
+                    })
+                });
+
+                const data = await response.json();
+                const eval = data.evaluation;
+
+                let resultsHTML = `
+                    <div class="space-y-4">
+                        <div class="text-center">
+                            <div class="text-6xl font-bold ${eval.score >= 70 ? 'text-green-600' : 'text-orange-600'}">
+                                ${eval.score}/100
+                            </div>
+                            <p class="text-gray-600 mt-2">${eval.score >= 70 ? '🎉 Great work!' : '💪 Keep practicing!'}</p>
+                        </div>
+                        <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                            <h4 class="font-bold mb-2">Feedback:</h4>
+                            <p>${eval.feedback}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-green-50 border border-green-200 p-4 rounded-lg">
+                                <h4 class="font-bold mb-2">✅ Strengths:</h4>
+                                <ul class="list-disc list-inside">
+                                    ${eval.strengths.map(s => `<li>${s}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <div class="bg-orange-50 border border-orange-200 p-4 rounded-lg">
+                                <h4 class="font-bold mb-2">📈 Improvements:</h4>
+                                <ul class="list-disc list-inside">
+                                    ${eval.improvements.map(i => `<li>${i}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg">
+                            <p class="text-center">
+                                <strong>Skill Confidence Updated:</strong> 
+                                ${eval.skill_confidence_delta > 0 ? '📈' : '📉'} 
+                                ${(eval.skill_confidence_delta * 100).toFixed(1)}%
+                            </p>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('resultsContent').innerHTML = resultsHTML;
+                document.getElementById('step5').classList.remove('hidden');
+                showStatus('✅ Evaluation complete!');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
