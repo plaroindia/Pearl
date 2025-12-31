@@ -100,6 +100,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('User not authenticated');
 
+      // Load taiken metadata
       final taikenResponse = await _supabase
           .from('taikens')
           .select()
@@ -107,6 +108,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
           .single();
       final taiken = Taiken.fromJson(taikenResponse);
 
+      // Load stages
       final stagesResponse = await _supabase
           .from('taiken_stages')
           .select()
@@ -116,6 +118,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
           .map((json) => TaikenStage.fromJson(json))
           .toList();
 
+      // Load characters
       final charactersResponse = await _supabase
           .from('taiken_characters')
           .select()
@@ -125,6 +128,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
           .map((json) => TaikenCharacter.fromJson(json))
           .toList();
 
+      // Load dialogues per stage
       final Map<String, List<TaikenDialogue>> dialoguesByStage = {};
       for (final stage in stages) {
         final dialoguesResponse = await _supabase
@@ -137,6 +141,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
             .toList();
       }
 
+      // Load questions per stage
       final Map<String, List<TaikenQuestion>> questionsByStage = {};
       for (final stage in stages) {
         final questionsResponse = await _supabase
@@ -149,21 +154,31 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
             .toList();
       }
 
+      // Try to load existing progress
       TaikenProgress? progress;
       try {
-        dynamic query = _supabase
+        // Use fresh query (no caching)
+        final progressResponse = await _supabase
             .from('taiken_progress')
-            .select();
-        query = query.eq('user_id', userId);
-        query = query.eq('taiken_id', taikenId);
-        final progressResponse = await query.single();
+            .select()
+            .eq('user_id', userId)
+            .eq('taiken_id', taikenId)
+            .order('created_at', ascending: false)  // Get most recent
+            .limit(1)
+            .single();
         progress = TaikenProgress.fromJson(progressResponse);
       } catch (e) {
+        // No progress found - create fresh one
         final newProgressData = {
           'user_id': userId,
           'taiken_id': taikenId,
           'current_stage_order': 1,
+          'questions_answered': 0,
+          'correct_answers': 0,
+          'wrong_answers': 0,
           'status': 'in_progress',
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
         };
         final createdProgress = await _supabase
             .from('taiken_progress')
@@ -173,7 +188,7 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
         progress = TaikenProgress.fromJson(createdProgress);
       }
 
-
+      // Load existing rating
       int? existingRating;
       try {
         final ratingResponse = await _supabase
@@ -184,10 +199,10 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
             .single();
         existingRating = ratingResponse['rating'] as int?;
       } catch (e) {
-        print('No existing rating found: $e');
+        // No rating yet
       }
 
-
+      // Determine initial UI state
       final showingIntro = progress.currentStageOrder == 1 &&
           progress.questionsAnswered == 0;
       final currentStageIndex = progress.currentStageOrder - 1;
@@ -200,13 +215,20 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
         questionsByStage: questionsByStage,
         progress: progress,
         currentStageIndex: currentStageIndex,
+        currentDialogueIndex: 0,
+        currentQuestionIndex: 0,
         showingIntro: showingIntro,
+        showingOutro: false,
         isLoading: false,
         error: null,
-         userRating: existingRating,
+        userRating: existingRating,
+        userAnswers: {},  // Always start fresh
       );
 
-      await _supabase.rpc('increment_play_count', params: {'taiken_id': taikenId});
+      // Increment play count (only once per load, not on retry)
+      if (progress.questionsAnswered == 0) {
+        await _supabase.rpc('increment_play_count', params: {'taiken_id': taikenId});
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -219,14 +241,16 @@ class TaikenExperienceNotifier extends StateNotifier<TaikenExperienceState> {
     state = state.copyWith(showingIntro: false);
   }
 
-  void advanceDialogue() {
+ void advanceDialogue() {
     if (state.hasMoreDialogues) {
+      // Still have dialogues to show - increment index
       state = state.copyWith(
         currentDialogueIndex: state.currentDialogueIndex + 1,
       );
     } else {
+      // All dialogues shown - transition to questions
+      // DON'T reset currentDialogueIndex to 0, just mark questions as active
       state = state.copyWith(
-        currentDialogueIndex: 0,
         currentQuestionIndex: 0,
       );
     }
@@ -246,10 +270,10 @@ Future<void> submitAnswer(String questionId, int selectedIndex) async {
 
     final totalQuestions = state.taiken!.totalQuestions;
     final passThreshold = state.taiken!.passThreshold;
-    
+
     // Calculate current accuracy
     final currentAccuracy = (newCorrectAnswers / newQuestionsAnswered) * 100;
-    
+
     // Calculate if it's mathematically impossible to pass
     final questionsRemaining = totalQuestions - newQuestionsAnswered;
     final maxPossibleCorrect = newCorrectAnswers + questionsRemaining;
@@ -262,7 +286,7 @@ Future<void> submitAnswer(String questionId, int selectedIndex) async {
     if (maxPossibleAccuracy < passThreshold) {
       newStatus = 'failed';
       completedAt = DateTime.now();
-    } 
+    }
     // Check if all questions are answered
     else if (newQuestionsAnswered >= totalQuestions) {
       final finalAccuracy = (newCorrectAnswers / totalQuestions) * 100;
@@ -321,25 +345,24 @@ Future<void> submitAnswer(String questionId, int selectedIndex) async {
     }
   }
 
-  Future<void> advanceToNextStage() async {
-    final nextStageIndex = state.currentStageIndex + 1;
-    final nextStageOrder = nextStageIndex + 1;
+Future<void> advanceToNextStage() async {
+  final nextStageIndex = state.currentStageIndex + 1;
+  final nextStageOrder = nextStageIndex + 1;
 
-    await _supabase
-        .from('taiken_progress')
-        .update({
-      'current_stage_order': nextStageOrder,
-      'updated_at': DateTime.now().toIso8601String(),
-    })
-        .eq('progress_id', state.progress!.progressId);
+  await _supabase
+      .from('taiken_progress')
+      .update({
+    'current_stage_order': nextStageOrder,
+    'updated_at': DateTime.now().toIso8601String(),
+  })
+      .eq('progress_id', state.progress!.progressId);
 
-    state = state.copyWith(
-      currentStageIndex: nextStageIndex,
-      currentDialogueIndex: 0,
-      currentQuestionIndex: 0,
-    );
-  }
-
+  state = state.copyWith(
+    currentStageIndex: nextStageIndex,
+    currentDialogueIndex: 0,  // This already resets for new stage
+    currentQuestionIndex: 0,
+  );
+}
  Future<void> rateTaiken(int rating, String? review) async {
   try {
     final userId = _supabase.auth.currentUser?.id;
@@ -357,6 +380,47 @@ Future<void> submitAnswer(String questionId, int selectedIndex) async {
     state = state.copyWith(error: 'Failed to submit rating: $e');
   }
 }
+
+  Future<void> resetAndRestart() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+
+      // STEP 1: Delete ALL existing progress records for this user+taiken
+      // Use explicit filter and await completion
+      await _supabase
+          .from('taiken_progress')
+          .delete()
+          .eq('user_id', userId)
+          .eq('taiken_id', taikenId);
+      
+      // STEP 2: Small delay to ensure database propagation (if using replicas)
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // STEP 3: Reset provider state to fresh initial state
+      state = TaikenExperienceState(
+        showingIntro: true,  // Force show intro screen
+        showingOutro: false,
+        currentStageIndex: 0,
+        currentDialogueIndex: 0,
+        currentQuestionIndex: 0,
+        userAnswers: {},  // Clear all answers
+      );
+
+      // STEP 4: Reload taiken data from scratch (will create new progress record)
+      await loadTaiken();
+      
+      // Verify we're starting fresh
+      if (state.progress?.currentStageOrder != 1 || 
+          state.progress?.questionsAnswered != 0) {
+        throw Exception('Failed to reset progress properly');
+      }
+      
+    } catch (e) {
+      state = state.copyWith(error: 'Failed to reset progress: $e');
+      rethrow;
+    }
+  }
 
   void reset() {
     state = TaikenExperienceState();

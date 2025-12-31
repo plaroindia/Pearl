@@ -1,7 +1,6 @@
-// lib/View/taiken_experience_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui';
 import '../ViewModel/taiken_experience_provider.dart';
 import '../Model/taiken.dart';
 
@@ -17,16 +16,134 @@ class TaikenExperiencePage extends ConsumerStatefulWidget {
   ConsumerState<TaikenExperiencePage> createState() => _TaikenExperiencePageState();
 }
 
-class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
+class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage>
+    with SingleTickerProviderStateMixin {
   int? _selectedAnswerIndex;
   bool _showExplanation = false;
+  int _visibleDialoguesCount = 0;
+  bool _isAdvancingDialogue = false;
+  late AnimationController _xpAnimationController;
+  late Animation<double> _xpAnimation;
+  double _currentXP = 100.0;
+  final ScrollController _dialogueScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _xpAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _xpAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _xpAnimationController, curve: Curves.easeInOut),
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(taikenExperienceProvider(widget.taikenId).notifier).loadTaiken();
     });
+  }
+
+  @override
+  void dispose() {
+    _dialogueScrollController.dispose();
+    _xpAnimationController.dispose();
+    super.dispose();
+  }
+
+  void _updateXPBar(TaikenExperienceState state) {
+    if (state.taiken == null || state.progress == null) return;
+
+    final totalQuestions = state.taiken!.totalQuestions;
+    final wrongAnswers = state.progress!.wrongAnswers;
+
+    final xpLossPerWrong = 100.0 / (totalQuestions / 2);
+    final newXP = (100.0 - (wrongAnswers * xpLossPerWrong)).clamp(0.0, 100.0);
+
+    _xpAnimation = Tween<double>(
+      begin: _currentXP / 100.0,
+      end: newXP / 100.0,
+    ).animate(
+      CurvedAnimation(parent: _xpAnimationController, curve: Curves.easeInOut),
+    );
+
+    _currentXP = newXP;
+    _xpAnimationController.forward(from: 0.0);
+  }
+void _showNextDialogue(int totalDialogues) {
+    if (_isAdvancingDialogue) return;  // Prevent concurrent execution
+    
+    if (_visibleDialoguesCount < totalDialogues) {
+      setState(() {
+        _isAdvancingDialogue = true;
+        _visibleDialoguesCount++;
+      });
+
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_dialogueScrollController.hasClients) {
+          _dialogueScrollController.animateTo(
+            _dialogueScrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+        
+        // Reset guard after animation starts
+        if (mounted) {
+          setState(() {
+            _isAdvancingDialogue = false;
+          });
+        }
+      });
+    }
+  }
+
+  // Add this method to handle complete reset
+  Future<void> _handleTryAgain() async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Resetting taiken...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      // Reset provider state (deletes DB, creates fresh progress)
+      await ref.read(taikenExperienceProvider(widget.taikenId).notifier)
+          .resetAndRestart();
+      
+      // Reset all local UI state
+      if (mounted) {
+        setState(() {
+          _currentXP = 100.0;
+          _selectedAnswerIndex = null;
+          _showExplanation = false;
+          _visibleDialoguesCount = 0;
+          _isAdvancingDialogue = false;
+        });
+        
+        // Reset scroll controller
+        if (_dialogueScrollController.hasClients) {
+          _dialogueScrollController.jumpTo(0);
+        }
+        
+        // Reset XP animation
+        _xpAnimationController.reset();
+        _xpAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+          CurvedAnimation(parent: _xpAnimationController, curve: Curves.easeInOut),
+        );
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reset: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -54,10 +171,13 @@ class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
             children: [
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
-              Text(
-                state.error!,
-                style: const TextStyle(color: Colors.red, fontSize: 16),
-                textAlign: TextAlign.center,
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  state.error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -77,17 +197,14 @@ class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
       );
     }
 
-    // Show intro screen
     if (state.showingIntro) {
       return _buildIntroScreen(state);
     }
 
-    // Show outro screen
     if (state.showingOutro) {
       return _buildOutroScreen(state);
     }
 
-    // Show main experience
     return _buildExperienceScreen(state);
   }
 
@@ -144,20 +261,11 @@ class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
                 ),
               ),
               const SizedBox(height: 24),
-              _buildInfoRow(
-                Icons.layers,
-                '${state.taiken!.totalStages} Stages',
-              ),
+              _buildInfoRow(Icons.layers, '${state.taiken!.totalStages} Stages'),
               const SizedBox(height: 8),
-              _buildInfoRow(
-                Icons.quiz,
-                '${state.taiken!.totalQuestions} Questions',
-              ),
+              _buildInfoRow(Icons.quiz, '${state.taiken!.totalQuestions} Questions'),
               const SizedBox(height: 8),
-              _buildInfoRow(
-                Icons.check_circle,
-                'Pass: ${state.taiken!.passThreshold}% correct',
-              ),
+              _buildInfoRow(Icons.check_circle, 'Pass: ${state.taiken!.passThreshold}% correct'),
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
@@ -205,128 +313,121 @@ class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
   }
 
   Widget _buildOutroScreen(TaikenExperienceState state) {
-    final isPassed = state.progress!.status == 'completed';
-    final accuracy = state.progress!.accuracyPercentage;
+  final isPassed = state.progress!.status == 'completed';
+  final accuracy = state.progress!.accuracyPercentage;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isPassed ? Icons.check_circle : Icons.cancel,
-                size: 100,
+  return Scaffold(
+    backgroundColor: Colors.black,
+    body: SafeArea(
+      child: SingleChildScrollView(  // ADDED: Make entire content scrollable
+        padding: const EdgeInsets.all(24),  // Moved padding here
+        child: Column(  // REMOVED mainAxisAlignment: MainAxisAlignment.center
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 40),  // Top spacing
+            Icon(
+              isPassed ? Icons.check_circle : Icons.cancel,
+              size: 100,
+              color: isPassed ? Colors.green : Colors.red,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isPassed ? 'Congratulations!' : 'Taiken Failed',
+              style: TextStyle(
                 color: isPassed ? Colors.green : Colors.red,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 24),
-              Text(
-                isPassed ? 'Congratulations!' : 'Taiken Failed',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                isPassed
+                    ? state.taiken!.outroSuccessScript
+                    : state.taiken!.outroFailureScript,
                 style: TextStyle(
-                  color: isPassed ? Colors.green : Colors.red,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[300],
+                  fontSize: 16,
+                  height: 1.5,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  isPassed
-                      ? state.taiken!.outroSuccessScript
-                      : state.taiken!.outroFailureScript,
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 32),
-              _buildResultStat(
-                'Accuracy',
-                '${accuracy.toStringAsFixed(1)}%',
-                isPassed ? Colors.green : Colors.red,
-              ),
-              const SizedBox(height: 12),
-              _buildResultStat(
-                'Correct Answers',
+            ),
+            const SizedBox(height: 32),
+            _buildResultStat('Accuracy', '${accuracy.toStringAsFixed(1)}%',
+                isPassed ? Colors.green : Colors.red),
+            const SizedBox(height: 12),
+            _buildResultStat('Correct Answers',
                 '${state.progress!.correctAnswers}/${state.progress!.questionsAnswered}',
-                Colors.blue,
+                Colors.blue),
+            const SizedBox(height: 12),
+            _buildResultStat('Final XP', '${_currentXP.toStringAsFixed(0)}%',
+                _currentXP > 50 ? Colors.green : Colors.orange),
+            const SizedBox(height: 32),
+            Text(
+              'Rate this Taiken',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 16,
               ),
-              const SizedBox(height: 32),
-              Text(
-                'Rate this Taiken',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 16,
+            ),
+            const SizedBox(height: 12),
+            _buildRatingStars(state),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Back to Taikens',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
+            ),
+            if (!isPassed) ...[
               const SizedBox(height: 12),
-              _buildRatingStars(state),
-              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                child: OutlinedButton(
+                  onPressed: _handleTryAgain,  // Use the new handler
+                  style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: Colors.white),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: const Text(
-                    'Back to Taikens',
+                    'Try Again',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-              if (!isPassed) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      // Reset and restart
-                      ref.read(taikenExperienceProvider(widget.taikenId).notifier)
-                          .reset();
-                      ref.read(taikenExperienceProvider(widget.taikenId).notifier)
-                          .loadTaiken();
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: const BorderSide(color: Colors.white),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Try Again',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
+            const SizedBox(height: 40),  // Bottom spacing
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildResultStat(String label, String value, Color color) {
     return Container(
@@ -360,42 +461,56 @@ class _TaikenExperiencePageState extends ConsumerState<TaikenExperiencePage> {
     );
   }
 
-Widget _buildRatingStars(TaikenExperienceState state) {
+  Widget _buildRatingStars(TaikenExperienceState state) {
+  // Get initial rating from provider state
+  final existingRating = state.userRating ?? 0;
+  
   return StatefulBuilder(
-    builder: (context, setState) {
-      int selectedRating = 0;
-      bool isSubmitted = false;
+    builder: (context, setLocalState) {
+      // Initialize from existing rating
+      int selectedRating = existingRating;
+      bool isSubmitted = existingRating > 0;  // If already rated, mark as submitted
 
       return Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(5, (index) {
+              final starIndex = index + 1;
+              final isFilled = starIndex <= selectedRating;
+              
               return IconButton(
                 icon: Icon(
-                  index < selectedRating ? Icons.star : Icons.star_border,
+                  isFilled ? Icons.star : Icons.star_border,
                   color: Colors.amber,
                   size: 32,
                 ),
                 onPressed: isSubmitted ? null : () async {
-                  setState(() => selectedRating = index + 1);
+                  // Update local state immediately for instant feedback
+                  setLocalState(() {
+                    selectedRating = starIndex;
+                  });
+                  
+                  // Submit to database
                   await ref
                       .read(taikenExperienceProvider(widget.taikenId).notifier)
-                      .rateTaiken(selectedRating, null);
-                  setState(() => isSubmitted = true);
+                      .rateTaiken(starIndex, null);
+                  
+                  // Mark as submitted after successful save
+                  setLocalState(() {
+                    isSubmitted = true;
+                  });
                 },
               );
             }),
           ),
+          const SizedBox(height: 8),
           if (isSubmitted)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Thank you for rating!',
-                style: TextStyle(
-                  color: Colors.green[400],
-                  fontSize: 14,
-                ),
+            Text(
+              'Thank you for rating!',
+              style: TextStyle(
+                color: Colors.green[400],
+                fontSize: 14,
               ),
             ),
         ],
@@ -410,67 +525,221 @@ Widget _buildRatingStars(TaikenExperienceState state) {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         foregroundColor: Colors.white,
-        title: Text('Stage ${state.currentStageIndex + 1}/${state.stages.length}'),
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            'Stage ${state.currentStageIndex + 1}/${state.stages.length}',
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
-              child: Text(
-                '${state.progress!.correctAnswers}/${state.progress!.questionsAnswered}',
-                style: const TextStyle(
-                  color: Colors.green,
-                  fontWeight: FontWeight.bold,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.favorite,
+                      color: _currentXP > 50 ? Colors.red : Colors.grey,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_currentXP.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        color: _currentXP > 50 ? Colors.red : Colors.grey,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildProgressBar(state),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (state.currentStage?.sceneImageUrl != null)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          state.currentStage!.sceneImageUrl!,
-                          width: double.infinity,
-                          height: 200,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            height: 200,
-                            color: Colors.grey[800],
-                            child: const Icon(Icons.image_not_supported, size: 64),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
+      body: Stack(
+        children: [
+          // Blurred background image
+          if (state.currentStage?.sceneImageUrl != null)
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  Image.network(
+                    state.currentStage!.sceneImageUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey[900],
+                    ),
+                  ),
+                  BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Positioned.fill(
+              child: Container(color: Colors.grey[900]),
+            ),
 
-                    // Show dialogues
-                    if (hasDialogues && state.hasMoreDialogues)
-                      _buildDialogueSection(state)
-                    // Show questions
-                    else if (hasQuestions && state.hasMoreQuestions)
-                      _buildQuestionSection(state)
-                    else
-                      const Center(child: Text('No content', style: TextStyle(color: Colors.white))),
+          // Main image (non-blurred center)
+          if (state.currentStage?.sceneImageUrl != null)
+            Positioned.fill(
+              child: Center(
+                child: Image.network(
+                  state.currentStage!.sceneImageUrl!,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                ),
+              ),
+            ),
+
+          // Gradient overlay for better readability
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.3),
+                    Colors.black.withOpacity(0.7),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Content
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                _buildXPBar(state),
+                _buildProgressBar(state),
+                Expanded(
+                  child: hasDialogues && state.hasMoreDialogues
+                      ? _buildDialogueSection(state)
+                      : hasQuestions && state.hasMoreQuestions
+                      ? _buildQuestionSection(state)
+                      : const Center(
+                    child: Text(
+                      'No content',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildXPBar(TaikenExperienceState state) {
+    return AnimatedBuilder(
+      animation: _xpAnimation,
+      builder: (context, child) {
+        final xpValue = _xpAnimation.value;
+        Color xpColor;
+        if (xpValue > 0.7) {
+          xpColor = Colors.green;
+        } else if (xpValue > 0.4) {
+          xpColor = Colors.orange;
+        } else {
+          xpColor = Colors.red;
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.favorite, color: xpColor, size: 16),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'XP Health',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${(xpValue * 100).toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      color: xpColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[850],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Stack(
+                    children: [
+                      FractionallySizedBox(
+                        widthFactor: xpValue,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [xpColor, xpColor.withOpacity(0.7)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -480,7 +749,12 @@ Widget _buildRatingStars(TaikenExperienceState state) {
     final progress = answered / totalQuestions;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -506,12 +780,12 @@ Widget _buildRatingStars(TaikenExperienceState state) {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 8,
+              minHeight: 6,
               backgroundColor: Colors.grey[800],
               valueColor: AlwaysStoppedAnimation<Color>(
                 progress >= (state.taiken!.passThreshold / 100)
@@ -525,208 +799,363 @@ Widget _buildRatingStars(TaikenExperienceState state) {
     );
   }
 
-  Widget _buildDialogueSection(TaikenExperienceState state) {
-    final dialogue = state.currentDialogues[state.currentDialogueIndex];
-    final character = state.characters.firstWhere(
-          (c) => c.characterId == dialogue.characterId,
-      orElse: () => TaikenCharacter(
-        characterId: '',
-        taikenId: '',
-        characterName: 'Narrator',
-        displayOrder: -1,
-        createdAt: DateTime.now(),
-      ),
-    );
+   Widget _buildDialogueSection(TaikenExperienceState state) {
+  final dialogues = state.currentDialogues;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // Only initialize once when entering dialogue section
+  if (_visibleDialoguesCount == 0 && dialogues.isNotEmpty) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _visibleDialoguesCount == 0) {
+        setState(() {
+          _visibleDialoguesCount = 1;
+        });
+      }
+    });
+  }
+
+  return GestureDetector(
+    onTap: _isAdvancingDialogue ? null : () => _showNextDialogue(dialogues.length),
+    behavior: HitTestBehavior.translucent,
+    child: Column(
       children: [
-        Row(
-          children: [
-            if (character.characterImageUrl != null)
-              CircleAvatar(
-                radius: 30,
-                backgroundImage: NetworkImage(character.characterImageUrl!),
-              )
-            else
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.grey[800],
-                child: const Icon(Icons.person, color: Colors.white),
-              ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                character.characterName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _dialogueScrollController,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                ...List.generate(
+                  _visibleDialoguesCount.clamp(0, dialogues.length),
+                  (index) {
+                    if (index >= dialogues.length) return const SizedBox();
+                    final dialogue = dialogues[index];
+                    final character = state.characters.firstWhere(
+                      (c) => c.characterId == dialogue.characterId,
+                      orElse: () => TaikenCharacter(
+                        characterId: '',
+                        taikenId: '',
+                        characterName: 'Narrator',
+                        displayOrder: -1,
+                        createdAt: DateTime.now(),
+                      ),
+                    );
+                    return _buildAnimatedDialogueCard(
+                      dialogue,
+                      character,
+                      index,
+                    );
+                  },
                 ),
-              ),
+                const SizedBox(height: 100),
+              ],
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 16),
+
+        // Bottom UI
         Container(
-          width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[700]!),
+            color: Colors.black.withOpacity(0.8),
           ),
-          child: Text(
-            dialogue.dialogueText,
-            style: TextStyle(
-              color: Colors.grey[300],
-              fontSize: 16,
-              height: 1.5,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _selectedAnswerIndex = null;
-                _showExplanation = false;
-              });
-              ref.read(taikenExperienceProvider(widget.taikenId).notifier)
-                  .advanceDialogue();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Continue',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+          child: Column(
+            children: [
+              if (_visibleDialoguesCount < dialogues.length)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.touch_app, color: Colors.grey[600], size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tap anywhere to continue • ${_visibleDialoguesCount}/${dialogues.length}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (_visibleDialoguesCount >= dialogues.length)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Reset dialogue counter when moving to questions
+                      setState(() {
+                        _visibleDialoguesCount = 0;
+                        _selectedAnswerIndex = null;
+                        _showExplanation = false;
+                      });
+                      
+                      // Advance to questions
+                      ref.read(taikenExperienceProvider(widget.taikenId).notifier)
+                          .advanceDialogue();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue to Questions',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
+
+
+  Widget _buildAnimatedDialogueCard(
+    TaikenDialogue dialogue,
+    TaikenCharacter character,
+    int index,
+) {
+  final isNarrator = character.characterName == 'Narrator';
+  final isLeftAligned = index % 2 == 0;
+
+  return TweenAnimationBuilder<double>(
+    duration: const Duration(milliseconds: 400),
+    curve: Curves.easeOutBack,
+    tween: Tween(begin: 0.0, end: 1.0),
+    builder: (context, value, child) {
+      // Clamp the value to ensure it's always between 0.0 and 1.0
+      final clampedValue = value.clamp(0.0, 1.0);
+      
+      return Transform.scale(
+        scale: clampedValue,
+        alignment: isLeftAligned ? Alignment.centerLeft : Alignment.centerRight,
+        child: Opacity(
+          opacity: clampedValue,  // Use clamped value
+          child: child,
+        ),
+      );
+    },
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        mainAxisAlignment:
+        isLeftAligned ? MainAxisAlignment.start : MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (isLeftAligned && !isNarrator)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundImage: character.characterImageUrl != null
+                    ? NetworkImage(character.characterImageUrl!)
+                    : null,
+                backgroundColor: Colors.grey[800],
+                child: character.characterImageUrl == null
+                    ? const Icon(Icons.person, size: 16, color: Colors.white)
+                    : null,
+              ),
+            ),
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isNarrator
+                    ? Colors.grey[900]?.withOpacity(0.9)
+                    : isLeftAligned
+                    ? Colors.blue[900]?.withOpacity(0.9)
+                    : Colors.green[900]?.withOpacity(0.9),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft:
+                  isLeftAligned ? Radius.zero : const Radius.circular(16),
+                  bottomRight:
+                  isLeftAligned ? const Radius.circular(16) : Radius.zero,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    character.characterName,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    dialogue.dialogueText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (!isLeftAligned && !isNarrator)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundImage: character.characterImageUrl != null
+                    ? NetworkImage(character.characterImageUrl!)
+                    : null,
+                backgroundColor: Colors.grey[800],
+                child: character.characterImageUrl == null
+                    ? const Icon(Icons.person, size: 16, color: Colors.white)
+                    : null,
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildQuestionSection(TaikenExperienceState state) {
     final question = state.currentQuestions[state.currentQuestionIndex];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.quiz, color: Colors.blue),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  question.questionText,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        ...List.generate(
-          question.options.length,
-              (index) => _buildOptionButton(
-            question.options[index],
-            index,
-            question,
-            state,
-          ),
-        ),
-        if (_showExplanation && question.explanation != null) ...[
-          const SizedBox(height: 16),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[900],
+              color: Colors.blue.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[700]!),
+              border: Border.all(color: Colors.blue, width: 2),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.blue[300],
-                      size: 20,
+                const Icon(Icons.quiz, color: Colors.blue, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    question.questionText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Explanation',
-                      style: TextStyle(
-                        color: Colors.blue[300],
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  question.explanation!,
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 14,
-                    height: 1.5,
                   ),
                 ),
               ],
             ),
           ),
-        ],
-        if (_selectedAnswerIndex != null) ...[
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _selectedAnswerIndex = null;
-                  _showExplanation = false;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Continue',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+          ...List.generate(
+            question.options.length,
+                (index) => _buildOptionButton(
+              question.options[index],
+              index,
+              question,
+              state,
             ),
           ),
+          if (_showExplanation && question.explanation != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900]?.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[700]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue[300],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Explanation',
+                        style: TextStyle(
+                          color: Colors.blue[300],
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    question.explanation!,
+                    style: TextStyle(
+                      color: Colors.grey[300],
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_selectedAnswerIndex != null) ...[
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedAnswerIndex = null;
+                    _showExplanation = false;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -746,22 +1175,22 @@ Widget _buildRatingStars(TaikenExperienceState state) {
 
     if (showResult) {
       if (isCorrect) {
-        backgroundColor = Colors.green.withOpacity(0.2);
+        backgroundColor = Colors.green.withOpacity(0.3);
         borderColor = Colors.green;
         textColor = Colors.green;
       } else if (isSelected) {
-        backgroundColor = Colors.red.withOpacity(0.2);
+        backgroundColor = Colors.red.withOpacity(0.3);
         borderColor = Colors.red;
         textColor = Colors.red;
       } else {
-        backgroundColor = Colors.grey[900]!;
+        backgroundColor = Colors.grey[900]!.withOpacity(0.5);
         borderColor = Colors.grey[700]!;
         textColor = Colors.grey[400]!;
       }
     } else {
       backgroundColor = isSelected
-          ? Colors.blue.withOpacity(0.2)
-          : Colors.grey[900]!;
+          ? Colors.blue.withOpacity(0.3)
+          : Colors.grey[900]!.withOpacity(0.7);
       borderColor = isSelected ? Colors.blue : Colors.grey[700]!;
       textColor = isSelected ? Colors.blue : Colors.white;
     }
@@ -770,13 +1199,16 @@ Widget _buildRatingStars(TaikenExperienceState state) {
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: _selectedAnswerIndex == null
-            ? () {
+            ? () async {
           setState(() {
             _selectedAnswerIndex = index;
             _showExplanation = true;
           });
-          ref.read(taikenExperienceProvider(widget.taikenId).notifier)
+          await ref
+              .read(taikenExperienceProvider(widget.taikenId).notifier)
               .submitAnswer(question.questionId, index);
+
+          _updateXPBar(ref.read(taikenExperienceProvider(widget.taikenId)));
         }
             : null,
         borderRadius: BorderRadius.circular(12),
