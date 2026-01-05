@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEARL Agent - Agentic Career Mentor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        .skill-chip {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #667eea;
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 5px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .module-card {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .module-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateX(5px);
+        }
+
+        .module-card.completed {
+            border-left-color: #48bb78;
+            background: #f0fdf4;
+        }
+
+        .module-card.active {
+            border-left-color: #ed8936;
+            background: #fffbf0;
+        }
+
+        .module-card.locked {
+            border-left-color: #cbd5e0;
+            opacity: 0.6;
+        }
+
+        .module-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .module-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .module-status {
+            font-size: 0.85em;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .status-locked {
+            background: #e2e8f0;
+            color: #64748b;
+        }
+
+        .status-active {
+            background: #fed7aa;
+            color: #92400e;
+        }
+
+        .status-completed {
+            background: #bbf7d0;
+            color: #065f46;
+        }
+
+        .module-description {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .module-progress {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .module-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .action-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .action-box {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .action-box:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+        }
+
+        .action-box.completed {
+            background: #f0fdf4;
+            border-color: #48bb78;
+        }
+
+        .action-type-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .badge-byte {
+            background: #e0e7ff;
+            color: #667eea;
+        }
+
+        .badge-course {
+            background: #dbeafe;
+            color: #0369a1;
+        }
+
+        .badge-taiken {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
+        .badge-checkpoint {
+            background: #fef08a;
+            color: #854d0e;
+        }
+
+        .action-title {
+            font-weight: 600;
+            color: #333;
+            margin: 10px 0;
+        }
+
+        .action-description {
+            color: #666;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+
+        .action-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: #999;
+            margin: 10px 0;
+        }
+
+        .action-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .checkbox {
+            display: flex;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .progress-bar-container {
+            margin: 20px 0;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .quiz-question {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .quiz-question:last-child {
+            border-bottom: none;
+        }
+
+        .question-text {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .option input[type="radio"] {
+            width: auto;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #f0fdf4;
+            color: #065f46;
+            border: 1px solid #bbf7d0;
+        }
+
+        .alert-error {
+            background: #fef2f2;
+            color: #7f1d1d;
+            border: 1px solid #fecaca;
+        }
+
+        .alert-info {
+            background: #f0f9ff;
+            color: #0c2d6b;
+            border: 1px solid #bfdbfe;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .breadcrumb {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .breadcrumb-item::after {
+            content: "→";
+            margin: 0 10px;
+        }
+
+        .breadcrumb-item:last-child::after {
+            content: "";
+            margin: 0;
+        }
+
+        .breadcrumb-item.active {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-weight: 600;
+            color: #999;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            color: #667eea;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎯 PEARL Agent</h1>
+            <p>Your Agentic Career Mentor - Breaking Down Goals into Actions</p>
+        </div>
+
+        <!-- Goal Input Section -->
+        <div id="goalSection" class="card section active">
+            <h2>Start Your Learning Journey</h2>
+            <p style="color: #666; margin-bottom: 20px;">Enter your career goal or paste a job description to get personalized learning modules.</p>
+
+            <div class="input-group">
+                <label for="careerGoal">Career Goal</label>
+                <input type="text" id="careerGoal" placeholder="e.g., Become a Backend Developer, Senior Data Scientist" value="Become a Backend Developer">
+            </div>
+
+            <div class="input-group">
+                <label for="jobDesc">Job Description (Optional)</label>
+                <textarea id="jobDesc" placeholder="Paste a job description for more personalized recommendations..."></textarea>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="startJourney()">🚀 Start Journey</button>
+            </div>
+        </div>
+
+        <!-- Loading Section -->
+        <div id="loadingSection" class="card section">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Analyzing your goal and creating personalized modules...</p>
+            </div>
+        </div>
+
+        <!-- Journey Overview Section -->
+        <div id="journeySection" class="card section">
+            <div class="breadcrumb">
+                <div class="breadcrumb-item">Career Goal</div>
+                <div class="breadcrumb-item">Skills to Learn</div>
+                <div class="breadcrumb-item active">Modules & Actions</div>
+            </div>
+
+            <h2 id="journeyTitle">Backend Developer</h2>
+
+            <div style="margin: 20px 0;">
+                <h3 style="margin-bottom: 15px;">📚 Skills to Master</h3>
+                <div id="skillsList"></div>
+            </div>
+
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalModulesCount">0</div>
+                    <div class="stat-label">Total Modules</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="totalHoursCount">0</div>
+                    <div class="stat-label">Hours to Complete</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="progressCount">0%</div>
+                    <div class="stat-label">Overall Progress</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">📖 Learning Modules</h3>
+            <div id="modulesList"></div>
+        </div>
+
+        <!-- Module Detail Section -->
+        <div id="moduleDetailSection" class="card section">
+            <button class="btn-secondary" onclick="backToJourney()" style="margin-bottom: 20px;">← Back to Skills</button>
+
+            <div class="breadcrumb">
+                <div class="breadcrumb-item" onclick="backToJourney()" style="cursor: pointer; color: #667eea;">Skills</div>
+                <div class="breadcrumb-item" id="currentSkillBreadcrumb">Python</div>
+                <div class="breadcrumb-item active" id="currentModuleBreadcrumb">Module 1</div>
+            </div>
+
+            <h2 id="moduleTitle">Module Title</h2>
+
+            <div class="progress-bar-container">
+                <div class="progress-info">
+                    <span>Module Progress</span>
+                    <span id="moduleProgressText">0/4 actions</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="moduleProgressBar"></div>
+                </div>
+            </div>
+
+            <div id="moduleDescription" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: #666;"></div>
+
+            <h3 style="margin: 25px 0 15px 0;">📋 Learning Objectives</h3>
+            <ul id="objectivesList" style="margin-left: 20px; color: #666;"></ul>
+
+            <div class="action-section">
+                <h3 style="margin-bottom: 15px;">✅ Actions to Complete</h3>
+                <div id="actionsList"></div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="backToJourney()">Back</button>
+                <button class="btn-primary" onclick="nextModule()">Next Module →</button>
+            </div>
+        </div>
+
+        <!-- Checkpoint Quiz Section -->
+        <div id="quizSection" class="card section">
+            <button class="btn-secondary" onclick="backToModule()" style="margin-bottom: 20px;">← Back to Module</button>
+
+            <h2>Module Checkpoint Assessment</h2>
+            <p style="color: #666; margin-bottom: 20px;">Answer all questions to proceed to the next module. You need at least 70% to pass.</p>
+
+            <div id="quizContainer">
+                <!-- Questions populated here -->
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="backToModule()">Back</button>
+                <button class="btn-success" onclick="submitCheckpoint()">Submit Answers</button>
+            </div>
+        </div>
+
+        <!-- Quiz Results Section -->
+        <div id="resultsSection" class="card section">
+            <h2 id="resultTitle">Quiz Results</h2>
+
+            <div class="stats-grid" style="margin: 20px 0;">
+                <div class="stat-box">
+                    <div class="stat-value" id="scoreDisplay">0%</div>
+                    <div class="stat-label">Your Score</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="correctDisplay">0/0</div>
+                    <div class="stat-label">Correct Answers</div>
+                </div>
+            </div>
+
+            <div id="resultsFeedback"></div>
+
+            <div class="button-group" style="margin-top: 30px;">
+                <button class="btn-secondary" onclick="retakeQuiz()">Retake Quiz</button>
+                <button class="btn-primary" onclick="continueToNextModule()" id="continueBtn">Continue to Next Module →</button>
+            </div>
+        </div>
+
+        <!-- Progress Dashboard Section -->
+        <div id="progressSection" class="card section">
+            <button class="btn-secondary" onclick="backToJourney()" style="margin-bottom: 20px;">← Back</button>
+
+            <h2>Your Learning Progress</h2>
+
+            <div id="skillProgressCards"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/agent';
+        let currentSessionId = null;
+        let currentSkill = null;
+        let currentModule = null;
+        let learningPaths = {};
+        let currentModuleData = null;
+        let currentActionIndex = 0;
+
+        // Navigation Functions
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+        }
+
+        async function startJourney() {
+            const goal = document.getElementById('careerGoal').value;
+            const jdText = document.getElementById('jobDesc').value;
+
+            if (!goal.trim()) {
+                alert('Please enter a career goal');
+                return;
+            }
+
+            showSection('loadingSection');
+
+            try {
+                const response = await fetch(`${API_URL}/start-journey`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        goal: goal,
+                        jd_text: jdText || null
+                    })
+                });
+
+                const data = await response.json();
+                currentSessionId = data.session_id;
+                learningPaths = data.learning_paths;
+
+                displayJourney(data);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to start journey. Check console.');
+                showSection('goalSection');
+            }
+        }
+
+        function displayJourney(data) {
+            document.getElementById('journeyTitle').textContent = data.target_role;
+
+            // Display skills
+            const skillsList = document.getElementById('skillsList');
+            skillsList.innerHTML = data.skills_to_learn
+                .map(skill => `<span class="skill-chip">${skill}</span>`)
+                .join('');
+
+            // Display stats
+            let totalModules = 0;
+            let totalHours = 0;
+
+            for (const skill in learningPaths) {
+                const path = learningPaths[skill];
+                totalModules += path.total_modules;
+                totalHours += path.estimated_hours;
+            }
+
+            document.getElementById('totalModulesCount').textContent = totalModules;
+            document.getElementById('totalHoursCount').textContent = totalHours;
+
+            // Display modules
+            displayModulesList();
+
+            showSection('journeySection');
+        }
+
+        function displayModulesList() {
+            const modulesList = document.getElementById('modulesList');
+            let html = '';
+
+            for (const skill in learningPaths) {
+                const path = learningPaths[skill];
+                html += `<h4 style="margin-top: 20px; margin-bottom: 10px; color: #667eea;">${skill}</h4>`;
+
+                path.modules.forEach(module => {
+                    // Calculate actual completion status based on actions
+                    const completedActions = module.actions.filter(a => a.completed).length;
+                    const totalActions = module.actions.length;
+                    const progress = totalActions > 0 ? (completedActions / totalActions * 100) : 0;
+                    
+                    // Determine module status based on action completion
+                    let moduleStatus = module.status;
+                    if (completedActions === totalActions && totalActions > 0) {
+                        moduleStatus = 'completed';
+                        module.status = 'completed';
+                        module.completed = true;
+                    }
+                    
+                    const statusClass = moduleStatus;
+
+                    html += `
+                        <div class="module-card ${statusClass}" onclick="selectModule('${skill}', ${module.module_id})">
+                            <div class="module-header">
+                                <div class="module-title">${module.name}</div>
+                                <span class="module-status status-${statusClass}">
+                                    ${moduleStatus.charAt(0).toUpperCase() + moduleStatus.slice(1)}
+                                </span>
+                            </div>
+                            <div class="module-description">${module.description}</div>
+                            <div class="module-progress">
+                                <div class="module-progress-bar" style="width: ${progress}%"></div>
+                            </div>
+                            <div style="font-size: 0.85em; color: #999; margin-top: 10px;">
+                                ${completedActions}/${totalActions} actions completed
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            modulesList.innerHTML = html;
+
+            // Update overall progress
+            let totalActions = 0;
+            let completedActions = 0;
+            for (const skill in learningPaths) {
+                learningPaths[skill].modules.forEach(m => {
+                    totalActions += m.actions.length;
+                    completedActions += m.actions.filter(a => a.completed).length;
+                });
+            }
+            const overallProgress = totalActions > 0 ? Math.round(completedActions / totalActions * 100) : 0;
+            document.getElementById('progressCount').textContent = overallProgress + '%';
+        }
+
+        function selectModule(skill, moduleId) {
+            try {
+                // Validate skill exists
+                if (!learningPaths[skill]) {
+                    alert('Skill not found');
+                    return;
+                }
+                
+                // Validate module exists
+                if (!learningPaths[skill].modules || !learningPaths[skill].modules[moduleId - 1]) {
+                    alert('Module not found');
+                    return;
+                }
+                
+                // Check if locked
+                if (learningPaths[skill].modules[moduleId - 1].status === 'locked') {
+                    alert('This module is locked. Complete the previous module first!');
+                    return;
+                }
+
+                currentSkill = skill;
+                currentModule = moduleId;
+                currentModuleData = learningPaths[skill].modules[moduleId - 1];
+                currentActionIndex = 0;
+
+                displayModuleDetail();
+                
+                // Refresh in background (non-blocking)
+                fetchAndRefreshLearningPaths();
+            } catch (error) {
+                console.error('[ERROR] selectModule failed:', error);
+                alert('Error selecting module: ' + error.message);
+            }
+        }
+
+        function displayModuleDetail() {
+            const module = currentModuleData;
+
+            document.getElementById('currentSkillBreadcrumb').textContent = currentSkill;
+            document.getElementById('currentModuleBreadcrumb').textContent = module.name;
+            document.getElementById('moduleTitle').textContent = module.name;
+            document.getElementById('moduleDescription').textContent = module.description;
+
+            // Objectives
+            const objectivesList = document.getElementById('objectivesList');
+            objectivesList.innerHTML = module.learning_objectives
+                .map(obj => `<li>${obj}</li>`)
+                .join('');
+
+            // Actions
+            const actionsList = document.getElementById('actionsList');
+            actionsList.innerHTML = module.actions
+                .map((action, idx) => displayActionBox(action, idx))
+                .join('');
+
+            // Update progress
+            const completed = module.actions.filter(a => a.completed).length;
+            const total = module.actions.length;
+            document.getElementById('moduleProgressText').textContent = `${completed}/${total} actions`;
+            document.getElementById('moduleProgressBar').style.width = (completed / total * 100) + '%';
+
+            showSection('moduleDetailSection');
+        }
+
+        function displayActionBox(action, idx) {
+            const badges = {
+                'byte': 'badge-byte',
+                'course': 'badge-course',
+                'taiken': 'badge-taiken',
+                'checkpoint': 'badge-checkpoint'
+            };
+
+            const icons = {
+                'byte': '📱',
+                'course': '📚',
+                'taiken': '⚡',
+                'checkpoint': '✅'
+            };
+
+            const completed = action.completed ? 'completed' : '';
+            const checkmark = action.completed ? '✓' : '';
+
+            // Handle resource link - extract to avoid nested ternaries
+            let resourceLink = '';
+            if (action.external_resource) {
+                resourceLink = `<a href="${action.external_resource.url}" target="_blank" class="action-link">Open Resource →</a>`;
+            } else if (action.url) {
+                resourceLink = `<a href="${action.url}" target="_blank" class="action-link">Go to Resource →</a>`;
+            }
+
+            // Handle completion UI - extract to avoid nested ternaries
+            let completionUI = '';
+            if (!action.completed) {
+                if (action.type === 'checkpoint') {
+                    completionUI = `<button class="btn-primary" onclick="startCheckpoint(${idx})" style="margin-top: 15px;">Take Assessment</button>`;
+                } else {
+                    completionUI = `
+                        <div class="checkbox">
+                            <input type="checkbox" onclick="completeAction(${idx})">
+                            <label>Mark as Completed</label>
+                        </div>
+                    `;
+                }
+            } else {
+                completionUI = '<p style="color: #48bb78; font-weight: 600; margin-top: 10px;">✓ Completed</p>';
+            }
+
+            if (action.type === 'checkpoint') {
+                return `
+                    <div class="action-box ${completed}">
+                        <span class="action-type-badge ${badges[action.type]}">${icons[action.type]} ${action.type.toUpperCase()}</span>
+                        <div class="action-title">${action.title} ${checkmark}</div>
+                        <div class="action-description">${action.description}</div>
+                        ${completionUI}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="action-box ${completed}">
+                    <span class="action-type-badge ${badges[action.type]}">${icons[action.type]} ${action.type.toUpperCase()}</span>
+                    <div class="action-title">${action.title} ${checkmark}</div>
+                    <div class="action-description">${action.description}</div>
+                    <div class="action-meta">
+                        <span>⏱️ ${action.duration_minutes} mins</span>
+                        <span>📍 ${action.platform}</span>
+                    </div>
+                    ${resourceLink}
+                    ${completionUI}
+                </div>
+            `;
+        }
+
+        async function completeAction(actionIndex) {
+            try {
+                const response = await fetch(`${API_URL}/complete-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        skill: currentSkill,
+                        module_id: currentModule,
+                        action_index: actionIndex,
+                        completion_data: {
+                            completed: true,
+                            action_type: currentModuleData.actions[actionIndex].type
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                currentModuleData.actions[actionIndex].completed = true;
+                displayModuleDetail();
+
+                alert('Action completed! 🎉');
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to mark action as complete');
+            }
+        }
+
+        function startCheckpoint(actionIndex) {
+            const checkpoint = currentModuleData.actions[actionIndex];
+            displayCheckpointQuiz(checkpoint);
+        }
+
+        function displayCheckpointQuiz(checkpoint) {
+            const questions = checkpoint.questions || [];
+            let html = '';
+
+            questions.forEach((q, idx) => {
+                html += `
+                    <div class="quiz-question">
+                        <div class="question-text">Q${idx + 1}. ${q.question}</div>
+                        <div style="margin-left: 10px;">
+                            ${(q.options || []).map((option, optIdx) => `
+                                <label class="option">
+                                    <input type="radio" name="q${idx}" value="${optIdx}">
+                                    ${option}
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('quizContainer').innerHTML = html;
+            showSection('quizSection');
+        }
+
+        async function submitCheckpoint() {
+            const answers = [];
+            const questions = currentModuleData.actions.find(a => a.type === 'checkpoint').questions || [];
+
+            for (let i = 0; i < questions.length; i++) {
+                const selected = document.querySelector(`input[name="q${i}"]:checked`);
+                if (!selected) {
+                    alert('Please answer all questions');
+                    return;
+                }
+                answers.push(parseInt(selected.value));
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/submit-checkpoint`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        skill: currentSkill,
+                        module_id: currentModule,
+                        answers: answers
+                    })
+                });
+
+                const data = await response.json();
+                displayResults(data.checkpoint_result);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to submit checkpoint');
+            }
+        }
+
+        function displayResults(result) {
+            document.getElementById('resultTitle').textContent = result.passed ? '🎉 Module Passed!' : '📝 Review Required';
+            document.getElementById('scoreDisplay').textContent = Math.round(result.score) + '%';
+            document.getElementById('correctDisplay').textContent = result.correct_count + '/' + result.total_questions;
+
+            let feedbackHtml = result.passed
+                ? '<div class="alert alert-success">Great job! You can now proceed to the next module.</div>'
+                : '<div class="alert alert-info">Review the explanations below and try again.</div>';
+
+            feedbackHtml += '<h3 style="margin: 20px 0 15px 0;">Answer Review</h3>';
+
+            result.feedback_items.forEach((item, idx) => {
+                const isCorrect = item.status === 'correct';
+                feedbackHtml += `
+                    <div style="padding: 15px; border-radius: 8px; margin-bottom: 10px; ${isCorrect ? 'background: #f0fdf4; border-left: 4px solid #48bb78;' : 'background: #fef2f2; border-left: 4px solid #f87171;'}">
+                        <strong>Q${item.question_num}:</strong> ${isCorrect ? '✓ Correct' : '✗ Incorrect'}<br>
+                        <small style="color: #666; display: block; margin-top: 5px;">${item.explanation}</small>
+                    </div>
+                `;
+            });
+
+            document.getElementById('resultsFeedback').innerHTML = feedbackHtml;
+
+            if (!result.passed) {
+                document.getElementById('continueBtn').style.display = 'none';
+            } else {
+                document.getElementById('continueBtn').style.display = 'block';
+            }
+
+            showSection('resultsSection');
+        }
+
+        function retakeQuiz() {
+            const checkpoint = currentModuleData.actions.find(a => a.type === 'checkpoint');
+            displayCheckpointQuiz(checkpoint);
+        }
+
+        function continueToNextModule() {
+            try {
+                // Mark ALL actions in current module as completed
+                currentModuleData.actions.forEach(action => {
+                    action.completed = true;
+                });
+
+                // Mark current module as completed
+                currentModuleData.status = 'completed';
+                currentModuleData.completed = true;
+
+                // Update in learning paths
+                const path = learningPaths[currentSkill];
+                if (!path) {
+                    alert('Error: Skill not found in learning paths');
+                    return;
+                }
+
+                // Find and update current module in learning paths
+                const currentModuleIndex = path.modules.findIndex(m => m.module_id === currentModule);
+                if (currentModuleIndex >= 0) {
+                    path.modules[currentModuleIndex].status = 'completed';
+                    path.modules[currentModuleIndex].completed = true;
+                    path.modules[currentModuleIndex].actions = currentModuleData.actions;
+                }
+
+                // Move to next module
+                if (currentModule < path.total_modules) {
+                    currentModule++;
+                    
+                    // Validate next module exists
+                    if (!path.modules[currentModule - 1]) {
+                        alert('Error: Next module not found');
+                        return;
+                    }
+                    
+                    // Unlock next module
+                    path.modules[currentModule - 1].status = 'active';
+                    currentModuleData = path.modules[currentModule - 1];
+                    displayModuleDetail();
+                    console.log('[DEBUG] Advanced to module:', currentModule);
+                } else {
+                    alert('🎉 Congratulations! You have completed all modules for ' + currentSkill);
+                    displayJourney({
+                        target_role: document.getElementById('journeyTitle').textContent,
+                        skills_to_learn: Object.keys(learningPaths),
+                        learning_paths: learningPaths
+                    });
+                    return;
+                }
+                
+                // Fetch fresh learning paths in background (non-blocking)
+                fetch(`${API_URL}/current-action/${currentSessionId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.learning_path && data.learning_path.learning_paths) {
+                            learningPaths = data.learning_path.learning_paths;
+                            console.log('[REFRESH] Learning paths updated after checkpoint');
+                            displayModulesList();
+                        }
+                    })
+                    .catch(error => console.error('[REFRESH ERROR] After checkpoint:', error));
+            } catch (error) {
+                console.error('[ERROR] continueToNextModule failed:', error);
+                alert('Error advancing to next module: ' + error.message);
+            }
+        }
+
+        function nextModule() {
+            try {
+                const path = learningPaths[currentSkill];
+                if (!path) {
+                    alert('Error: Skill not found');
+                    return;
+                }
+                
+                if (currentModule < path.total_modules) {
+                    currentModule++;
+                    
+                    // Validate module exists
+                    if (!path.modules || !path.modules[currentModule - 1]) {
+                        alert('Error: Module not found');
+                        currentModule--;
+                        return;
+                    }
+                    
+                    if (path.modules[currentModule - 1].status === 'locked') {
+                        alert('This module is locked. Complete the previous module first!');
+                        currentModule--;
+                        return;
+                    }
+                    
+                    currentModuleData = path.modules[currentModule - 1];
+                    displayModuleDetail();
+                } else {
+                    alert('No more modules in this skill');
+                }
+            } catch (error) {
+                console.error('[ERROR] nextModule failed:', error);
+                alert('Error navigating to next module: ' + error.message);
+            }
+        }
+
+        function backToModule() {
+            displayModuleDetail();
+        }
+
+        function backToJourney() {
+            try {
+                // Display using current data immediately
+                displayModulesList();
+                showSection('journeySection');
+                
+                // Refresh from server in background (non-blocking)
+                fetchAndRefreshLearningPaths();
+            } catch (error) {
+                console.error('[ERROR] backToJourney failed:', error);
+            }
+        }
+        
+        function fetchAndRefreshLearningPaths() {
+            // Non-blocking fetch that updates state when complete
+            if (!currentSessionId) {
+                console.warn('[REFRESH] No session ID, skipping refresh');
+                return;
+            }
+            
+            fetch(`${API_URL}/current-action/${currentSessionId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Validate response structure
+                    if (data.learning_path && data.learning_path.learning_paths) {
+                        learningPaths = data.learning_path.learning_paths;
+                        console.log('[REFRESH] Learning paths updated from server');
+                    } else {
+                        console.warn('[REFRESH] Invalid response structure:', data);
+                    }
+                })
+                .catch(error => {
+                    console.error('[REFRESH ERROR] Could not refresh learning paths:', error);
+                });
+        }
+    </script>
+</body>
+</html>

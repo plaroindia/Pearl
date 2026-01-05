@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import agent, health
+from fastapi.staticfiles import StaticFiles
+from routes import agent, health, pearl_routes
+import os
 
-app = FastAPI(title="PEARL Agent API", version="1.0.0")
+app = FastAPI(title="PEARL Agent API", version="2.0.0")
 
 # CORS for frontend
 app.add_middleware(
@@ -16,6 +18,10 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(agent.router, prefix="/agent", tags=["agent"])
+app.include_router(pearl_routes.router, prefix="/agent", tags=["pearl"])
+
+# Serve static files (frontend.html)
+app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn

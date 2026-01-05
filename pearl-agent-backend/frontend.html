@@ -5,91 +5,314 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PEARL Agent - Career Readiness AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .pulse-animation {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .gradient-border {
+            position: relative;
+            background: linear-gradient(145deg, #0f172a, #1e293b);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(145deg, #3b82f6, #1e40af);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .gradient-border:hover::before {
+            opacity: 1;
+        }
+
+        .glass-effect {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        body {
+            background: linear-gradient(180deg, #000000 0%, #0f172a 50%, #1e293b 100%);
+            min-height: 100vh;
+        }
+
+        .star-field {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn-primary:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4);
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border-radius: 10px;
+            transition: width 1s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+    </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
+<body class="text-gray-100">
+    <!-- Starfield Background -->
+    <div class="star-field" id="starField"></div>
+
+    <div class="container mx-auto px-4 py-8 max-w-5xl relative">
         <!-- Header -->
-        <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-6 mb-8">
-            <h1 class="text-3xl font-bold mb-2">🤖 PEARL Agent</h1>
-            <p class="text-blue-100">AI-Powered Career Readiness Assistant</p>
+        <div class="glass-effect rounded-2xl p-8 mb-8 fade-in-up">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+                        PEARL Agent
+                    </h1>
+                    <p class="text-blue-300 text-sm">AI-Powered Career Readiness Platform</p>
+                </div>
+                <div class="text-blue-400">
+                    <i class="fas fa-rocket text-5xl"></i>
+                </div>
+            </div>
         </div>
 
         <!-- Status Bar -->
-        <div id="status" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
-            <p class="text-blue-800 font-medium" id="statusText"></p>
+        <div id="status" class="mb-6 glass-effect rounded-xl p-4 hidden fade-in-up">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-circle-notch fa-spin text-blue-400" id="statusIcon"></i>
+                <p class="text-gray-200 font-medium" id="statusText"></p>
+            </div>
         </div>
 
         <!-- Step 1: JD Input -->
-        <div id="step1" class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 class="text-xl font-bold mb-4">📄 Step 1: Paste Job Description</h2>
+        <div id="step1" class="gradient-border rounded-2xl p-8 mb-8 fade-in-up">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-file-alt text-white"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Job Description Analysis</h2>
+            </div>
             <textarea 
                 id="jdInput" 
-                class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Paste the job description here...
+                class="w-full h-56 p-6 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:outline-none transition text-gray-100 placeholder-gray-500 resize-none"
+                placeholder="Paste your target job description here...
 
 Example:
 Backend Developer Intern
 Required Skills: Python, Django, REST APIs, SQL, Git
 Experience: 0-1 years
 Responsibilities: Build REST APIs, maintain database schemas..."
+                spellcheck="false"
             ></textarea>
             <button 
                 onclick="analyzeJD()"
-                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition"
+                class="mt-6 btn-primary text-white font-semibold py-4 px-8 rounded-xl w-full sm:w-auto"
             >
-                🔍 Analyze Job Description
+                <i class="fas fa-search mr-2"></i>
+                Analyze Description
             </button>
         </div>
 
         <!-- Step 2: Skill Gaps -->
-        <div id="step2" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
-            <h2 class="text-xl font-bold mb-4">📊 Your Skill Analysis</h2>
+        <div id="step2" class="gradient-border rounded-2xl p-8 mb-8 hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-chart-line text-white"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Skill Assessment</h2>
+            </div>
             <div id="skillGaps"></div>
             <button 
                 onclick="generateRoadmap()"
-                class="mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition"
+                class="mt-6 btn-primary text-white font-semibold py-4 px-8 rounded-xl w-full sm:w-auto"
             >
-                🗺️ Generate Learning Roadmap
+                <i class="fas fa-route mr-2"></i>
+                Generate Learning Path
             </button>
         </div>
 
         <!-- Step 3: Roadmap -->
-        <div id="step3" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
-            <h2 class="text-xl font-bold mb-4">🗺️ Your Personalized Roadmap</h2>
+        <div id="step3" class="gradient-border rounded-2xl p-8 mb-8 hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-map text-white"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Personalized Roadmap</h2>
+            </div>
             <div id="roadmapContent"></div>
             <button 
                 onclick="getPracticeTask()"
-                class="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition"
+                class="mt-6 btn-primary text-white font-semibold py-4 px-8 rounded-xl w-full sm:w-auto"
             >
-                🎯 Get Practice Task
+                <i class="fas fa-tasks mr-2"></i>
+                Start Practice
             </button>
         </div>
 
         <!-- Step 4: Practice Task -->
-        <div id="step4" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
-            <h2 class="text-xl font-bold mb-4">🎯 Practice Challenge</h2>
+        <div id="step4" class="gradient-border rounded-2xl p-8 mb-8 hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-code text-white"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Practice Challenge</h2>
+            </div>
             <div id="taskContent"></div>
             <textarea 
                 id="taskSubmission" 
-                class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mt-4"
+                class="w-full h-40 p-6 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none mt-6 text-gray-100 placeholder-gray-500 resize-none"
                 placeholder="Write your solution here..."
+                spellcheck="false"
             ></textarea>
             <button 
                 onclick="submitTask()"
-                class="mt-4 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition"
+                class="mt-6 btn-primary text-white font-semibold py-4 px-8 rounded-xl w-full sm:w-auto"
             >
-                ✅ Submit Solution
+                <i class="fas fa-check mr-2"></i>
+                Submit Solution
             </button>
         </div>
 
         <!-- Step 5: Results -->
-        <div id="step5" class="bg-white rounded-lg shadow-md p-6 hidden">
-            <h2 class="text-xl font-bold mb-4">🎉 Evaluation Results</h2>
+        <div id="step5" class="gradient-border rounded-2xl p-8 hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-award text-white"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Evaluation Results</h2>
+            </div>
             <div id="resultsContent"></div>
         </div>
     </div>
 
     <script>
+        // Create starfield
+        const starField = document.getElementById('starField');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.width = Math.random() * 3 + 'px';
+            star.style.height = star.style.width;
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starField.appendChild(star);
+        }
+
         const API_URL = 'http://localhost:8000';
         let sessionId = null;
         let taskId = null;
@@ -97,27 +320,26 @@ Responsibilities: Build REST APIs, maintain database schemas..."
         function showStatus(message, isError = false) {
             const statusEl = document.getElementById('status');
             const statusText = document.getElementById('statusText');
+            const statusIcon = document.getElementById('statusIcon');
             
             statusText.textContent = message;
             statusEl.classList.remove('hidden');
             
             if (isError) {
-                statusEl.className = 'mb-6 p-4 bg-red-50 border border-red-200 rounded-lg';
-                statusText.className = 'text-red-800 font-medium';
+                statusIcon.className = 'fas fa-exclamation-circle text-red-400';
             } else {
-                statusEl.className = 'mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg';
-                statusText.className = 'text-blue-800 font-medium';
+                statusIcon.className = 'fas fa-circle-notch fa-spin text-blue-400';
             }
         }
 
         async function analyzeJD() {
             const jdText = document.getElementById('jdInput').value;
             if (!jdText.trim()) {
-                alert('Please paste a job description');
+                showStatus('Please paste a job description', true);
                 return;
             }
 
-            showStatus('🔄 Analyzing job description...');
+            showStatus('Analyzing job description...');
 
             try {
                 const response = await fetch(`${API_URL}/agent/analyze-jd`, {
@@ -133,37 +355,55 @@ Responsibilities: Build REST APIs, maintain database schemas..."
 
                 const data = await response.json();
                 
-                // Validate response structure
                 if (!data.session_id || !data.parsed_jd || !data.skill_gaps) {
-                    throw new Error('Invalid response from server. Check console.');
+                    throw new Error('Invalid response from server');
                 }
                 
-                console.log('Analysis response:', data);
                 sessionId = data.session_id;
 
-                // Display skill gaps
                 let gapsHTML = `
-                    <div class="mb-4">
-                        <h3 class="font-bold text-lg mb-2">Target Role: ${data.parsed_jd.role}</h3>
-                        <p class="text-gray-600 mb-4">Overall Readiness: ${(data.skill_gaps.overall_readiness * 100).toFixed(0)}%</p>
+                    <div class="mb-6 p-6 bg-slate-900 rounded-xl">
+                        <h3 class="text-xl font-bold mb-2">${data.parsed_jd.role}</h3>
+                        <div class="flex items-center gap-4 mt-4">
+                            <span class="text-gray-400">Overall Readiness</span>
+                            <div class="flex-1">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${data.skill_gaps.overall_readiness * 100}%"></div>
+                                </div>
+                            </div>
+                            <span class="text-blue-400 font-bold">${(data.skill_gaps.overall_readiness * 100).toFixed(0)}%</span>
+                        </div>
                     </div>
-                    <div class="space-y-3">
+                    <div class="space-y-4">
                 `;
 
                 data.skill_gaps.gaps.forEach(gap => {
                     const color = gap.gap_severity === 'high' ? 'red' : gap.gap_severity === 'medium' ? 'yellow' : 'green';
+                    const bgColor = gap.gap_severity === 'high' ? 'bg-red-900/30' : gap.gap_severity === 'medium' ? 'bg-yellow-900/30' : 'bg-green-900/30';
+                    const borderColor = gap.gap_severity === 'high' ? 'border-red-700' : gap.gap_severity === 'medium' ? 'border-yellow-700' : 'border-green-700';
+                    const textColor = gap.gap_severity === 'high' ? 'text-red-400' : gap.gap_severity === 'medium' ? 'text-yellow-400' : 'text-green-400';
+                    
                     gapsHTML += `
-                        <div class="border border-${color}-300 bg-${color}-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center">
-                                <span class="font-bold">${gap.skill}</span>
-                                <span class="px-3 py-1 bg-${color}-200 text-${color}-800 rounded-full text-sm">
-                                    ${gap.gap_severity} gap
+                        <div class="${bgColor} border ${borderColor} p-6 rounded-xl">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="font-bold text-lg">${gap.skill}</span>
+                                <span class="px-4 py-1 ${bgColor} ${textColor} rounded-full text-sm font-semibold border ${borderColor}">
+                                    ${gap.gap_severity.toUpperCase()}
                                 </span>
                             </div>
-                            <div class="mt-2 text-sm text-gray-700">
-                                Current: ${(gap.current_level * 100).toFixed(0)}% | 
-                                Required: ${(gap.required_level * 100).toFixed(0)}% | 
-                                Est. ${gap.learning_weeks} weeks
+                            <div class="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-400 block mb-1">Current</span>
+                                    <span class="text-blue-400 font-semibold">${(gap.current_level * 100).toFixed(0)}%</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400 block mb-1">Required</span>
+                                    <span class="text-blue-400 font-semibold">${(gap.required_level * 100).toFixed(0)}%</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400 block mb-1">Timeline</span>
+                                    <span class="text-blue-400 font-semibold">${gap.learning_weeks} weeks</span>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -172,15 +412,16 @@ Responsibilities: Build REST APIs, maintain database schemas..."
                 gapsHTML += '</div>';
                 document.getElementById('skillGaps').innerHTML = gapsHTML;
                 document.getElementById('step2').classList.remove('hidden');
-                showStatus('✅ Analysis complete!');
+                document.getElementById('step2').classList.add('fade-in-up');
+                showStatus('Analysis complete');
+                document.getElementById('statusIcon').className = 'fas fa-check-circle text-green-400';
             } catch (error) {
-                console.error('Analysis error:', error);
-                showStatus(`❌ Error: ${error.message}`, true);
+                showStatus(`Error: ${error.message}`, true);
             }
         }
 
         async function generateRoadmap() {
-            showStatus('🔄 Generating personalized roadmap...');
+            showStatus('Generating personalized roadmap...');
 
             try {
                 const response = await fetch(`${API_URL}/agent/generate-roadmap/${sessionId}`, {
@@ -189,19 +430,46 @@ Responsibilities: Build REST APIs, maintain database schemas..."
 
                 const data = await response.json();
                 
-                let roadmapHTML = `<p class="text-gray-600 mb-4">${data.roadmap.total_weeks}-week plan</p><div class="space-y-4">`;
+                let roadmapHTML = `
+                    <div class="mb-6 p-6 bg-slate-900 rounded-xl">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-calendar-alt text-blue-400"></i>
+                            <span class="text-gray-400">${data.roadmap.total_weeks}-week learning path</span>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                `;
 
-                data.roadmap.weeks.forEach(week => {
+                data.roadmap.weeks.forEach((week, index) => {
                     roadmapHTML += `
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <h3 class="font-bold text-lg mb-2">Week ${week.week}: ${week.title}</h3>
-                            <p class="text-gray-700 mb-3">${week.milestone}</p>
-                            <div class="flex flex-wrap gap-2 mb-3">
-                                ${week.skills_focus.map(s => `<span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">${s}</span>`).join('')}
-                            </div>
-                            <div class="text-sm text-gray-600">
-                                <strong>Resources:</strong>
-                                ${week.retrieved_resources.map(r => `<div>📚 ${r.title} (${r.type})</div>`).join('')}
+                        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 hover:border-blue-500 transition">
+                            <div class="flex items-start gap-4">
+                                <div class="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-blue-400 font-bold">${week.week}</span>
+                                </div>
+                                <div class="flex-1">
+                                    <h3 class="font-bold text-xl mb-2">${week.title}</h3>
+                                    <p class="text-gray-400 mb-4">${week.milestone}</p>
+                                    <div class="flex flex-wrap gap-2 mb-4">
+                                        ${week.skills_focus.map(s => `
+                                            <span class="px-3 py-1 bg-blue-600/20 border border-blue-500 text-blue-400 rounded-lg text-sm">
+                                                <i class="fas fa-code mr-1"></i>${s}
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                    <div class="text-sm space-y-2">
+                                        <div class="text-gray-400 font-semibold mb-2">
+                                            <i class="fas fa-book mr-2"></i>Resources
+                                        </div>
+                                        ${week.retrieved_resources.map(r => `
+                                            <div class="flex items-center gap-2 text-gray-300">
+                                                <i class="fas fa-chevron-right text-blue-400 text-xs"></i>
+                                                <span>${r.title}</span>
+                                                <span class="text-gray-500 text-xs">(${r.type})</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -210,14 +478,16 @@ Responsibilities: Build REST APIs, maintain database schemas..."
                 roadmapHTML += '</div>';
                 document.getElementById('roadmapContent').innerHTML = roadmapHTML;
                 document.getElementById('step3').classList.remove('hidden');
-                showStatus('✅ Roadmap generated!');
+                document.getElementById('step3').classList.add('fade-in-up');
+                showStatus('Roadmap generated');
+                document.getElementById('statusIcon').className = 'fas fa-check-circle text-green-400';
             } catch (error) {
-                alert('Error: ' + error.message);
+                showStatus(`Error: ${error.message}`, true);
             }
         }
 
         async function getPracticeTask() {
-            showStatus('🔄 Generating practice task...');
+            showStatus('Generating practice task...');
 
             try {
                 const response = await fetch(`${API_URL}/agent/next-task/${sessionId}`, {
@@ -228,41 +498,58 @@ Responsibilities: Build REST APIs, maintain database schemas..."
                 taskId = data.task_id;
 
                 let taskHTML = `
-                    <div class="space-y-4">
-                        <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold">Skill: ${data.task.skill_focus}</span>
-                                <span class="px-3 py-1 bg-purple-200 text-purple-800 rounded-full text-sm">
-                                    ${data.task.difficulty}
+                    <div class="space-y-6">
+                        <div class="bg-slate-900 border border-blue-500 p-6 rounded-xl">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i class="fas fa-bullseye text-blue-400"></i>
+                                        <span class="font-bold text-lg">${data.task.skill_focus}</span>
+                                    </div>
+                                    <div class="flex items-center gap-4 text-sm text-gray-400">
+                                        <span><i class="far fa-clock mr-1"></i>${data.task.estimated_time}</span>
+                                    </div>
+                                </div>
+                                <span class="px-4 py-2 bg-blue-600/20 border border-blue-500 text-blue-400 rounded-lg text-sm font-semibold">
+                                    ${data.task.difficulty.toUpperCase()}
                                 </span>
                             </div>
-                            <p class="text-sm text-gray-600">⏱️ ${data.task.estimated_time}</p>
                         </div>
-                        <div class="prose max-w-none">
-                            <h4 class="font-bold mb-2">Task Description:</h4>
-                            <p>${data.task.description}</p>
-                            <h4 class="font-bold mt-4 mb-2">Expected Output:</h4>
-                            <p>${data.task.expected_output}</p>
+                        <div class="bg-slate-900 p-6 rounded-xl">
+                            <h4 class="font-bold mb-3 flex items-center gap-2">
+                                <i class="fas fa-info-circle text-blue-400"></i>
+                                Task Description
+                            </h4>
+                            <p class="text-gray-300 leading-relaxed">${data.task.description}</p>
+                        </div>
+                        <div class="bg-slate-900 p-6 rounded-xl">
+                            <h4 class="font-bold mb-3 flex items-center gap-2">
+                                <i class="fas fa-flag-checkered text-blue-400"></i>
+                                Expected Output
+                            </h4>
+                            <p class="text-gray-300 leading-relaxed">${data.task.expected_output}</p>
                         </div>
                     </div>
                 `;
 
                 document.getElementById('taskContent').innerHTML = taskHTML;
                 document.getElementById('step4').classList.remove('hidden');
-                showStatus('✅ Task ready!');
+                document.getElementById('step4').classList.add('fade-in-up');
+                showStatus('Task ready');
+                document.getElementById('statusIcon').className = 'fas fa-check-circle text-green-400';
             } catch (error) {
-                alert('Error: ' + error.message);
+                showStatus(`Error: ${error.message}`, true);
             }
         }
 
         async function submitTask() {
             const submission = document.getElementById('taskSubmission').value;
             if (!submission.trim()) {
-                alert('Please write your solution');
+                showStatus('Please write your solution', true);
                 return;
             }
 
-            showStatus('🔄 Evaluating submission...');
+            showStatus('Evaluating submission...');
 
             try {
                 const response = await fetch(`${API_URL}/agent/submit-task`, {
@@ -278,46 +565,77 @@ Responsibilities: Build REST APIs, maintain database schemas..."
                 const eval = data.evaluation;
 
                 let resultsHTML = `
-                    <div class="space-y-4">
-                        <div class="text-center">
-                            <div class="text-6xl font-bold ${eval.score >= 70 ? 'text-green-600' : 'text-orange-600'}">
-                                ${eval.score}/100
+                    <div class="space-y-6">
+                        <div class="text-center p-8 bg-slate-900 rounded-xl">
+                            <div class="inline-block p-6 rounded-full ${eval.score >= 70 ? 'bg-green-600/20 border-2 border-green-500' : 'bg-yellow-600/20 border-2 border-yellow-500'} mb-4">
+                                <i class="fas ${eval.score >= 70 ? 'fa-trophy' : 'fa-star'} text-5xl ${eval.score >= 70 ? 'text-green-400' : 'text-yellow-400'}"></i>
                             </div>
-                            <p class="text-gray-600 mt-2">${eval.score >= 70 ? '🎉 Great work!' : '💪 Keep practicing!'}</p>
+                            <div class="text-6xl font-bold ${eval.score >= 70 ? 'text-green-400' : 'text-yellow-400'} mb-2">
+                                ${eval.score}<span class="text-3xl text-gray-500">/100</span>
+                            </div>
+                            <p class="text-gray-400">${eval.score >= 70 ? 'Excellent work!' : 'Keep practicing!'}</p>
                         </div>
-                        <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                            <h4 class="font-bold mb-2">Feedback:</h4>
-                            <p>${eval.feedback}</p>
+                        
+                        <div class="bg-slate-900 border border-blue-500 p-6 rounded-xl">
+                            <h4 class="font-bold mb-3 flex items-center gap-2">
+                                <i class="fas fa-comment-dots text-blue-400"></i>
+                                Feedback
+                            </h4>
+                            <p class="text-gray-300 leading-relaxed">${eval.feedback}</p>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="bg-green-50 border border-green-200 p-4 rounded-lg">
-                                <h4 class="font-bold mb-2">✅ Strengths:</h4>
-                                <ul class="list-disc list-inside">
-                                    ${eval.strengths.map(s => `<li>${s}</li>`).join('')}
+                        
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-green-900/20 border border-green-700 p-6 rounded-xl">
+                                <h4 class="font-bold mb-4 flex items-center gap-2 text-green-400">
+                                    <i class="fas fa-check-circle"></i>
+                                    Strengths
+                                </h4>
+                                <ul class="space-y-2">
+                                    ${eval.strengths.map(s => `
+                                        <li class="flex items-start gap-2 text-gray-300">
+                                            <i class="fas fa-chevron-right text-green-400 mt-1"></i>
+                                            <span>${s}</span>
+                                        </li>
+                                    `).join('')}
                                 </ul>
                             </div>
-                            <div class="bg-orange-50 border border-orange-200 p-4 rounded-lg">
-                                <h4 class="font-bold mb-2">📈 Improvements:</h4>
-                                <ul class="list-disc list-inside">
-                                    ${eval.improvements.map(i => `<li>${i}</li>`).join('')}
+                            <div class="bg-yellow-900/20 border border-yellow-700 p-6 rounded-xl">
+                                <h4 class="font-bold mb-4 flex items-center gap-2 text-yellow-400">
+                                    <i class="fas fa-arrow-up"></i>
+                                    Areas to Improve
+                                </h4>
+                                <ul class="space-y-2">
+                                    ${eval.improvements.map(i => `
+                                        <li class="flex items-start gap-2 text-gray-300">
+                                            <i class="fas fa-chevron-right text-yellow-400 mt-1"></i>
+                                            <span>${i}</span>
+                                        </li>
+                                    `).join('')}
                                 </ul>
                             </div>
                         </div>
-                        <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg">
-                            <p class="text-center">
-                                <strong>Skill Confidence Updated:</strong> 
-                                ${eval.skill_confidence_delta > 0 ? '📈' : '📉'} 
-                                ${(eval.skill_confidence_delta * 100).toFixed(1)}%
-                            </p>
+                        
+                        <div class="bg-slate-900 border border-blue-500 p-6 rounded-xl text-center">
+                            <div class="flex items-center justify-center gap-3">
+                                <i class="fas ${eval.skill_confidence_delta > 0 ? 'fa-arrow-trend-up text-green-400' : 'fa-arrow-trend-down text-red-400'} text-2xl"></i>
+                                <div>
+                                    <div class="text-gray-400 text-sm">Skill Confidence Change</div>
+                                    <div class="text-2xl font-bold ${eval.skill_confidence_delta > 0 ? 'text-green-400' : 'text-red-400'}">
+                                        ${eval.skill_confidence_delta > 0 ? '+' : ''}${(eval.skill_confidence_delta * 100).toFixed(1)}%
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
 
                 document.getElementById('resultsContent').innerHTML = resultsHTML;
                 document.getElementById('step5').classList.remove('hidden');
-                showStatus('✅ Evaluation complete!');
+                document.getElementById('step5').classList.add('fade-in-up');
+                showStatus('Evaluation complete');
+                document.getElementById('statusIcon').className = 'fas fa-check-circle text-green-400';
             } catch (error) {
-                alert('Error: ' + error.message);
+                showStatus(`Error: ${error.message}`, true);
             }
         }
     </script>
