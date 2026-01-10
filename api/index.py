@@ -1,7 +1,18 @@
 """
 PEARL Agent Backend - Vercel Entry Point
 """
+# Add this import at the top
+from fastapi.responses import FileResponse, HTMLResponse
+import os
 
+# Add this route (after your existing routes)
+@app.get("/app", response_class=HTMLResponse)
+async def serve_frontend():
+    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pearl_frontend.html")
+    if os.path.exists(html_path):
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return HTMLResponse(content=f.read())
+    return {"error": "Frontend not found"}
 import sys
 import os
 
