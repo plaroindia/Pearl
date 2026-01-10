@@ -1,18 +1,7 @@
 """
 PEARL Agent Backend - Vercel Entry Point
 """
-# Add this import at the top
-from fastapi.responses import FileResponse, HTMLResponse
-import os
 
-# Add this route (after your existing routes)
-@app.get("/app", response_class=HTMLResponse)
-async def serve_frontend():
-    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pearl_frontend.html")
-    if os.path.exists(html_path):
-        with open(html_path, 'r', encoding='utf-8') as f:
-            return HTMLResponse(content=f.read())
-    return {"error": "Frontend not found"}
 import sys
 import os
 
@@ -22,7 +11,7 @@ sys.path.insert(0, parent_dir)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 # Create FastAPI app
 app = FastAPI(
@@ -55,7 +44,8 @@ async def root():
         "endpoints": {
             "docs": "/docs",
             "health": "/health",
-            "start": "/agent/start-journey"
+            "start": "/agent/start-journey",
+            "app": "/app"
         }
     }
 
@@ -70,6 +60,17 @@ async def health_check():
 @app.get("/test")
 async def test():
     return {"message": "API is working"}
+
+@app.get("/app", response_class=HTMLResponse)
+async def serve_frontend():
+    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pearl_frontend.html")
+    if os.path.exists(html_path):
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return HTMLResponse(content=f.read())
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Frontend not found"}
+    )
 
 # Error handler
 @app.exception_handler(Exception)
