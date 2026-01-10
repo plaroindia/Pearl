@@ -1,19 +1,73 @@
 """
-Vercel API Entry Point
-Imports and exposes the FastAPI app from pearl-agent-backend
+PEARL Agent Backend - Vercel Entry Point
 """
+
 import sys
 import os
 
-# Add pearl-agent-backend to Python path
-backend_path = os.path.join(os.path.dirname(__file__), '..', 'pearl-agent-backend')
-sys.path.insert(0, backend_path)
+# Add parent directory to Python path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
-# Change working directory to pearl-agent-backend
-os.chdir(backend_path)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-# Import the FastAPI app
-from index import app
+# Create FastAPI app
+app = FastAPI(
+    title="PEARL Agent API",
+    description="Agentic Career Mentor",
+    version="1.0.0"
+)
 
-# Vercel will serve this
-__all__ = ['app']
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Import routes AFTER app is created
+try:
+    from routes.pearl_routes import router as pearl_router
+    app.include_router(pearl_router, prefix="/agent", tags=["PEARL Agent"])
+except Exception as e:
+    print(f"Error importing routes: {e}")
+
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "PEARL Agent API",
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/health",
+            "start": "/agent/start-journey"
+        }
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "PEARL Agent",
+        "version": "1.0.0"
+    }
+
+@app.get("/test")
+async def test():
+    return {"message": "API is working"}
+
+# Error handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc),
+            "type": type(exc).__name__,
+            "path": str(request.url)
+        }
+    )
