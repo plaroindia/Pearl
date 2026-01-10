@@ -467,7 +467,7 @@ async def submit_checkpoint(req: CheckpointSubmission):
         if not learning_path:
             raise HTTPException(status_code=404, detail="Skill not found")
         
-        # Find checkpoint data
+        # Find checkpoint dataf
         checkpoint_data = None
         for module in learning_path['modules']:
             if module['module_id'] == req.module_id:
