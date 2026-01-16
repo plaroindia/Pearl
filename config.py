@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     DEMO_USER_ID: str
     ENVIRONMENT: str = "development"
+    FRONTEND_URL: str = "http://localhost:8000"
     
     class Config:
         env_file = ".env"
