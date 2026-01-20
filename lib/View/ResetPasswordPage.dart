@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ResetPasswordPage extends StatefulWidget {
-  final String? token; // Made optional to handle both OTP and deep link flows
+  final String? resetToken; // Made optional to handle both OTP and deep link flows
 
-  const ResetPasswordPage({super.key, this.token});
+  const ResetPasswordPage({super.key, this.resetToken});
 
   @override
   State<ResetPasswordPage> createState() => _ResetPasswordPageState();
@@ -25,24 +25,30 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     super.dispose();
   }
 
-  Future<void> _resetPassword() async {
+Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
 
     try {
-      if (widget.token != null) {
-        // Handle deep link reset with token
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(password: _passwordController.text),
+      if (widget.resetToken != null) {
+        // Use the token from OTP verification
+        final response = await Supabase.instance.client.auth.verifyOTP(
+          type: OtpType.recovery,
+          token: widget.resetToken!,
+          email: '', // Not needed with token
         );
-      } else {
-        // Handle OTP-verified reset (user is already authenticated)
-        final session = Supabase.instance.client.auth.currentSession;
-        if (session == null) {
-          throw Exception('No active session. Please verify your OTP first.');
-        }
 
+        if (response.session != null) {
+          // Now update the password
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(password: _passwordController.text),
+          );
+        } else {
+          throw Exception('Failed to verify reset token');
+        }
+      } else {
+        // Fallback: user is already authenticated
         await Supabase.instance.client.auth.updateUser(
           UserAttributes(password: _passwordController.text),
         );

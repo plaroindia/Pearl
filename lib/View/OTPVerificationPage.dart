@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ResetPasswordPage.dart';
+import 'onboarding_flow.dart';
 
 class OTPVerificationPage extends StatefulWidget {
   final String email;
+  final String userId;
+  final String purpose; // 'signup' or 'password_reset'
 
-  const OTPVerificationPage({super.key, required this.email});
-
+  const OTPVerificationPage({
+    super.key,
+    required this.email,
+    required this.userId,
+    required this.purpose,
+  });
   @override
   State<OTPVerificationPage> createState() => _OTPVerificationPageState();
 }
@@ -43,42 +50,51 @@ class _OTPVerificationPageState extends State<OTPVerificationPage> {
     setState(() => _loading = true);
 
     try {
-      // Verify OTP and get session
-      final response = await Supabase.instance.client.auth.verifyOTP(
-        email: widget.email,
-        token: _otp,
-        type: OtpType.recovery,
+      final response = await Supabase.instance.client.functions.invoke(
+        'verify-otp',
+        body: {
+          'email': widget.email,
+          'otp': _otp,
+          'purpose': widget.purpose,
+        },
       );
 
-      if (mounted && response.session != null) {
-        _showMessage(
-          'Code verified! You can now reset your password.',
-          Colors.green,
-        );
-
-        // Wait a moment for the success message to be visible
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        // Navigate to reset password page (without token since user is already authenticated)
+      if (response.data['success'] == true) {
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const ResetPasswordPage()),
-          );
+          _showMessage('Verification successful!', Colors.green);
+
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          if (widget.purpose == 'signup') {
+            // For signup, set the session to log the user in
+            final sessionData = response.data['session'];
+            if (sessionData != null) {
+              await Supabase.instance.client.auth.setSession(
+                sessionData['refresh_token'],
+              );
+            }
+
+
+
+            // Navigate to onboarding
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const OnboardingFlow()),
+            );
+          } else {
+            // Navigate to reset password with token
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ResetPasswordPage(
+                  resetToken: response.data['resetToken'],
+                ),
+              ),
+            );
+          }
         }
       } else {
-        _showMessage('Verification failed. Please try again.', Colors.red);
-      }
-    } on AuthException catch (e) {
-      if (mounted) {
-        String errorMessage = 'Invalid or expired code';
-        if (e.message.toLowerCase().contains('expired')) {
-          errorMessage = 'Code has expired. Please request a new one.';
-        } else if (e.message.toLowerCase().contains('invalid')) {
-          errorMessage = 'Invalid code. Please check and try again.';
-        }
-        _showMessage(errorMessage, Colors.red);
-        _clearOTP(); // Clear the entered OTP
+        throw Exception(response.data['error'] ?? 'Verification failed');
       }
     } catch (e) {
       if (mounted) {
@@ -103,11 +119,17 @@ class _OTPVerificationPageState extends State<OTPVerificationPage> {
     setState(() => _resending = true);
 
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(widget.email);
+      await Supabase.instance.client.functions.invoke(
+        'send-otp',
+        body: {
+          'email': widget.email,
+          'purpose': widget.purpose,
+        },
+      );
 
       if (mounted) {
         _showMessage('New code sent to your email', Colors.green);
-        _clearOTP(); // Clear current OTP input
+        _clearOTP();
       }
     } catch (e) {
       if (mounted) {

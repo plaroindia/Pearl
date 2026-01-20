@@ -4,6 +4,7 @@ import 'signup_page.dart';
 import 'package:plaro_3/ViewModel/auth_provider.dart';
 import '../ViewModel/theme_provider.dart';
 import 'forgot_password_page.dart';
+import 'onboarding_flow.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -102,38 +103,63 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
   }
 
-  Future<void> _googleSignIn() async {
-    setState(() => _isGoogleLoading = true);
+Future<void> _googleSignIn() async {
+  setState(() => _isGoogleLoading = true);
 
-    try {
-      final success = await ref.read(authControllerProvider).googleSignIn();
+  try {
+    final result = await ref.read(authControllerProvider).googleSignIn();
 
-      if (mounted) {
-        setState(() => _isGoogleLoading = false);
-        if (success) {
+    if (mounted) {
+      setState(() => _isGoogleLoading = false);
+      
+      if (result['success'] == true) {
+        if (result['requiresOnboarding'] == true) {
+          // New user - go to onboarding
           _showFeedback(
-            'Google Sign-In Successful!',
+            'Welcome! Let\'s set up your profile',
             Colors.green,
             Icons.check_circle,
           );
+          
+          Future.delayed(const Duration(seconds: 1), () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const OnboardingFlow()),
+            );
+          });
+        } else {
+          // Existing user - go to main app
+          _showFeedback(
+            'Welcome back!',
+            Colors.green,
+            Icons.check_circle,
+          );
+          
           Future.delayed(const Duration(seconds: 1), () {
             Navigator.pushReplacementNamed(context, '/navipg');
           });
-        } else {
-          _showFeedback('Google Sign-In failed', Colors.red, Icons.error);
         }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isGoogleLoading = false);
+      } else if (result['cancelled'] == true) {
+        _showFeedback('Sign-in cancelled', Colors.orange, Icons.info);
+      } else {
         _showFeedback(
-          'Google Sign-In error: ${e.toString()}',
+          result['error'] ?? 'Google Sign-In failed',
           Colors.red,
           Icons.error,
         );
       }
     }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _isGoogleLoading = false);
+      _showFeedback(
+        'Error: ${e.toString()}',
+        Colors.red,
+        Icons.error,
+      );
+    }
   }
+}
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
@@ -446,9 +472,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         side: BorderSide(
                           color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(60),
                         ),
                         elevation: 0,
                       ),
@@ -461,7 +487,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           strokeWidth: 2,
                         ),
                       )
-                          : const Text("Sign in with Google"),
+                          : Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              children: [
+                                Image.asset(
+                                  'assets/google_icon.png',
+                                  height: 30,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                                SizedBox(width: 16),
+                                const Text("Sign in with Google"),
+                              ],
+                            ),
+                          ),
                     ),
                   ),
                 ),

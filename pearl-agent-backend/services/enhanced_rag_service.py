@@ -1,6 +1,7 @@
 """
 Enhanced RAG Service - Real External Resource Retrieval
 Provides curated database of real learning resources
+
 """
 
 from typing import List, Dict, Optional

@@ -14,18 +14,22 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _emailController = TextEditingController();
   bool _loading = false;
 
-  Future<void> _sendOTP() async {
-    if (!_formKey.currentState!.validate()) return;
+ Future<void> _sendOTP() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _loading = true);
+  setState(() => _loading = true);
 
-    try {
-      // Send OTP instead of reset link
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        _emailController.text.trim(),
-        // Remove redirectTo - this will send OTP instead of link
-      );
+  try {
+    // Call Edge Function to send OTP
+    final response = await Supabase.instance.client.functions.invoke(
+      'send-otp',
+      body: {
+        'email': _emailController.text.trim(),
+        'purpose': 'password_reset', // or 'signup' for signup flow
+      },
+    );
 
+    if (response.data['success'] == true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -41,36 +45,40 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           ),
         );
 
-        // Navigate to OTP verification page
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder:
-                (context) =>
-                OTPVerificationPage(email: _emailController.text.trim()),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text("Error: ${e.toString()}")),
-              ],
+            builder: (context) => OTPVerificationPage(
+              email: _emailController.text.trim(),
+              userId: response.data['userId'],
+              purpose: 'password_reset',
             ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    } else {
+      throw Exception(response.data['error'] ?? 'Failed to send OTP');
     }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text("Error: ${e.toString()}")),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _loading = false);
   }
+}
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {

@@ -3,6 +3,7 @@ import 'package:plaro_3/View/login_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:plaro_3/ViewModel/auth_provider.dart';
 import '../ViewModel/theme_provider.dart';
+import 'OTPVerificationPage.dart';
 
 class SigninScreen extends ConsumerStatefulWidget {
   const SigninScreen({super.key});
@@ -75,41 +76,50 @@ class _SigninScreenState extends ConsumerState<SigninScreen> with SingleTickerPr
     );
   }
 
-  Future<void> _signUp() async {
-    if (!_formKey.currentState!.validate()) return;
+Future<void> _signUp() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    if (!_acceptTerms) {
-      _showFeedback('Please accept the terms and conditions', Colors.red, Icons.error);
-      return;
+  if (!_acceptTerms) {
+    _showFeedback('Please accept the terms and conditions', Colors.red, Icons.error);
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    final result = await ref.read(authControllerProvider).signUpWithEmail(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+
+      if (result['success'] == true) {
+        _showFeedback('Verification code sent!', Colors.green, Icons.check_circle);
+        
+        // Navigate to OTP verification
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OTPVerificationPage(
+              email: _emailController.text.trim(),
+              userId: result['userId'],
+              purpose: 'signup',
+            ),
+          ),
+        );
+      } else {
+        _showFeedback(result['error'] ?? 'Sign up failed', Colors.red, Icons.error);
+      }
     }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final success = await ref.read(authControllerProvider).logUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        if (success) {
-          _showFeedback('Account created successfully!', Colors.green, Icons.check_circle);
-          Future.delayed(const Duration(seconds: 1), () {
-            Navigator.pushReplacementNamed(context, '/navipg');
-          });
-        } else {
-          _showFeedback('Sign up failed. Please try again.', Colors.red, Icons.error);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _showFeedback('Error: ${e.toString()}', Colors.red, Icons.error);
-      }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _showFeedback('Error: ${e.toString()}', Colors.red, Icons.error);
     }
   }
+}
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {

@@ -20,13 +20,11 @@ class AuthController {
   final Ref ref;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    // Use your WEB client ID here (not Android client ID)
     serverClientId: AppConfig.googleSignInServerClientId,
   );
 
   AuthController(this.ref);
-
-  /// 📹 Email/Password Login
+  
   Future<bool> login({required String email, required String password}) async {
     try {
       final response = await ref
@@ -40,55 +38,52 @@ class AuthController {
     }
   }
 
-  /// 📹 Signup
-  Future<bool> logUp({required String email, required String password}) async {
+  /// Email Signup with OTP
+  Future<Map<String, dynamic>> signUpWithEmail({
+    required String email,
+    required String password,
+  }) async {
     try {
-      final response = await ref
-          .read(supAuthProv)
-          .signUp(email: email, password: password);
+      // Call Edge Function to create user and send OTP
+      final response = await Supabase.instance.client.functions.invoke(
+        'send-otp',
+        body: {
+          'email': email,
+          'purpose': 'signup',
+        },
+      );
 
-      debugPrint('SignUp response: ${response.user?.email}');
-
-      if (response.user != null) {
-        if (response.session != null) {
-          debugPrint('SignUp successful with immediate session');
-          return true;
-        } else {
-          debugPrint('SignUp successful - email confirmation required');
-          return true;
-        }
+      if (response.data['success'] == true) {
+        return {
+          'success': true,
+          'userId': response.data['userId'],
+          'requiresVerification': true,
+        };
       } else {
-        debugPrint('SignUp failed: No user created');
-        return false;
+        throw Exception(response.data['error'] ?? 'Signup failed');
       }
     } catch (e) {
-      debugPrint('SignUp error: $e');
-      return false;
+      debugPrint('Signup error: $e');
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// 📹 Google Sign-In
-  Future<bool> googleSignIn() async {
+  /// Google Sign-In with onboarding check
+  Future<Map<String, dynamic>> googleSignIn() async {
     try {
-      // Clear any existing sign-in state
       await _googleSignIn.signOut();
 
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        debugPrint("Google Sign-In cancelled by user");
-        return false;
+        return {'success': false, 'cancelled': true};
       }
 
       final googleAuth = await googleUser.authentication;
       final idToken = googleAuth.idToken;
       final accessToken = googleAuth.accessToken;
 
-      debugPrint("Google ID Token: ${idToken != null ? 'Present' : 'Null'}");
-      debugPrint("Google Access Token: ${accessToken != null ? 'Present' : 'Null'}");
-
       if (idToken == null) {
-        debugPrint("Google ID Token is null");
-        return false;
+        throw Exception('Failed to get Google ID token');
       }
 
       final response = await ref
@@ -100,26 +95,88 @@ class AuthController {
       );
 
       if (response.session != null) {
-        debugPrint('Google Sign-In successful');
-        debugPrint('User: ${response.user?.email}');
-        return true;
-      } else {
-        debugPrint('Google Sign-In failed: No session created');
-        return false;
+        // Check if this is a new user by checking metadata
+        final user = response.user;
+        final isNewUser = user?.userMetadata?['onboarding_complete'] == null;
+        
+        if (isNewUser) {
+          // Set initial metadata
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(
+              data: {'onboarding_complete': false},
+            ),
+          );
+        }
+
+        return {
+          'success': true,
+          'isNewUser': isNewUser,
+          'requiresOnboarding': !_checkOnboardingComplete(user),
+        };
       }
+
+      return {'success': false, 'error': 'No session created'};
     } catch (e) {
-      debugPrint("Google Sign-In error: $e");
-      // Print more detailed error information
-      if (e.toString().contains('network')) {
-        debugPrint("Network error - check internet connection");
-      } else if (e.toString().contains('configuration')) {
-        debugPrint("Configuration error - check OAuth setup");
-      }
+      debugPrint('Google Sign-In error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Check if onboarding is complete
+  bool _checkOnboardingComplete(User? user) {
+    if (user == null) return false;
+    
+    // Check user metadata
+    final metadata = user.userMetadata?['onboarding_complete'];
+    return metadata == true;
+  }
+
+  /// Check onboarding status (public method)
+  Future<bool> isOnboardingComplete() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return false;
+
+      // Also check database for redundancy
+      final response = await Supabase.instance.client
+          .from('user_profiles')
+          .select('onboarding_complete')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      return response?['onboarding_complete'] == true;
+    } catch (e) {
+      debugPrint('Error checking onboarding: $e');
       return false;
     }
   }
 
-  /// 📹 Logout with Google disconnect
+  /// Mark onboarding as complete
+  Future<void> completeOnboarding() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('No user logged in');
+
+      // Update metadata
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(
+          data: {'onboarding_complete': true},
+        ),
+      );
+
+      // Also update database
+      await Supabase.instance.client
+          .from('user_profiles')
+          .update({'onboarding_complete': true})
+          .eq('user_id', user.id);
+
+      debugPrint('Onboarding completed');
+    } catch (e) {
+      debugPrint('Error completing onboarding: $e');
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     try {
       await ref.read(supAuthProv).signOut();
