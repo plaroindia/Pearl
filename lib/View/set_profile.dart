@@ -6,7 +6,8 @@ import '../ViewModel/setprofileprovider.dart';
 import 'package:image_picker/image_picker.dart';
 
 class SetProfile extends ConsumerStatefulWidget {
-  const SetProfile({super.key});
+  final bool isOnboarding;
+  const SetProfile({super.key, this.isOnboarding = false});
 
   @override
   ConsumerState<SetProfile> createState() => _SetProfileState();
@@ -283,7 +284,13 @@ class _SetProfileState extends ConsumerState<SetProfile> {
 
       // Optionally navigate back
       if (mounted) {
-        Navigator.pop(context);
+        if (widget.isOnboarding) {
+          // If coming from onboarding, navigate to main app
+          Navigator.pushReplacementNamed(context, '/navipg');
+        } else {
+          // If editing existing profile, just go back
+          Navigator.pop(context);
+        }
       }
     } catch (error) {
       String errorMessage = 'Failed to save profile';

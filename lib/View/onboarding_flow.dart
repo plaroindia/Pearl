@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:plaro_3/View/set_profile.dart';
 
 // Onboarding state provider
 final onboardingStateProvider = StateNotifierProvider<OnboardingStateNotifier, OnboardingData>(
@@ -239,13 +240,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentStep < 4) {
       setState(() => _currentStep++);
     } else {
-      // Final step - save everything
+      // Final step - save onboarding data and navigate to profile setup
       setState(() => _isSubmitting = true);
       try {
         await ref.read(onboardingStateProvider.notifier).saveOnboarding();
 
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/navipg');
+          // Navigate to SetProfile page instead of navipg
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SetProfile(isOnboarding: true),
+            ),
+          );
         }
       } catch (e) {
         if (mounted) {
