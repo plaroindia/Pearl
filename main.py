@@ -123,32 +123,33 @@ except Exception as e:
 
 # Serve React/Angular frontend from pearl-agent folder
 pearl_agent_path = os.path.join(os.path.dirname(__file__), "pearl-agent")
-
-class SPAStaticFiles(StaticFiles):
-    """Custom StaticFiles to serve index.html for SPA routing"""
-    async def get_response(self, path, scope):
-        try:
-            response = await super().get_response(path, scope)
-            if response.status_code == 404:
-                # Serve index.html for any 404 (SPA routing)
-                index_path = os.path.join(self.directory, "index.html")
-                if os.path.exists(index_path):
-                    return FileResponse(index_path)
-            return response
-        except Exception as e:
-            print(f"[ERROR] SPA routing error: {e}")
-            # Fallback to index.html
-            index_path = os.path.join(self.directory, "index.html")
-            if os.path.exists(index_path):
-                return FileResponse(index_path)
-            raise
-
 if os.path.exists(pearl_agent_path):
-    # Mount pearl-agent folder with SPA routing support
-    app.mount("/", SPAStaticFiles(directory=pearl_agent_path), name="frontend")
+    @app.get("/")
+    async def serve_frontend():
+        """Serve index.html from pearl-agent folder as root page"""
+        frontend_path = os.path.join(pearl_agent_path, "index.html")
+        if os.path.exists(frontend_path):
+            return FileResponse(frontend_path)
+        else:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Frontend index.html not found at pearl-agent/"}
+            )
+    
+    # Mount pearl-agent folder as static files for assets (JS, CSS, images)
+    app.mount("/", StaticFiles(directory=pearl_agent_path, html=True), name="frontend")
     print(f"[SUCCESS] React/Angular frontend mounted from pearl-agent at http://localhost:8000/")
 else:
     print(f"[ERROR] pearl-agent folder not found at {pearl_agent_path}")
+    print(f"[WARNING] Falling back to pearl_frontend.html if available")
+    
+    pearl_frontend = os.path.join(os.path.dirname(__file__), "pearl_frontend.html")
+    if os.path.exists(pearl_frontend):
+        @app.get("/")
+        async def serve_fallback():
+            """Fallback to pearl_frontend.html"""
+            return FileResponse(pearl_frontend)
+        print(f"[SUCCESS] Fallback: pearl_frontend.html will be served at http://localhost:8000/")
 
 # Root endpoint
 @app.get("/api-status")

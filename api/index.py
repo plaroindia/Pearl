@@ -1,56 +1,68 @@
 """
 PEARL Agent Backend - Vercel Entry Point
+(Serverless-safe, API-only)
 """
 
 import sys
-import os
+from pathlib import Path
 
-# Add parent directory to Python path
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 
-# Create FastAPI app
+# ------------------------------------------------------------------
+# Path setup (allow importing routes/)
+# ------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
+# ------------------------------------------------------------------
+# FastAPI app
+# ------------------------------------------------------------------
 app = FastAPI(
     title="PEARL Agent API",
     description="Agentic Career Mentor",
     version="1.0.0"
 )
 
-# CORS
+# ------------------------------------------------------------------
+# CORS (Vercel-safe)
+# ------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://pearl-agent.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-# Import routes AFTER app is created
+# ------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------
 try:
     from routes.pearl_routes import router as pearl_router
     app.include_router(pearl_router, prefix="/agent", tags=["PEARL Agent"])
 except Exception as e:
-    print(f"Error importing routes: {e}")
+    print(f"[ERROR] Failed to load pearl routes: {e}")
 
+# ------------------------------------------------------------------
+# Core endpoints
+# ------------------------------------------------------------------
 @app.get("/")
 async def root():
     return {
         "status": "online",
-        "message": "PEARL Agent API",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "start": "/agent/start-journey",
-            "app": "/app"
-        }
+        "service": "PEARL Agent API",
+        "docs": "/docs",
+        "health": "/health"
     }
 
 @app.get("/health")
-async def health_check():
+async def health():
     return {
         "status": "healthy",
         "service": "PEARL Agent",
@@ -61,25 +73,15 @@ async def health_check():
 async def test():
     return {"message": "API is working"}
 
-@app.get("/app", response_class=HTMLResponse)
-async def serve_frontend():
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    html_path = os.path.join(base_dir, "pearl-agent", "index.html")
-    if os.path.exists(html_path):
-        with open(html_path, 'r', encoding='utf-8') as f:
-            return HTMLResponse(content=f.read())
-    return JSONResponse(
-        status_code=404,
-        content={"error": "Frontend not found"}
-    )
-
-# Error handler
+# ------------------------------------------------------------------
+# Global error handler (safe for production)
+# ------------------------------------------------------------------
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "error": str(exc),
+            "error": "Internal Server Error",
             "type": type(exc).__name__,
             "path": str(request.url)
         }
