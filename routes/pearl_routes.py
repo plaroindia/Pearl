@@ -5,15 +5,20 @@ Fixed PEARL Routes - Proper skill extraction from ANY career goal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict
-from database import SupabaseHelper
+from database import EnhancedSupabaseHelper
 from services.enhanced_rag_service import enhanced_rag
 from config import get_settings
 import json
 import google.generativeai as genai
 from datetime import datetime
 
+# Import new services for Agent 4, Adzuna, and Content Providers
+from services.learning_optimizer_agent import learning_optimizer
+from services.job_retrieval_service import adzuna_service
+from services.content_provider_service import content_provider
+
 router = APIRouter()
-db = SupabaseHelper()
+db = EnhancedSupabaseHelper()
 settings = get_settings()
 
 # Configure Gemini
@@ -360,10 +365,12 @@ async def get_current_action(session_id: str):
         if not learning_paths:
             raise HTTPException(status_code=404, detail="No learning paths")
         
-        # Find current skill
+        # Find current skill (with bounds checking)
         current_skill = None
         for skill, path in learning_paths.items():
-            if path['current_module'] <= path['total_modules']:
+            current_module = path.get('current_module', 0)
+            total_modules = path.get('total_modules', 0)
+            if 0 < current_module <= total_modules:
                 current_skill = skill
                 break
         
@@ -458,14 +465,18 @@ async def submit_checkpoint(req: CheckpointSubmission):
         if not learning_path:
             raise HTTPException(status_code=404, detail="Skill not found")
         
-        # Find checkpoint
+        # Find checkpoint with proper error handling
         checkpoint_data = None
-        for module in learning_path['modules']:
-            if module['module_id'] == req.module_id:
-                for action in module['actions']:
-                    if action['type'] == 'checkpoint':
+        modules = learning_path.get('modules', [])
+        
+        for module in modules:
+            if module.get('module_id') == req.module_id:
+                actions = module.get('actions', [])
+                for action in actions:
+                    if action.get('type') == 'checkpoint':
                         checkpoint_data = action
                         break
+                break
         
         if not checkpoint_data:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
@@ -491,23 +502,26 @@ async def submit_checkpoint(req: CheckpointSubmission):
             )
         
         if result['passed']:
-            # Mark complete and advance
-            for module in learning_path['modules']:
-                if module['module_id'] == req.module_id:
-                    for action in module['actions']:
-                        if action['type'] == 'checkpoint':
+            # Mark complete and advance (with bounds checking)
+            modules = learning_path.get('modules', [])
+            for module in modules:
+                if module.get('module_id') == req.module_id:
+                    actions = module.get('actions', [])
+                    for action in actions:
+                        if action.get('type') == 'checkpoint':
                             action['completed'] = True
             
             advance_result = pearl.advance_progress(learning_path, req.module_id, 0)
             
-            # Update database
-            current_module = learning_path['modules'][req.module_id - 1]
-            PEARLDatabaseHelper.save_module_progress(
-                req.session_id, req.user_id, req.skill, req.module_id, current_module
-            )
+            # Update database with bounds checking
+            if 0 < req.module_id <= len(modules):
+                current_module = modules[req.module_id - 1]
+                PEARLDatabaseHelper.save_module_progress(
+                    req.session_id, req.user_id, req.skill, req.module_id, current_module
+                )
             
-            if req.module_id < learning_path['total_modules']:
-                next_module = learning_path['modules'][req.module_id]
+            if req.module_id < learning_path.get('total_modules', 0) and req.module_id < len(modules):
+                next_module = modules[req.module_id]
                 PEARLDatabaseHelper.save_module_progress(
                     req.session_id, req.user_id, req.skill, req.module_id + 1, next_module
                 )
@@ -597,7 +611,261 @@ async def get_skill_progress(session_id: str, skill: str):
 
 
 # ============================================
-# ENDPOINT 6: VERIFY QUESTIONS SOURCE
+# ENDPOINT 6: AGENT 4 - OPTIMIZE LEARNING PATH
+# ============================================
+
+@router.post("/optimize-path")
+async def optimize_learning_path(req: CareerGoalRequest):
+    """
+    Agent 4: Optimize learning sequence based on user profile
+    Uses AI to prioritize skills, recommend parallel learning, and adjust difficulty
+    """
+    try:
+        print(f"\n[OPTIMIZER] 🚀 Starting path optimization for user: {req.user_id}")
+        
+        # Get user skills from database
+        user_skills_data = db.get_user_skills(req.user_id)
+        user_skills = {s['skill_name']: float(s['confidence_score']) for s in user_skills_data}
+        
+        print(f"[OPTIMIZER] Current skills: {list(user_skills.keys())}")
+        
+        # Extract required skills from career goal
+        from services.enhanced_rag_service import enhanced_rag
+        required_skills_text = await enhanced_rag.extract_skills(req.goal)
+        required_skills = json.loads(required_skills_text) if isinstance(required_skills_text, str) else required_skills_text
+        
+        if not isinstance(required_skills, list):
+            required_skills = list(required_skills) if hasattr(required_skills, '__iter__') else [req.goal]
+        
+        print(f"[OPTIMIZER] Required skills extracted: {required_skills}")
+        
+        # Get onboarding data for time and preference constraints
+        try:
+            onboarding = db.client.table('user_onboarding').select('*').eq(
+                'user_id', req.user_id
+            ).single().execute()
+            
+            time_weeks = 8  # Default
+            learning_pref = "mixed"  # Default
+            
+            if onboarding.data:
+                # Parse time availability
+                time_availability = onboarding.data.get('time_availability', '5-10 hours/week')
+                if '1-5' in time_availability:
+                    time_weeks = 12
+                elif '10-20' in time_availability:
+                    time_weeks = 6
+                elif '20+' in time_availability:
+                    time_weeks = 4
+                else:
+                    time_weeks = 8
+                
+                learning_pref = onboarding.data.get('learning_preference', 'mixed')
+                print(f"[OPTIMIZER] Constraints: {time_weeks} weeks, preference: {learning_pref}")
+        except Exception as e:
+            print(f"[OPTIMIZER] Using defaults (onboarding data not found): {e}")
+            time_weeks = 8
+            learning_pref = "mixed"
+        
+        # Run Agent 4: Learning Path Optimizer
+        optimization = learning_optimizer.optimize_learning_sequence(
+            user_skills=user_skills,
+            required_skills=required_skills,
+            time_constraint_weeks=time_weeks,
+            learning_preference=learning_pref
+        )
+        
+        print(f"[OPTIMIZER] ✅ Path optimization complete")
+        
+        return {
+            "success": True,
+            "optimization": optimization,
+            "user_skills": user_skills,
+            "required_skills": required_skills,
+            "constraints": {
+                "weeks_available": time_weeks,
+                "learning_preference": learning_pref
+            }
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Optimization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINT 7: JOB RECOMMENDATIONS (ADZUNA)
+# ============================================
+
+@router.get("/jobs/recommendations")
+async def get_job_recommendations(
+    user_id: str,
+    target_role: str,
+    location: str = "Chennai"
+):
+    """
+    Get real job recommendations from Adzuna API
+    Matches jobs to user's current skills with percentage compatibility
+    """
+    try:
+        print(f"\n[JOBS] 🔍 Finding jobs for user: {user_id}")
+        print(f"[JOBS] Target role: {target_role}, Location: {location}")
+        
+        # Get user skills from database
+        user_skills_data = db.get_user_skills(user_id)
+        user_skills = {s['skill_name']: float(s['confidence_score']) for s in user_skills_data}
+        
+        print(f"[JOBS] User has {len(user_skills)} skills: {list(user_skills.keys())}")
+        
+        # FALLBACK: If user has no skills, extract from target role
+        if not user_skills:
+            print(f"[JOBS] ⚠️ No skills found for user, extracting from target role: {target_role}")
+            # Extract keywords from target role
+            keywords = target_role.lower().split()
+            user_skills = {kw: 0.5 for kw in keywords if len(kw) > 2}
+            
+            # Add common keywords based on role keywords
+            if any(word in target_role.lower() for word in ['backend', 'api', 'server']):
+                user_skills.update({'Python': 0.5, 'API': 0.5, 'Database': 0.5, 'SQL': 0.4})
+            if any(word in target_role.lower() for word in ['frontend', 'ui', 'web']):
+                user_skills.update({'React': 0.5, 'JavaScript': 0.5, 'CSS': 0.5, 'HTML': 0.4})
+            if any(word in target_role.lower() for word in ['data', 'analytics', 'science']):
+                user_skills.update({'SQL': 0.5, 'Python': 0.5, 'Statistics': 0.5, 'Data': 0.4})
+            
+            print(f"[JOBS] Fallback skills created: {list(user_skills.keys())}")
+        
+        # Search and match jobs using Adzuna
+        matched_jobs = adzuna_service.match_jobs_to_skills(
+            user_skills=user_skills,
+            target_role=target_role,
+            location=location
+        )
+        
+        print(f"[JOBS] ✅ Found {len(matched_jobs)} matching jobs")
+        
+        # Prepare response with top 10 jobs
+        top_jobs = matched_jobs[:10]
+        
+        return {
+            "success": True,
+            "total_jobs_found": len(matched_jobs),
+            "jobs_returned": len(top_jobs),
+            "jobs": top_jobs,
+            "user_skills": user_skills,
+            "search_criteria": {
+                "target_role": target_role,
+                "location": location
+            }
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Job recommendations failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINT 8: CONTENT PROVIDERS
+# ============================================
+
+@router.get("/content-providers/{skill}")
+async def get_content_providers(
+    skill: str,
+    content_type: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    learning_preference: Optional[str] = None
+):
+    """
+    Get curated learning content for a skill
+    Sources: YouTube (primary), freeCodeCamp (practice), MIT OCW (academic depth)
+    """
+    try:
+        print(f"\n[CONTENT] 📚 Fetching content for skill: {skill}")
+        
+        if learning_preference and learning_preference in ['video', 'reading', 'hands_on', 'mixed']:
+            # Get mixed learning path based on preference
+            print(f"[CONTENT] Learning preference: {learning_preference}")
+            content = content_provider.get_mixed_learning_path(
+                skill=skill,
+                learning_preference=learning_preference
+            )
+        else:
+            # Get content with optional filters
+            content = content_provider.get_content_for_skill(
+                skill=skill,
+                content_type=content_type,
+                difficulty=difficulty
+            )
+        
+        print(f"[CONTENT] ✅ Retrieved {len(content)} resources")
+        
+        return {
+            "success": True,
+            "skill": skill,
+            "total_resources": len(content),
+            "filters": {
+                "content_type": content_type,
+                "difficulty": difficulty,
+                "learning_preference": learning_preference
+            },
+            "content": content
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Content retrieval failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINT 9: GET LEARNING ROADMAP
+# ============================================
+
+@router.get("/learning-roadmap/{skill}")
+async def get_learning_roadmap(
+    skill: str,
+    secondary_skills: Optional[str] = None,
+    learning_preference: str = "mixed"
+):
+    """
+    Get a comprehensive learning roadmap for a skill
+    Includes primary and secondary skills across multiple phases
+    """
+    try:
+        print(f"\n[ROADMAP] 🗺️  Creating roadmap for: {skill}")
+        
+        secondary_list = []
+        if secondary_skills:
+            secondary_list = [s.strip() for s in secondary_skills.split(',')]
+            print(f"[ROADMAP] Secondary skills: {secondary_list}")
+        
+        roadmap = content_provider.get_learning_roadmap(
+            primary_skill=skill,
+            secondary_skills=secondary_list,
+            learning_preference=learning_preference
+        )
+        
+        print(f"[ROADMAP] ✅ Roadmap created with {len(roadmap['phases'])} phases")
+        
+        return {
+            "success": True,
+            "roadmap": roadmap,
+            "learning_preference": learning_preference
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Roadmap creation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINT 10: VERIFY QUESTIONS SOURCE
 # ============================================
 
 @router.get("/debug/verify-questions/{session_id}/{skill}/{module_id}")
@@ -653,4 +921,41 @@ async def verify_questions_source(session_id: str, skill: str, module_id: int):
     
     except Exception as e:
         print(f"[ERROR] Verification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINT 11: GET USER ONBOARDING DATA
+# ============================================
+
+@router.get("/onboarding/{user_id}")
+async def get_user_onboarding(user_id: str):
+    """Get user onboarding data including goals and preferences"""
+    try:
+        print(f"\n[ONBOARDING] 📋 Fetching onboarding data for user: {user_id}")
+        
+        onboarding_data = db.get_onboarding_data(user_id)
+        
+        if not onboarding_data:
+            print(f"[ONBOARDING] No onboarding data found for {user_id}")
+            return {
+                "success": False,
+                "onboarding": None,
+                "message": "No onboarding data found"
+            }
+        
+        print(f"[ONBOARDING] ✅ Retrieved onboarding data")
+        return {
+            "success": True,
+            "primary_career_goal": onboarding_data.get('primary_career_goal'),
+            "target_role": onboarding_data.get('target_role'),
+            "learning_preference": onboarding_data.get('learning_preference', 'mixed'),
+            "time_availability": onboarding_data.get('time_availability'),
+            "current_status": onboarding_data.get('current_status'),
+            "skills": onboarding_data.get('skills', []),
+            "created_at": onboarding_data.get('created_at')
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Get onboarding failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

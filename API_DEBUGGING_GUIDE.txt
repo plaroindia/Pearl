@@ -1,0 +1,475 @@
+================================================================================
+                  API CONNECTION & DEBUGGING GUIDE
+                        Fix Frontend-Backend Communication
+================================================================================
+
+DATE: January 24, 2026
+ISSUE: App not functional, API not connecting properly
+STATUS: FIX IN PROGRESS
+
+================================================================================
+STEP 1: VERIFY BACKEND IS RUNNING
+================================================================================
+
+Terminal 1: Check if backend is running
+   cd pearl-agent-backend
+   python main.py
+
+Expected output:
+   [SUCCESS] Auth routes loaded
+   [SUCCESS] Pearl routes loaded
+   [SUCCESS] API routes loaded
+   [SUCCESS] Skill gap routes loaded
+   [SUCCESS] Enhanced routes loaded
+   [SUCCESS] React/Angular frontend mounted from pearl-agent at http://localhost:8000/
+
+✅ Backend should run at: http://localhost:8000
+✅ API docs at: http://localhost:8000/docs
+✅ Health check: http://localhost:8000/health
+
+If backend doesn't start:
+   - Check Python version: python --version (need 3.8+)
+   - Check dependencies: pip list | grep fastapi
+   - Check for errors: python main.py 2>&1 | head -50
+   - Check port 8000 not in use: lsof -i :8000 (Mac/Linux)
+
+================================================================================
+STEP 2: VERIFY ENVIRONMENT CONFIGURATION
+================================================================================
+
+File: pearl-agent/.env (IN FRONTEND FOLDER)
+
+Required settings:
+   VITE_API_BASE_URL=http://localhost:8000
+   VITE_API_TIMEOUT=30000
+   VITE_SUPABASE_URL=https://xxxxx.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+
+Verify .env file exists:
+   ls -la pearl-agent/.env
+
+If missing:
+   cat > pearl-agent/.env << 'EOF'
+   VITE_API_BASE_URL=http://localhost:8000
+   VITE_API_TIMEOUT=30000
+   VITE_ENABLE_NOTIFICATIONS=true
+   VITE_ENABLE_RPG=true
+   VITE_ENABLE_PRACTICE=true
+   VITE_ENABLE_FEEDBACK=true
+   VITE_ENABLE_SKILL_GAP=true
+   VITE_ENABLE_DEBUG=true
+   EOF
+
+================================================================================
+STEP 3: CREATE API CLIENT LAYER
+================================================================================
+
+✅ NEW FILES CREATED:
+
+1. pearl-agent/api.ts
+   - Centralized API client
+   - Handles Bearer token authentication
+   - Includes all API functions
+   - Error handling with logging
+
+2. pearl-agent/hooks.ts
+   - Custom React hooks for API calls
+   - useSkillGapSummary()
+   - useRpgStats()
+   - useNotifications()
+   - ... and more
+
+3. pearl-agent/components/Dashboard-Updated.tsx
+   - Example component using API hooks
+   - Shows how to fetch data
+   - Error handling and loading states
+
+================================================================================
+STEP 4: UPDATE FRONTEND TO USE NEW API CLIENT
+================================================================================
+
+The old Dashboard.tsx doesn't call any APIs. We need to update components.
+
+Replace this file:
+   FROM: pearl-agent/components/Dashboard.tsx
+   TO: pearl-agent/components/Dashboard-Updated.tsx
+
+OR manually update Dashboard.tsx to add API calls:
+
+   // At the top of file, add imports:
+   import { useSkillGapSummary, useRpgStats } from '../hooks';
+
+   // Inside component, add:
+   const skillGapSummary = useSkillGapSummary();
+   const rpgStats = useRpgStats();
+
+   // Then use data in UI:
+   <p>{skillGapSummary.data?.data?.readiness || '--'}%</p>
+
+================================================================================
+STEP 5: VERIFY FRONTEND DEPENDENCIES
+================================================================================
+
+Terminal 2: In pearl-agent folder
+   cd pearl-agent
+   npm install
+
+Expected packages (verify with):
+   npm list
+
+Should include:
+   react@19.2.3
+   typescript
+   vite
+   tailwindcss
+   recharts
+
+If missing, install:
+   npm install react@19 react-dom@19 typescript
+
+================================================================================
+STEP 6: START DEVELOPMENT SERVER
+================================================================================
+
+Terminal 2: Start Vite dev server
+   cd pearl-agent
+   npm run dev
+
+Expected output:
+   ➜  Local:   http://localhost:5173/
+   ➜  Press h to show help
+
+✅ Frontend runs at: http://localhost:5173
+✅ With hot reload enabled
+
+If port 5173 in use:
+   - Change in vite.config.ts
+   - Or kill existing: lsof -i :5173
+
+================================================================================
+STEP 7: TEST BROWSER CONSOLE FOR DEBUGGING
+================================================================================
+
+Open: http://localhost:5173
+Press: F12 (Open DevTools)
+Go to: Console tab
+
+Expected logs:
+   [API] Base URL: http://localhost:8000
+   [API] Timeout: 30000 ms
+   [AUTH] Token found, length: XXX
+   [API] GET /api/skill-gap/summary
+   [API] Response status: 200
+   [API] Success: /api/skill-gap/summary
+
+If you see errors like:
+   ❌ CORS error (Access to XMLHttpRequest blocked)
+      - Backend CORS is enabled, this shouldn't happen
+      - Verify backend running: http://localhost:8000/health
+
+   ❌ 401 Unauthorized
+      - No auth token found
+      - Need to login first or set token manually
+
+   ❌ Cannot find module 'api'
+      - api.ts file missing
+      - Make sure file exists: pearl-agent/api.ts
+
+   ❌ ECONNREFUSED - Connection refused
+      - Backend not running
+      - Start: python main.py
+
+================================================================================
+STEP 8: MANUAL API TESTING
+================================================================================
+
+Test backend directly (no frontend needed):
+
+1. Health Check (No auth required)
+   curl http://localhost:8000/health
+
+   Expected response:
+   {
+     "status": "healthy",
+     "service": "PEARL Agent",
+     "frontend_url": "http://localhost:8000/",
+     "routes_loaded": {...}
+   }
+
+2. Skill Gap API (Requires Bearer token)
+   Get token from Supabase or create test token
+   
+   curl -X GET "http://localhost:8000/api/skill-gap" \
+     -H "Authorization: Bearer YOUR_TOKEN"
+
+3. Test in Python (without frontend)
+   python
+   >>> import requests
+   >>> token = "YOUR_TOKEN"
+   >>> headers = {"Authorization": f"Bearer {token}"}
+   >>> r = requests.get("http://localhost:8000/api/skill-gap", headers=headers)
+   >>> r.status_code
+   >>> r.json()
+
+================================================================================
+STEP 9: AUTHENTICATION SETUP
+================================================================================
+
+The app requires user authentication. Options:
+
+Option A: Manual Token (for testing)
+   1. Generate test token or get from Supabase
+   2. In browser console:
+      localStorage.setItem('sb-auth-token', 'YOUR_TOKEN')
+   3. Refresh page
+
+Option B: Supabase Authentication
+   1. Create Supabase account: https://supabase.com
+   2. Create new project
+   3. Get credentials from project settings
+   4. Add to pearl-agent/.env:
+      VITE_SUPABASE_URL=https://xxxxx.supabase.co
+      VITE_SUPABASE_ANON_KEY=your-key
+   5. Create auth component to handle login/signup
+
+Option C: Test User (if backend supports)
+   Check if backend has test endpoint:
+   curl http://localhost:8000/test
+
+================================================================================
+STEP 10: COMMON ISSUES & SOLUTIONS
+================================================================================
+
+ISSUE 1: "Cannot GET /"
+   ❌ Frontend not serving
+   ✅ Solution: 
+      - Check pearl-agent folder exists
+      - Check npm run dev is running
+      - Or ensure dist/ is built
+
+ISSUE 2: "Cannot read property 'data' of undefined"
+   ❌ API response format wrong
+   ✅ Solution:
+      - Check backend returns proper JSON
+      - Check response wrapping in api.ts
+      - Log response in browser console
+
+ISSUE 3: "Failed to fetch" or timeout
+   ❌ Backend connection timeout
+   ✅ Solution:
+      - Increase VITE_API_TIMEOUT in .env
+      - Check backend is responding: curl http://localhost:8000/health
+      - Check no firewall blocking port 8000
+
+ISSUE 4: 401 Unauthorized on all API calls
+   ❌ No authentication token
+   ✅ Solution:
+      - Need to login first
+      - Or set token in localStorage (dev testing)
+      - Check VITE_SUPABASE_URL is correct
+
+ISSUE 5: API calls work but components don't update
+   ❌ Component not using hooks
+   ✅ Solution:
+      - Replace Dashboard.tsx with Dashboard-Updated.tsx
+      - Or manually add hooks to components
+      - Check console for errors
+
+ISSUE 6: Module not found errors
+   ❌ Missing api.ts or hooks.ts
+   ✅ Solution:
+      - Verify files exist: ls pearl-agent/api.ts pearl-agent/hooks.ts
+      - Check imports in Dashboard-Updated.tsx are correct
+      - Run npm install if needed
+
+================================================================================
+STEP 11: COMPLETE SETUP CHECKLIST
+================================================================================
+
+Backend Setup:
+☐ Python 3.8+ installed
+☐ Dependencies installed (pip install -r requirements.txt)
+☐ Environment variables set (config.py)
+☐ Supabase connection working
+☐ Gemini AI key configured
+☐ Backend runs without errors: python main.py
+☐ Health check passes: curl http://localhost:8000/health
+☐ API docs available: http://localhost:8000/docs
+
+Frontend Setup:
+☐ Node.js 16+ installed
+☐ pearl-agent folder exists
+☐ npm dependencies installed: npm install
+☐ .env file created with correct values
+☐ api.ts file exists: pearl-agent/api.ts
+☐ hooks.ts file exists: pearl-agent/hooks.ts
+☐ Dashboard-Updated.tsx available (example component)
+☐ Dev server runs: npm run dev
+
+Integration Testing:
+☐ Backend health: http://localhost:8000/health → 200
+☐ Frontend loads: http://localhost:5173 → Page loads
+☐ Browser console shows API logs (no errors)
+☐ API calls work in console:
+   const {data} = await import('./api.ts').then(m => m.healthCheck())
+☐ Dashboard displays stats (if authenticated)
+☐ Skill gap data loads (if token valid)
+☐ No CORS errors in browser console
+☐ No 401 errors (unless intentional)
+
+================================================================================
+STEP 12: DEBUGGING TIPS
+================================================================================
+
+Enable Debug Logging:
+   In .env: VITE_ENABLE_DEBUG=true
+   Then in api.ts: Logs will show all API calls
+
+Check Network Requests:
+   Browser DevTools → Network tab
+   - Look for failed requests (red)
+   - Check status code (200, 400, 401, 500, etc.)
+   - Check response body for error details
+
+Check Backend Logs:
+   Terminal where python main.py runs
+   - Look for [ERROR] messages
+   - Check route was matched
+   - Check database connection errors
+   - Look for Gemini AI errors
+
+Use cURL for Direct Testing:
+   curl -i http://localhost:8000/health
+   curl -X POST http://localhost:8000/api/practice/generate \
+     -H "Authorization: Bearer TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"skill":"Python","topic":"Loops","difficulty":"medium","question_count":5}'
+
+Test API in JavaScript Console:
+   // Import API
+   import {apiRequest, getAuthToken} from './api.ts'
+   
+   // Test health
+   apiRequest('/health', {}, false)
+   
+   // Test skill gap (requires token)
+   apiRequest('/api/skill-gap')
+
+================================================================================
+STEP 13: NEXT STEPS AFTER FIXING
+================================================================================
+
+Once API connects successfully:
+
+1. Update All Components
+   - Replace component files with API-enabled versions
+   - Use hooks for data fetching
+   - Add loading states
+   - Add error handling
+
+2. Implement Authentication
+   - Add login/signup with Supabase
+   - Store token securely
+   - Refresh token before expiry
+   - Handle 401 errors
+
+3. Add Real Data
+   - Components now show real data from backend
+   - Test with actual user data
+   - Verify all API endpoints work
+
+4. Enhance UI
+   - Add animations
+   - Loading skeletons
+   - Error messages
+   - Success notifications
+
+5. Test Thoroughly
+   - Test all features
+   - Test error scenarios
+   - Test offline behavior
+   - Test cross-browser compatibility
+
+================================================================================
+SUPPORT COMMANDS
+================================================================================
+
+Backend Health:
+   curl http://localhost:8000/health
+
+Check if port 8000 in use (Mac/Linux):
+   lsof -i :8000
+
+Kill process on port 8000:
+   kill -9 $(lsof -ti:8000)
+
+Check if port 5173 in use (Mac/Linux):
+   lsof -i :5173
+
+Frontend dependencies:
+   npm list
+
+Backend dependencies:
+   pip list
+
+Start fresh (if needed):
+   # Backend
+   pip install -r requirements.txt --force-reinstall
+   
+   # Frontend
+   rm -rf node_modules package-lock.json
+   npm install
+
+View backend API docs:
+   http://localhost:8000/docs
+
+View console logs (backend):
+   python main.py 2>&1 | tee backend.log
+
+View console logs (frontend):
+   Browser DevTools → Console tab
+
+================================================================================
+EXPECTED SUCCESS STATE
+================================================================================
+
+✅ Backend running at http://localhost:8000
+✅ Frontend running at http://localhost:5173
+✅ Browser DevTools shows:
+   [API] Base URL: http://localhost:8000
+   [API] GET /api/skill-gap/summary
+   [API] Response status: 200
+   [API] Success: /api/skill-gap/summary
+
+✅ Dashboard displays:
+   - Skill Readiness %
+   - Critical Gaps count
+   - RPG Level and XP
+   - Energy bar
+   - Quick action buttons
+
+✅ No errors in browser console
+✅ No errors in backend terminal
+✅ Responsive design works on mobile
+✅ All navigation buttons functional
+
+When you see this → App is working!
+
+================================================================================
+FINAL STEPS
+================================================================================
+
+1. Backup current working files
+2. Add new api.ts and hooks.ts
+3. Update Dashboard.tsx (or use Dashboard-Updated.tsx as template)
+4. Update other components similarly
+5. Test each component after updating
+6. Deploy when all tests pass
+
+Questions? Check:
+→ Browser console (F12)
+→ Backend terminal output
+→ /docs endpoint for API docs
+→ BACKEND_DOCUMENTATION.txt for reference
+
+Happy debugging! 🚀

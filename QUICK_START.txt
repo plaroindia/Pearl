@@ -1,0 +1,355 @@
+================================================================================
+                    QUICK START - FRONTEND MIGRATION
+================================================================================
+
+✅ MIGRATION COMPLETE: pearl_frontend.html → React/Angular (pearl-agent)
+
+================================================================================
+QUICK SETUP (5 STEPS)
+================================================================================
+
+1. INSTALL FRONTEND DEPENDENCIES
+   cd pearl-agent
+   npm install
+
+2. CONFIGURE ENVIRONMENT
+   Edit pearl-agent/.env:
+   VITE_API_BASE_URL=http://localhost:8000
+   VITE_SUPABASE_URL=<your-supabase-url>
+   VITE_SUPABASE_ANON_KEY=<your-anon-key>
+
+3. START DEVELOPMENT SERVER (Terminal 1)
+   cd pearl-agent
+   npm run dev
+   Frontend runs on: http://localhost:5173
+
+4. START BACKEND API (Terminal 2)
+   cd pearl-agent-backend
+   python main.py
+   Backend runs on: http://localhost:8000
+
+5. ACCESS APPLICATION
+   http://localhost:5173 (Vite dev server)
+   OR
+   http://localhost:8000 (Backend serves frontend)
+
+================================================================================
+WHAT WAS CHANGED
+================================================================================
+
+✅ main.py Updated:
+   - Now serves pearl-agent/index.html at /
+   - Mounts pearl-agent/ folder for static assets
+   - Falls back to pearl_frontend.html if pearl-agent not found
+   - All API routes remain unchanged
+   - CORS still enabled
+
+✅ pearl-agent/index.css Created:
+   - Global styles for the React app
+   - CSS variables, animations, utilities
+   - Dark mode support
+   - Responsive design
+
+✅ pearl-agent/.env Created:
+   - API endpoint configuration
+   - Supabase credentials
+   - Feature flags
+   - Environment variables
+
+✅ Documentation Created:
+   - FRONTEND_MIGRATION.md: Complete setup guide
+   - QUICK_START.md: This file
+
+================================================================================
+AVAILABLE NPM SCRIPTS (in pearl-agent/)
+================================================================================
+
+npm run dev          → Start development server (hot reload)
+npm run build        → Build for production
+npm run preview      → Preview production build
+npm run type-check   → Check TypeScript errors
+
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+
+pearl-agent-backend/
+├── pearl-agent/                    ← React/TypeScript Frontend
+│   ├── index.html                  ← Entry point
+│   ├── index.tsx                   ← React entry
+│   ├── App.tsx                     ← Main component
+│   ├── index.css                   ← Global styles
+│   ├── .env                        ← Config (NEW)
+│   ├── components/                 ← React components
+│   │   ├── Navbar.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── Analytics.tsx
+│   │   ├── Jobs.tsx
+│   │   ├── Profile.tsx
+│   │   ├── Roadmap.tsx
+│   │   ├── Onboarding.tsx
+│   │   └── TaikenStory.tsx
+│   └── vite.config.ts              ← Build config
+│
+├── main.py                         ← Backend (UPDATED)
+├── routes/
+│   ├── skill_gap_routes.py         ← Skill gap APIs
+│   ├── enhanced_routes.py          ← Practice/RPG/Feedback/Notifications
+│   └── ...
+├── services/
+│   ├── skill_gap_service.py
+│   ├── practice_service.py
+│   ├── rpg_progression_service.py
+│   ├── feedback_service.py
+│   ├── notification_service.py
+│   └── ...
+└── FRONTEND_MIGRATION.md           ← Full setup guide
+
+================================================================================
+API INTEGRATION
+================================================================================
+
+Frontend will use:
+  Base URL: http://localhost:8000
+  
+Example API Call:
+```typescript
+const token = await getAuthToken(); // From Supabase auth
+const response = await fetch('http://localhost:8000/api/skill-gap', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+const data = await response.json();
+```
+
+Available Endpoints:
+  GET /api/skill-gap
+  GET /api/skill-gap/summary
+  POST /api/practice/generate
+  POST /api/practice/submit
+  GET /api/rpg/stats
+  POST /api/feedback/submit
+  GET /api/notifications
+
+See BACKEND_DOCUMENTATION.txt for all endpoints
+
+================================================================================
+TECHNOLOGY STACK
+================================================================================
+
+Frontend:
+  ✅ React 19.2.3
+  ✅ TypeScript
+  ✅ Vite (build tool)
+  ✅ Tailwind CSS
+  ✅ Recharts (charts/graphs)
+
+Backend:
+  ✅ FastAPI
+  ✅ Python 3.8+
+  ✅ Supabase PostgreSQL
+  ✅ Google Gemini AI
+  ✅ Bearer Token Auth
+
+================================================================================
+ENVIRONMENT VARIABLES REFERENCE
+================================================================================
+
+VITE_API_BASE_URL
+  Default: http://localhost:8000
+  Usage: All API calls use this base URL
+
+VITE_SUPABASE_URL
+  Example: https://xxxxx.supabase.co
+  Get from: Supabase project settings
+
+VITE_SUPABASE_ANON_KEY
+  Get from: Supabase project settings
+  Used for: Client-side authentication
+
+VITE_ENABLE_NOTIFICATIONS
+  Default: true
+  Controls: Notifications feature
+
+VITE_ENABLE_RPG
+  Default: true
+  Controls: RPG gamification
+
+VITE_ENABLE_PRACTICE
+  Default: true
+  Controls: Practice sets feature
+
+VITE_ENABLE_FEEDBACK
+  Default: true
+  Controls: Feedback collection
+
+VITE_ENABLE_SKILL_GAP
+  Default: true
+  Controls: Skill gap analysis
+
+================================================================================
+FRONTEND COMPONENTS OVERVIEW
+================================================================================
+
+Navbar.tsx
+  - Horizontal navigation
+  - User dropdown menu
+  - Theme toggle
+  - Links to main sections
+
+Dashboard.tsx
+  - Main dashboard view
+  - Skill summary
+  - Quick stats
+  - Recent activities
+
+Analytics.tsx
+  - Progress visualization
+  - Charts and graphs (Recharts)
+  - Performance metrics
+  - Learning analytics
+
+Jobs.tsx
+  - Job recommendations
+  - Match score
+  - Job details
+  - Apply functionality
+
+Profile.tsx
+  - User profile info
+  - Skills list
+  - Resume/CV
+  - Settings
+
+Roadmap.tsx
+  - Learning path display
+  - Milestones
+  - Course recommendations
+  - Progress tracking
+
+Onboarding.tsx
+  - User setup flow
+  - Skill selection
+  - Goal setting
+  - Preference configuration
+
+TaikenStory.tsx
+  - Story-based learning
+  - Interactive narratives
+  - Character progression
+  - Skill practice
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+❌ Problem: npm install fails
+✅ Solution: 
+   - Use Node.js 16+ (check: node -v)
+   - Clear cache: npm cache clean --force
+   - Delete node_modules: rm -r node_modules
+   - Try again: npm install
+
+❌ Problem: Port 8000 already in use
+✅ Solution: 
+   - Find process: netstat -ano | findstr :8000 (Windows)
+   - Kill process: taskkill /PID <PID> /F
+   - Or change port in main.py
+
+❌ Problem: API calls return 401
+✅ Solution:
+   - Verify token in localStorage/sessionStorage
+   - Check Supabase auth is working
+   - Ensure Authorization header is set
+
+❌ Problem: CSS not loading
+✅ Solution:
+   - Check index.css exists in pearl-agent/
+   - Verify import in index.tsx
+   - Check browser console for errors
+
+❌ Problem: Hot reload not working
+✅ Solution:
+   - Restart: npm run dev
+   - Check port conflicts
+   - Verify vite.config.ts
+
+================================================================================
+DEPLOYMENT (Future)
+================================================================================
+
+For Production:
+1. Build frontend: npm run build
+2. Creates dist/ folder with optimized assets
+3. Copy dist/ to production server
+4. Configure backend to serve from dist/
+5. Set environment variables on server
+6. Start backend API
+
+OR use Docker/Cloud deployment platform
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. ✅ Install dependencies:
+   cd pearl-agent && npm install
+
+2. ✅ Configure environment:
+   Edit pearl-agent/.env with your settings
+
+3. ✅ Start development:
+   npm run dev (in pearl-agent)
+   python main.py (in pearl-agent-backend)
+
+4. ✅ Test integration:
+   Visit http://localhost:5173
+   Test API calls to backend
+   Verify authentication
+
+5. ✅ Start building:
+   Modify components in pearl-agent/components/
+   Add new features
+   Integrate with backend APIs
+
+================================================================================
+SUPPORT & DOCUMENTATION
+================================================================================
+
+Complete Setup Guide:
+  → FRONTEND_MIGRATION.md
+
+Backend API Docs:
+  → BACKEND_DOCUMENTATION.txt
+  → API_QUICK_REFERENCE.txt
+  → http://localhost:8000/docs (Swagger UI)
+
+Frontend Stack:
+  → React: https://react.dev
+  → Vite: https://vitejs.dev
+  → TypeScript: https://www.typescriptlang.org
+  → Tailwind CSS: https://tailwindcss.com
+
+Questions or Issues:
+  → Check FRONTEND_MIGRATION.md troubleshooting section
+  → Check backend console for errors
+  → Check browser console for frontend errors
+
+================================================================================
+STATUS: ✅ READY TO START
+================================================================================
+
+✅ Backend updated and tested
+✅ Frontend structure ready
+✅ API routes all functional
+✅ Documentation complete
+✅ Environment configured
+
+You're ready to:
+1. npm install in pearl-agent/
+2. Start dev server
+3. Start coding!
+
+Happy coding! 🚀

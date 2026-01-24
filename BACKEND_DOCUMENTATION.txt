@@ -1,0 +1,609 @@
+================================================================================
+                        PEARL AGENT BACKEND DOCUMENTATION
+                         Complete Service & API Mapping
+================================================================================
+
+================================================================================
+SECTION 1: BACKEND SERVICES
+================================================================================
+
+1. SKILL GAP SERVICE (services/skill_gap_service.py)
+   Keywords: skill-gap, gap-severity, readiness, evidence, confidence, delta
+   
+   Main Class: SkillGapService
+   
+   Key Methods:
+   - compute_skill_gap(user_id, target_role)
+     Returns: Complete skill analysis with gaps, readiness, recommendations
+   - _get_target_skills()
+     From: user_onboarding.skills or active roadmap
+   - _get_current_skills()
+     From: user_skill_memory table (confidence scores)
+   - _get_skill_evidence()
+     Aggregates from: checkpoints, tasks, taikens, modules
+   - _get_skill_status()
+     Maps confidence to: mastered, intermediate, beginner, not_started
+   - _calculate_readiness()
+     Formula: Average of all skills' confidence scores
+   - _get_readiness_level()
+     Maps: job_ready (90%+), nearly_ready (70%+), progressing (50%+), building (30%+), started (<30%)
+   - update_skill_on_completion()
+     Auto-updates on: checkpoint_passed (+10%), practice (score-based), taiken (+15%), module (+8%)
+   
+   Evidence Sources:
+   - ai_checkpoint_results: Assessment evidence
+   - ai_task_results: Practice submission evidence
+   - taiken_progress: Story-based learning evidence
+   - user_skill_memory: Current confidence scores
+   - user_onboarding: Target skills baseline
+
+
+2. PRACTICE SERVICE (services/practice_service.py)
+   Keywords: practice-set, MCQ, difficulty, score, gemini-ai, fallback
+   
+   Main Class: PracticeSetService
+   
+   Key Methods:
+   - generate_practice_set(skill, topic, difficulty, question_count)
+     Uses: Google Gemini 2.5 AI
+     Returns: MCQ questions with 4 options, explanations, tags
+   - _get_fallback_practice()
+     Returns: Generic practice when AI fails
+   - save_practice_attempt(user_id, skill, topic, questions, answers, time_taken)
+     Calculates: Score = (correct/total) * 100
+     Returns: performance_level (excellent, good, fair, needs_improvement)
+   - get_practice_history(user_id, skill=None)
+     Returns: Last 20 attempts, optionally filtered by skill
+   - get_practice_analytics(user_id)
+     Aggregates: Performance by skill with averages, best scores
+   
+   Storage:
+   - practice_attempts table: Stores all submissions with scores
+
+
+3. RPG PROGRESSION SERVICE (services/rpg_progression_service.py)
+   Keywords: energy, xp, level, exponential-scaling, regen, max-energy, stats
+   
+   Main Class: RPGProgressionService
+   
+   Constants:
+   - MAX_ENERGY: 100
+   - ENERGY_REGEN_PER_HOUR: 5
+   - XP_PER_LEVEL: 100 (base)
+   - LEVEL_MULTIPLIER: 1.5 (exponential)
+   
+   Key Methods:
+   - get_user_rpg_stats(user_id)
+     Returns/Creates: Level, XP, Energy, Max Energy, Streaks
+     Auto-regenerates energy on retrieval
+   - _regenerate_energy()
+     Formula: Hours since last = (now - last_regenerated) / 3600
+     Energy gained = hours * 5, capped at max
+   - _calculate_xp_for_level(level)
+     Formula: 100 * 1.5 ^ (level - 1)
+   - award_xp(user_id, xp_amount, reason)
+     Triggers level-up when total XP >= required
+     On level-up: max_energy += 10
+   - consume_energy(user_id, energy_cost, activity)
+     Checks: Has enough energy, deducts if yes
+     Returns: Success/failure with remaining energy
+   - get_energy_costs()
+     Dictionary: watch=5, course=15, practice=10, checkpoint=20, taiken=25, job=30
+   - get_xp_rewards()
+     Dictionary: watch=10, course=50, practice_set_good=30, practice_set_perfect=30,
+                  checkpoint=100, module=150, roadmap=1000, skill_mastery=500
+   
+   Storage:
+   - user_rpg_stats table: Profile (level, xp, energy, max_energy)
+   - xp_transactions table: XP audit log
+   - energy_transactions table: Energy audit log
+
+
+4. FEEDBACK SERVICE (services/feedback_service.py)
+   Keywords: rating, feedback, suggestion, tags, aggregation, distribution
+   
+   Main Class: FeedbackService
+   
+   Key Methods:
+   - submit_module_feedback(user_id, module_id, skill, rating, feedback_text, tags)
+     Rating: 1-5 stars
+     Stores: Feedback with timestamp, skill, tags
+   - submit_course_feedback(user_id, course_id, rating, usefulness_rating, feedback_text)
+     Rating: Overall 1-5, Usefulness 1-5
+   - submit_improvement_suggestion(user_id, suggestion_type, suggestion_text, priority)
+     Types: content, ui, features, difficulty, clarity
+     Priority: low, medium, high, critical
+   - get_module_ratings(module_id)
+     Returns: Average rating, distribution (1-5 breakdown), count
+   - get_user_feedback_history(user_id)
+     Returns: Last 20 feedback entries
+   - get_popular_tags()
+     Returns: Top 20 most used tags across platform
+   
+   Storage:
+   - user_feedback table: Module/course feedback with ratings
+   - improvement_suggestions table: User suggestions and priorities
+
+
+5. NOTIFICATION SERVICE (services/notification_service.py)
+   Keywords: notification-types, priority, category, icon, unread, read
+   
+   Main Class: NotificationService
+   
+   Notification Types (8):
+   1. module_unlock
+      Icon: 🔓, Priority: high, Category: learning
+      Triggers: When module unlocks
+      
+   2. checkpoint_ready
+      Icon: ✅, Priority: high, Category: assessment
+      Triggers: When checkpoint available
+      
+   3. skill_mastery
+      Icon: 🎯, Priority: high, Category: achievement
+      Triggers: When skill reaches mastery (confidence >= 0.9)
+      
+   4. job_match
+      Icon: 💼, Priority: medium, Category: jobs
+      Triggers: When job matches current skills
+      
+   5. streak_reminder
+      Icon: 🔥, Priority: medium, Category: engagement
+      Triggers: Periodic engagement reminders
+      
+   6. energy_restored
+      Icon: ⚡, Priority: low, Category: rpg
+      Triggers: When energy fully regenerated
+      
+   7. level_up
+      Icon: 🆙, Priority: high, Category: rpg
+      Triggers: When user levels up in RPG
+      
+   8. ai_tip
+      Icon: 💡, Priority: low, Category: guidance
+      Triggers: AI-generated personalized tips
+   
+   Key Methods:
+   - create_notification(user_id, type, title, message, icon, priority, category)
+     Generic creation with type mapping
+   - notify_module_unlock(user_id, module_name)
+   - notify_checkpoint_ready(user_id, checkpoint_name)
+   - notify_skill_mastery(user_id, skill_name)
+   - notify_job_match(user_id, job_title)
+   - notify_level_up(user_id, new_level)
+   - send_ai_guidance(user_id, tip_message)
+   - get_user_notifications(user_id, unread_only=False)
+     Returns: Notifications with read status
+   - mark_as_read(notification_id)
+   - get_notification_summary(user_id)
+     Returns: Count by category/type, unread count
+   
+   Storage:
+   - user_notifications table: All notifications with read status
+
+
+6. AUXILIARY SERVICES (existing)
+   Keywords: auth, content-provider, rag, gamification, geminiai, job-retrieval
+   
+   - auth_service.py: Authentication, token management
+   - content_provider_service.py: Learning content delivery
+   - enhanced_rag_service.py: RAG for semantic search
+   - gamification_service.py: Points, achievements, badges
+   - geminiai_service.py: Google Gemini AI integration
+   - job_retrieval_service.py: Job API integration
+   - learning_optimizer_agent.py: Learning path optimization
+   - onboarding_service.py: User onboarding flows
+   - pearl_agent.py: Main agent coordinator
+   - resume_service.py: Resume building
+
+
+================================================================================
+SECTION 2: API ROUTES & ENDPOINTS
+================================================================================
+
+PREFIX: /api (All endpoints use Bearer token authentication)
+
+1. SKILL GAP ROUTES (routes/skill_gap_routes.py)
+   
+   GET /api/skill-gap?target_role=optional
+   - Returns: Complete skill gap analysis
+   - Data: All skills, gaps, critical gaps, mastered skills, readiness
+   - Status Codes: 200, 401, 404, 503
+   
+   GET /api/skill-gap/summary
+   - Returns: Quick summary metrics
+   - Data: total_skills, readiness%, critical_gaps_count, top_3_priorities
+   
+   GET /api/skill-gap/skill/{skill_name}
+   - Returns: Single skill analysis
+   - Data: gap_analysis, current_confidence, target_confidence, evidence
+   
+   GET /api/skill-gap/recommendations/{skill_name}
+   - Returns: Recommendations for specific skill
+   - Data: Suggested resources, difficulty level, learning path
+   
+   GET /api/learning-context
+   - Returns: User's complete learning data
+   - Data: Onboarding, skills, roadmap, modules, taikens
+   
+   GET /api/skill-evidence/{skill_name}
+   - Returns: All evidence for skill aggregation
+   - Data: Checkpoints passed, practice completed, modules completed, taikens
+
+
+2. PRACTICE ROUTES (routes/enhanced_routes.py)
+   
+   POST /api/practice/generate
+   - Input: skill, topic, difficulty (easy/medium/hard), question_count
+   - Returns: MCQ questions with options, explanations
+   - Uses: Gemini AI, Fallback to generic
+   
+   POST /api/practice/submit
+   - Input: skill, topic, questions[], answers[], time_taken_seconds
+   - Returns: Score, performance_level, XP awarded
+   - Auto-awards XP based on score (80%+ = perfect, 60%+ = good)
+   
+   GET /api/practice/history
+   - Query: ?skill=optional
+   - Returns: Last 20 practice attempts with scores and times
+   - Analytics: Aggregate performance by skill
+
+
+3. RPG ROUTES (routes/enhanced_routes.py)
+   
+   GET /api/rpg/stats
+   - Returns: Current RPG statistics
+   - Data: level, xp, energy, max_energy, energy_regen_time
+   - Also includes: Energy costs table, XP rewards table
+   
+   POST /api/rpg/consume-energy
+   - Input: activity, energy_cost
+   - Returns: Success status, remaining energy
+   - Checks: Sufficient energy available
+   
+   POST /api/rpg/award-xp/{xp_amount}?reason=string
+   - Input: XP amount, reason
+   - Returns: New XP total, level (if leveled up), max energy bonus
+
+
+4. FEEDBACK ROUTES (routes/enhanced_routes.py)
+   
+   POST /api/feedback/submit
+   - Input: module_id OR course_id, rating (1-5), feedback_text, tags[]
+   - Returns: Confirmation with feedback_id
+   
+   POST /api/feedback/suggestion
+   - Input: suggestion_type, suggestion_text, priority
+   - Returns: Confirmation with suggestion_id
+   
+   GET /api/feedback/module/{module_id}/ratings
+   - Returns: Aggregated ratings for module
+   - Data: average_rating, distribution (1-5 breakdown), total_count
+   
+   GET /api/feedback/history
+   - Returns: User's feedback history
+   - Data: Last 20 feedback entries with timestamps
+
+
+5. NOTIFICATION ROUTES (routes/enhanced_routes.py)
+   
+   GET /api/notifications
+   - Returns: User's notifications
+   - All notifications, unread count, summary
+   
+   POST /api/notifications/{notification_id}/mark-read
+   - Returns: Confirmation, notification marked as read
+   
+   GET /api/notifications/summary
+   - Returns: Summary aggregation
+   - Data: Total count, unread count, by category, by type
+
+
+================================================================================
+SECTION 3: DATABASE SCHEMA
+================================================================================
+
+CORE TABLES:
+
+1. user_skill_memory
+   Fields: user_id, skill, confidence (0-1), last_updated, evidence_count
+   Purpose: Track current skill confidence levels
+   Updated by: skill_gap_service.update_skill_on_completion()
+
+2. ai_checkpoint_results
+   Fields: user_id, checkpoint_id, skill, passed (bool), score, timestamp
+   Purpose: Store checkpoint assessments
+   Evidence for: Skill gap computation
+
+3. ai_task_results
+   Fields: user_id, task_id, skill, topic, score, timestamp
+   Purpose: Store practice task submissions
+   Evidence for: Skill gap, practice analytics
+
+4. taiken_progress
+   Fields: user_id, taiken_id, completed (bool), progress%, timestamp
+   Purpose: Track story-based learning progress
+   Evidence for: Skill gap computation
+
+5. practice_attempts
+   Fields: user_id, skill, topic, score, question_count, time_seconds, timestamp
+   Purpose: Store practice set attempts
+   Used by: Practice analytics, RPG XP awards
+
+6. user_rpg_stats
+   Fields: user_id, level, xp, energy, max_energy, last_regenerated, streak_count
+   Purpose: Central RPG profile
+   Updated by: RPG service (award_xp, consume_energy)
+
+7. user_feedback
+   Fields: user_id, module_id/course_id, skill, rating, usefulness_rating, text, tags[], timestamp
+   Purpose: Store user feedback and reviews
+   Used by: Analytics, content improvement
+
+8. improvement_suggestions
+   Fields: user_id, type, text, priority, timestamp, status
+   Purpose: Collect user suggestions
+   Used by: Platform improvement tracking
+
+9. user_notifications
+   Fields: user_id, type, title, message, icon, priority, category, read (bool), timestamp
+   Purpose: Store user notifications
+   Used by: Notification retrieval and summary
+
+10. xp_transactions
+    Fields: user_id, xp_amount, reason, timestamp, activity_type
+    Purpose: Audit log for XP changes
+    Used by: Analytics, validation
+
+11. energy_transactions
+    Fields: user_id, energy_delta, activity, timestamp, balance_before, balance_after
+    Purpose: Audit log for energy changes
+    Used by: Analytics, validation
+
+12. user_onboarding (existing)
+    Fields: user_id, skills[], target_role, completed_sections[]
+    Purpose: Onboarding data storage
+    Used by: Skill gap target skills
+
+13. user_modules (existing)
+    Fields: user_id, module_id, completed (bool), progress%, timestamp
+    Purpose: Module progress tracking
+    Used by: Skill gap evidence
+
+
+================================================================================
+SECTION 4: CONFIGURATION & SETUP
+================================================================================
+
+1. ENVIRONMENT VARIABLES (config.py)
+   - SUPABASE_URL: Database connection
+   - SUPABASE_KEY: API key for Supabase
+   - GEMINI_API_KEY: Google Generative AI key
+   - API_PORT: Server port (default 8000)
+   - LOG_LEVEL: Logging level
+
+2. CONSTANTS & THRESHOLDS
+   
+   Energy System:
+   - MAX_ENERGY: 100
+   - ENERGY_REGEN_PER_HOUR: 5
+   - Energy costs: watch=5, course=15, practice=10, checkpoint=20, taiken=25, job=30
+   
+   XP System:
+   - Base XP per level: 100
+   - Level multiplier: 1.5x (exponential)
+   - XP rewards: watch=10, course=50, practice_good=30, practice_perfect=30,
+                 checkpoint=100, module=150, roadmap=1000, mastery=500
+   
+   Skill Confidence Thresholds:
+   - Mastered: >= 0.8 (80%)
+   - Intermediate: 0.5 - 0.8
+   - Beginner: 0.2 - 0.5
+   - Not Started: < 0.2
+   
+   Readiness Levels:
+   - Job Ready: >= 90%
+   - Nearly Ready: >= 70%
+   - Progressing Well: >= 50%
+   - Building Foundation: >= 30%
+   - Getting Started: < 30%
+   
+   Skill Update Deltas:
+   - Checkpoint passed: +10%
+   - Practice task: score/100 * 10%
+   - Taiken completed: +15%
+   - Module completed: +8%
+
+3. AUTHENTICATION
+   - Method: Bearer Token
+   - Header: "Authorization: Bearer <token>"
+   - Extraction: get_user_from_token() in skill_gap_routes.py
+   - Errors: 401 on missing/invalid token
+
+4. ERROR HANDLING
+   - 400: Bad Request (validation error)
+   - 401: Unauthorized (invalid/missing token)
+   - 403: Forbidden (permission denied)
+   - 404: Not Found (resource not found)
+   - 500: Server Error (unexpected)
+   - 503: Service Unavailable (db/AI unavailable)
+
+5. MAIN ENTRY POINT (main.py)
+   - Framework: FastAPI
+   - Port: 8000
+   - Reload: True (development)
+   - CORS: Enabled for all origins
+   - Routers loaded:
+     - auth_routes (prefix: /auth)
+     - pearl_routes (prefix: /agent)
+     - new_routes (prefix: /api)
+     - skill_gap_routes (prefix: /api, tags: skill-gap)
+     - enhanced_routes (prefix: /api, tags: enhanced)
+
+
+================================================================================
+SECTION 5: API REQUEST/RESPONSE FORMATS
+================================================================================
+
+1. AUTHENTICATION HEADER
+   Authorization: Bearer <user_token>
+   (Required for all /api/* endpoints)
+
+2. SUCCESS RESPONSE FORMAT
+   {
+     "success": true,
+     "data": { ... }
+   }
+   Status: 200
+
+3. ERROR RESPONSE FORMAT
+   {
+     "detail": "Error message"
+   }
+   Status: 4xx or 5xx
+
+4. REQUEST EXAMPLES
+
+   Practice Generate:
+   POST /api/practice/generate
+   {
+     "skill": "Python",
+     "topic": "List Comprehension",
+     "difficulty": "medium",
+     "question_count": 5
+   }
+
+   Practice Submit:
+   POST /api/practice/submit
+   {
+     "skill": "Python",
+     "topic": "List Comprehension",
+     "questions": [...],
+     "answers": [0, 1, 2, 1, 3],
+     "time_taken_seconds": 420
+   }
+
+   Feedback Submit:
+   POST /api/feedback/submit
+   {
+     "module_id": "module-123",
+     "skill": "Python",
+     "rating": 5,
+     "feedback_text": "Excellent module!",
+     "tags": ["clear", "practical", "helpful"]
+   }
+
+   RPG Consume Energy:
+   POST /api/rpg/consume-energy
+   {
+     "activity": "watch",
+     "energy_cost": 5
+   }
+
+
+================================================================================
+SECTION 6: SERVICE INITIALIZATION
+================================================================================
+
+Global Service Instances (initialized at startup):
+
+from services.skill_gap_service import skill_gap_service
+from services.practice_service import practice_service
+from services.rpg_progression_service import rpg_service
+from services.feedback_service import feedback_service
+from services.notification_service import notification_service
+
+Database Connection:
+from database import EnhancedSupabaseHelper
+db = EnhancedSupabaseHelper()
+
+All services use singleton pattern (single instance per service)
+
+
+================================================================================
+SECTION 7: FEATURE FLOW SUMMARY
+================================================================================
+
+SKILL GAP WORKFLOW:
+User starts → Onboarding sets target skills → skill_gap_service computes gaps
+→ Shows skill analysis → User practices → Evidence collected → Skill confidence
+updates automatically → Readiness recalculated → Shows progress
+
+PRACTICE WORKFLOW:
+User requests practice → practice_service generates via Gemini → User answers
+→ Submit attempt → Score calculated → RPG XP awarded → Notification sent
+→ Skill memory updated → Analytics recorded
+
+RPG WORKFLOW:
+User has profile (level, XP, energy) → Actions consume energy → XP awarded on
+completion → Level-up triggers when XP threshold reached → Energy regenerates
+over time → Notifications on major events
+
+FEEDBACK WORKFLOW:
+User completes module/course → Submits feedback/rating → Stored in db
+→ Aggregated for analytics → Popular tags tracked → Suggestions collected
+
+NOTIFICATION WORKFLOW:
+Event triggers (skill mastery, level-up, module unlock) → Notification created
+→ Stored in db → Fetched by user → Marked as read → Summary aggregated
+
+
+================================================================================
+SECTION 8: INTEGRATION POINTS
+================================================================================
+
+Services calling other services:
+- enhanced_routes.py calls: practice_service → rpg_service (award XP)
+- skill_gap_service → database (EnhancedSupabaseHelper)
+- All routes → get_user_from_token() for auth
+
+Database dependencies:
+- All services depend on: EnhancedSupabaseHelper (Supabase client)
+- Fallback handling if DB unavailable (503 error)
+
+AI dependencies:
+- practice_service uses: Google Generative AI (Gemini 2.5)
+- Fallback to generic questions if AI unavailable
+
+Frontend integration points:
+- All data flows through REST API (/api/*)
+- Bearer token from frontend auth (from Supabase Auth)
+- Real-time updates via polling or WebSocket (if added)
+
+
+================================================================================
+SECTION 9: DEPLOYMENT CHECKLIST
+================================================================================
+
+✅ Services Created (7 files):
+   - skill_gap_service.py
+   - practice_service.py
+   - rpg_progression_service.py
+   - feedback_service.py
+   - notification_service.py
+   - skill_gap_routes.py
+   - enhanced_routes.py
+
+✅ Routes Registered in main.py:
+   - skill_gap_routes
+   - enhanced_routes
+
+✅ Configuration:
+   - Environment variables set (config.py)
+   - Database credentials configured
+   - Gemini API key available
+   - CORS enabled
+
+✅ Database:
+   - Required tables exist or will auto-create
+   - Supabase connection working
+
+✅ Start Server:
+   python main.py
+   Access: http://localhost:8000/
+   Docs: http://localhost:8000/docs
+
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
