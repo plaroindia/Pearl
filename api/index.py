@@ -58,3 +58,4 @@ async def error_handler(request, exc):
             "type": type(exc).__name__
         }
     )
+    

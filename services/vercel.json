@@ -1,25 +1,33 @@
 {
+  "version": 2,
   "builds": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python"
+      "src": "main.py",
+      "use": "@vercel/python",
+      "config": { 
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.11"
+      }
     },
     {
-      "src": "pearl-agent/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "pearl-agent/dist"
-      }
+      "src": "dist/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/index.py"
+      "dest": "/main.py"
     },
     {
       "src": "/(.*)",
-      "dest": "/pearl-agent/dist/index.html"
+      "dest": "/dist/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=3600, s-maxage=3600"
+      }
     }
-  ]
+  ],
+  "env": {
+    "PYTHONPATH": "/var/task"
+  }
 }

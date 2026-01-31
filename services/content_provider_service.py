@@ -1,380 +1,165 @@
 """
-Content Provider Service
-Manages curated content from YouTube, freeCodeCamp, and MIT OpenCourseWare
-Provides structured learning paths based on user preferences
+Content Provider Service - FIXED
+Manages content from database tables: courses, bytes, taikens
+Provides structured learning paths from actual platform content
 """
 
 from typing import List, Dict, Optional
+from supabase import create_client
+from config import get_settings
+
+settings = get_settings()
 
 
 class ContentProviderService:
     """
-    Manages curated, high-quality content from trusted educational providers:
-    - YouTube: Primary video content source
-    - freeCodeCamp: Hands-on practice and certification
-    - MIT OpenCourseWare: Rigorous academic depth
+    Manages platform content from database
+    Queries: courses, bytes, taikens tables
     """
     
-    # Comprehensive curated content database
-    CONTENT_DATABASE = {
-        "Python": {
-            "video": [
-                {
-                    "provider_id": "yt_python_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "Python Full Course - freeCodeCamp",
-                    "difficulty": "beginner",
-                    "duration": 270,
-                    "source_url": "https://www.youtube.com/watch?v=rfscVS0vtbE",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "views": "50M+",
-                        "rating": 4.9,
-                        "topics": ["basics", "data structures", "OOP", "modules"]
-                    }
-                },
-                {
-                    "provider_id": "yt_python_002",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "Python in 100 Seconds",
-                    "difficulty": "beginner",
-                    "duration": 2,
-                    "source_url": "https://www.youtube.com/watch?v=x7X9w_GIm1s",
-                    "metadata": {
-                        "channel": "Fireship",
-                        "format": "quick_overview",
-                        "topics": ["language_features", "basics"]
-                    }
-                }
-            ],
-            "task": [
-                {
-                    "provider_id": "fcc_python_001",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "Scientific Computing with Python",
-                    "difficulty": "intermediate",
-                    "duration": 300,
-                    "source_url": "https://www.freecodecamp.org/learn/scientific-computing-with-python/",
-                    "metadata": {
-                        "certification": True,
-                        "projects": 5,
-                        "estimated_hours": 300,
-                        "topics": ["numpy", "pandas", "matplotlib", "data_analysis"]
-                    }
-                },
-                {
-                    "provider_id": "fcc_python_002",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "Python for Everybody",
-                    "difficulty": "beginner",
-                    "duration": 200,
-                    "source_url": "https://www.freecodecamp.org/learn/python-for-everybody/",
-                    "metadata": {
-                        "certification": False,
-                        "projects": 3,
-                        "topics": ["fundamentals", "functions", "files"]
-                    }
-                }
-            ],
-            "text": [
-                {
-                    "provider_id": "mit_python_001",
-                    "name": "MIT OpenCourseWare",
-                    "content_type": "text",
-                    "title": "Introduction to Computer Science and Programming in Python",
-                    "difficulty": "advanced",
-                    "duration": 900,
-                    "source_url": "https://ocw.mit.edu/courses/6-0001-introduction-to-computer-science-and-programming-in-python-fall-2016/",
-                    "metadata": {
-                        "format": "course",
-                        "has_lectures": True,
-                        "has_assignments": True,
-                        "has_exams": True,
-                        "university": "MIT"
-                    }
-                }
-            ]
-        },
-        "JavaScript": {
-            "video": [
-                {
-                    "provider_id": "yt_js_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "JavaScript Full Course for Beginners",
-                    "difficulty": "beginner",
-                    "duration": 480,
-                    "source_url": "https://www.youtube.com/watch?v=PkZNo7MFNFg",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "views": "30M+",
-                        "topics": ["variables", "functions", "DOM", "events"]
-                    }
-                },
-                {
-                    "provider_id": "yt_js_002",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "Modern JavaScript Course 2024",
-                    "difficulty": "intermediate",
-                    "duration": 600,
-                    "source_url": "https://www.youtube.com/watch?v=lkIFF4maKMU",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "topics": ["ES6", "async", "promises", "async_await"]
-                    }
-                }
-            ],
-            "task": [
-                {
-                    "provider_id": "fcc_js_001",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "JavaScript Algorithms and Data Structures",
-                    "difficulty": "intermediate",
-                    "duration": 300,
-                    "source_url": "https://www.freecodecamp.org/learn/javascript-algorithms-and-data-structures/",
-                    "metadata": {
-                        "certification": True,
-                        "projects": 5,
-                        "topics": ["algorithms", "data_structures", "problem_solving"]
-                    }
-                }
-            ]
-        },
-        "React": {
-            "video": [
-                {
-                    "provider_id": "yt_react_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "React Course - Beginner's Tutorial",
-                    "difficulty": "intermediate",
-                    "duration": 720,
-                    "source_url": "https://www.youtube.com/watch?v=bMknfKXIFA8",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "views": "15M+",
-                        "topics": ["components", "hooks", "state", "JSX"]
-                    }
-                }
-            ],
-            "task": [
-                {
-                    "provider_id": "fcc_react_001",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "Front End Development Libraries",
-                    "difficulty": "intermediate",
-                    "duration": 300,
-                    "source_url": "https://www.freecodecamp.org/learn/front-end-development-libraries/",
-                    "metadata": {
-                        "certification": True,
-                        "projects": 5,
-                        "includes": ["React", "Redux", "Bootstrap"]
-                    }
-                }
-            ]
-        },
-        "SQL": {
-            "video": [
-                {
-                    "provider_id": "yt_sql_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "SQL Tutorial - Full Database Course",
-                    "difficulty": "beginner",
-                    "duration": 240,
-                    "source_url": "https://www.youtube.com/watch?v=HXV3zeQKqGY",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "topics": ["queries", "joins", "aggregation", "indexing"]
-                    }
-                }
-            ],
-            "task": [
-                {
-                    "provider_id": "fcc_sql_001",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "Relational Database Certification",
-                    "difficulty": "intermediate",
-                    "duration": 300,
-                    "source_url": "https://www.freecodecamp.org/learn/relational-database/",
-                    "metadata": {
-                        "certification": True,
-                        "projects": 4,
-                        "topics": ["design", "normalization", "transactions"]
-                    }
-                }
-            ]
-        },
-        "Machine Learning": {
-            "video": [
-                {
-                    "provider_id": "yt_ml_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "Machine Learning Course - freeCodeCamp",
-                    "difficulty": "advanced",
-                    "duration": 600,
-                    "source_url": "https://www.youtube.com/watch?v=NWONeJKn6kc",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "topics": ["supervised_learning", "regression", "classification"]
-                    }
-                }
-            ],
-            "text": [
-                {
-                    "provider_id": "mit_ml_001",
-                    "name": "MIT OpenCourseWare",
-                    "content_type": "text",
-                    "title": "Introduction to Machine Learning",
-                    "difficulty": "advanced",
-                    "duration": 1200,
-                    "source_url": "https://ocw.mit.edu/courses/6-036-introduction-to-machine-learning-fall-2020/",
-                    "metadata": {
-                        "format": "course",
-                        "has_video": True,
-                        "has_assignments": True,
-                        "university": "MIT"
-                    }
-                }
-            ]
-        },
-        "Git": {
-            "video": [
-                {
-                    "provider_id": "yt_git_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "Git and GitHub Tutorial",
-                    "difficulty": "beginner",
-                    "duration": 120,
-                    "source_url": "https://www.youtube.com/watch?v=RGOj5yH7evk",
-                    "metadata": {
-                        "channel": "freeCodeCamp.org",
-                        "topics": ["version_control", "branches", "collaboration"]
-                    }
-                }
-            ]
-        },
-        "REST APIs": {
-            "video": [
-                {
-                    "provider_id": "yt_api_001",
-                    "name": "YouTube",
-                    "content_type": "video",
-                    "title": "REST API Best Practices",
-                    "difficulty": "intermediate",
-                    "duration": 180,
-                    "source_url": "https://www.youtube.com/watch?v=SLwpqD8n3d0",
-                    "metadata": {
-                        "channel": "Tech With Tim",
-                        "topics": ["HTTP", "REST", "design_patterns"]
-                    }
-                }
-            ],
-            "task": [
-                {
-                    "provider_id": "fcc_api_001",
-                    "name": "freeCodeCamp",
-                    "content_type": "task",
-                    "title": "Build a REST API",
-                    "difficulty": "intermediate",
-                    "duration": 200,
-                    "source_url": "https://www.freecodecamp.org/learn/",
-                    "metadata": {
-                        "projects": 2,
-                        "topics": ["Flask", "Express", "FastAPI"]
-                    }
-                }
-            ]
-        }
-    }
+    def __init__(self):
+        self.client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
     
-    @staticmethod
     def get_content_for_skill(
+        self,
         skill: str,
         content_type: Optional[str] = None,
         difficulty: Optional[str] = None,
-        provider: Optional[str] = None
+        limit: int = 10
     ) -> List[Dict]:
         """
-        Retrieve curated content for a skill with optional filters
+        Retrieve content for a skill from database
         
         Args:
-            skill: Skill name (e.g., "Python", "React")
+            skill: Skill name (searches in domain/category)
             content_type: Filter by type ('video', 'task', 'text')
-            difficulty: Filter by difficulty ('beginner', 'intermediate', 'advanced')
-            provider: Filter by provider ('YouTube', 'freeCodeCamp', 'MIT OpenCourseWare')
+            difficulty: Filter by difficulty
+            limit: Maximum results
         
         Returns:
-            List of matching content items
+            List of content items from database
         """
         
         try:
-            skill_content = ContentProviderService.CONTENT_DATABASE.get(skill, {})
-            
-            if not skill_content:
-                print(f"[CONTENT] ⚠️  No content found for skill: {skill}")
-                return []
-            
             all_content = []
             
-            # Iterate through provider categories
-            for provider_name, items in skill_content.items():
-                if provider and provider != provider_name:
-                    continue
+            # Search bytes (short videos)
+            if not content_type or content_type == 'video':
+                bytes_query = self.client.table('bytes').select('*').eq('domain', skill)
                 
-                try:
-                    # items is dict like {"video": [...], "task": [...]}
-                    if isinstance(items, dict):
-                        for ctype, content_list in items.items():
-                            if content_type and ctype != content_type:
-                                continue
-                            
-                            if not isinstance(content_list, list):
-                                print(f"[CONTENT] WARNING: Invalid content_list structure for {skill}/{ctype}")
-                                continue
-                            
-                            for item in content_list:
-                                if difficulty and item.get("difficulty") != difficulty:
-                                    continue
-                                
-                                all_content.append(item)
-                    else:
-                        # items is list (legacy format)
-                        if not isinstance(items, list):
-                            print(f"[CONTENT] WARNING: Invalid items structure for {skill}")
-                            continue
-                        
-                        for item in items:
-                            if content_type and item.get("content_type") != content_type:
-                                continue
-                            if difficulty and item.get("difficulty") != difficulty:
-                                continue
-                            
-                            all_content.append(item)
+                if difficulty:
+                    bytes_query = bytes_query.eq('difficulty', difficulty)
                 
-                except Exception as type_error:
-                    print(f"[CONTENT] WARNING: Error processing {skill}/{provider_name}: {type_error}")
-                    continue
+                bytes_result = bytes_query.order('educational_value', desc=True).limit(limit).execute()
+                
+                for byte in bytes_result.data or []:
+                    all_content.append({
+                        "provider_id": f"byte_{byte['byte_id']}",
+                        "name": "PEARL Byte",
+                        "content_type": "video",
+                        "title": byte.get('caption', 'Learning Byte'),
+                        "difficulty": byte.get('difficulty', 'beginner'),
+                        "duration": 5,  # Bytes are short
+                        "source_url": byte.get('byte'),
+                        "content_id": byte['byte_id'],
+                        "metadata": {
+                            "likes": byte.get('like_count', 0),
+                            "educational_value": byte.get('educational_value', 0.5),
+                            "creator_id": byte.get('user_id')
+                        }
+                    })
             
-            print(f"[CONTENT] 📚 Found {len(all_content)} resources for {skill}")
-            return all_content
+            # Search courses
+            if not content_type or content_type == 'course':
+                courses_query = self.client.table('courses').select('*, course_videos(count)').eq('domain', skill)
+                
+                if difficulty:
+                    courses_query = courses_query.eq('difficulty', difficulty)
+                
+                courses_result = courses_query.order('created_at', desc=True).limit(limit).execute()
+                
+                for course in courses_result.data or []:
+                    all_content.append({
+                        "provider_id": f"course_{course['course_id']}",
+                        "name": "PEARL Course",
+                        "content_type": "course",
+                        "title": course.get('title'),
+                        "difficulty": course.get('difficulty', 'intermediate'),
+                        "duration": 60,  # Estimate
+                        "source_url": f"/courses/{course['course_id']}",
+                        "content_id": course['course_id'],
+                        "metadata": {
+                            "description": course.get('description'),
+                            "category": course.get('category'),
+                            "creator_id": course.get('user_id'),
+                            "thumbnail": course.get('thumbnail_url')
+                        }
+                    })
+            
+            # Search taikens (interactive experiences)
+            if not content_type or content_type == 'taiken':
+                taikens_query = self.client.table('taikens').select('*').eq('domain', skill).eq('is_published', True)
+                
+                if difficulty:
+                    taikens_query = taikens_query.eq('difficulty', difficulty)
+                
+                taikens_result = taikens_query.order('average_rating', desc=True).limit(limit).execute()
+                
+                for taiken in taikens_result.data or []:
+                    all_content.append({
+                        "provider_id": f"taiken_{taiken['taiken_id']}",
+                        "name": "PEARL Taiken",
+                        "content_type": "taiken",
+                        "title": taiken.get('title'),
+                        "difficulty": taiken.get('difficulty'),
+                        "duration": taiken.get('total_stages', 1) * 10,  # ~10 min per stage
+                        "source_url": f"/taikens/{taiken['taiken_id']}",
+                        "content_id": taiken['taiken_id'],
+                        "metadata": {
+                            "description": taiken.get('description'),
+                            "stages": taiken.get('total_stages'),
+                            "questions": taiken.get('total_questions'),
+                            "rating": taiken.get('average_rating', 0),
+                            "plays": taiken.get('play_count', 0)
+                        }
+                    })
+            
+            # Search posts (text/articles)
+            if not content_type or content_type == 'text':
+                posts_query = self.client.table('post').select('*').eq('domain', skill).eq('is_published', True).eq('is_hidden', False)
+                
+                if difficulty:
+                    posts_query = posts_query.eq('difficulty', difficulty)
+                
+                posts_result = posts_query.order('educational_value', desc=True).limit(limit).execute()
+                
+                for post in posts_result.data or []:
+                    all_content.append({
+                        "provider_id": f"post_{post['post_id']}",
+                        "name": "PEARL Article",
+                        "content_type": "text",
+                        "title": post.get('title', 'Learning Article'),
+                        "difficulty": post.get('difficulty', 'beginner'),
+                        "duration": 15,  # Reading time estimate
+                        "source_url": f"/posts/{post['post_id']}",
+                        "content_id": post['post_id'],
+                        "metadata": {
+                            "content": post.get('content'),
+                            "tags": post.get('tags', []),
+                            "likes": post.get('like_count', 0),
+                            "educational_value": post.get('educational_value', 0.5)
+                        }
+                    })
+            
+            print(f"[CONTENT] 📚 Found {len(all_content)} resources for {skill} from database")
+            return all_content[:limit]
         
         except Exception as e:
             print(f"[CONTENT] ERROR: Failed to get content for {skill}: {e}")
             return []
     
-    @staticmethod
     def get_mixed_learning_path(
+        self,
         skill: str,
         learning_preference: str = "mixed"
     ) -> List[Dict]:
@@ -391,68 +176,37 @@ class ContentProviderService:
         
         # Preference weight mappings
         weights = {
-            "video": {"video": 0.7, "task": 0.2, "text": 0.1},
-            "reading": {"text": 0.6, "video": 0.2, "task": 0.2},
-            "hands_on": {"task": 0.6, "video": 0.3, "text": 0.1},
-            "mixed": {"video": 0.4, "task": 0.4, "text": 0.2}
+            "video": {"video": 2, "course": 1, "taiken": 1, "text": 0},
+            "reading": {"text": 2, "course": 1, "video": 1, "taiken": 0},
+            "hands_on": {"taiken": 3, "course": 1, "video": 1, "text": 0},
+            "mixed": {"video": 1, "course": 1, "taiken": 1, "text": 1}
         }
         
         pref_weights = weights.get(learning_preference, weights["mixed"])
         
         content = []
-        skill_resources = ContentProviderService.CONTENT_DATABASE.get(skill, {})
         
-        if not skill_resources:
-            print(f"[CONTENT] ⚠️  No resources available for {skill}")
-            return []
+        # Get content based on weights
+        for content_type, weight in pref_weights.items():
+            if weight > 0:
+                items = self.get_content_for_skill(
+                    skill, 
+                    content_type=content_type,
+                    limit=weight * 2  # Get more than needed
+                )
+                content.extend(items[:weight])
         
-        # Flatten the nested structure
-        all_by_type = {}
-        for provider_name, items in skill_resources.items():
-            if isinstance(items, dict):
-                for ctype, content_list in items.items():
-                    if ctype not in all_by_type:
-                        all_by_type[ctype] = []
-                    all_by_type[ctype].extend(content_list)
-            else:
-                for item in items:
-                    ctype = item.get("content_type", "unknown")
-                    if ctype not in all_by_type:
-                        all_by_type[ctype] = []
-                    all_by_type[ctype].append(item)
-        
-        # Add content based on preference weights
-        if pref_weights.get("video", 0) >= 0.3 and "video" in all_by_type:
-            # Add top 2 videos
-            content.extend(all_by_type["video"][:2])
-        
-        if pref_weights.get("task", 0) >= 0.2 and "task" in all_by_type:
-            # Add top practice task
-            content.extend(all_by_type["task"][:1])
-        
-        if pref_weights.get("text", 0) >= 0.1 and "text" in all_by_type:
-            # Add top text resource
-            content.extend(all_by_type["text"][:1])
-        
-        print(f"[CONTENT] 🎓 Created {learning_preference} learning path with {len(content)} items for {skill}")
+        print(f"[CONTENT] 🎯 Created {learning_preference} learning path with {len(content)} items for {skill}")
         return content
     
-    @staticmethod
     def get_learning_roadmap(
+        self,
         primary_skill: str,
         secondary_skills: List[str],
         learning_preference: str = "mixed"
     ) -> Dict:
         """
         Create a comprehensive learning roadmap for multiple related skills
-        
-        Args:
-            primary_skill: Main skill to focus on
-            secondary_skills: Supporting skills to learn alongside
-            learning_preference: User's preferred learning style
-        
-        Returns:
-            Structured roadmap with phases and content
         """
         
         roadmap = {
@@ -461,56 +215,119 @@ class ContentProviderService:
         }
         
         # Phase 1: Primary skill fundamentals
-        phase1_content = ContentProviderService.get_mixed_learning_path(
-            primary_skill, learning_preference
-        )
-        roadmap["phases"].append({
-            "phase": 1,
-            "title": f"Master {primary_skill}",
-            "duration_weeks": 4,
-            "content": phase1_content,
-            "focus": "fundamentals"
-        })
+        phase1_content = self.get_mixed_learning_path(primary_skill, learning_preference)
         
-        # Phase 2: Secondary skills (if provided)
-        if secondary_skills:
-            phase2_content = []
-            for skill in secondary_skills[:2]:  # Limit to 2 secondary skills
-                phase2_content.extend(
-                    ContentProviderService.get_content_for_skill(skill, content_type="video")[:1]
-                )
-            
+        if phase1_content:
             roadmap["phases"].append({
-                "phase": 2,
-                "title": f"Build Supporting Skills: {', '.join(secondary_skills[:2])}",
-                "duration_weeks": 3,
-                "content": phase2_content,
-                "focus": "supporting"
+                "phase": 1,
+                "title": f"Master {primary_skill}",
+                "duration_weeks": 4,
+                "content": phase1_content[:5],
+                "focus": "fundamentals"
             })
         
-        # Phase 3: Advanced and project-based
-        phase3_content = ContentProviderService.get_content_for_skill(
-            primary_skill, difficulty="advanced"
+        # Phase 2: Secondary skills
+        if secondary_skills:
+            phase2_content = []
+            for skill in secondary_skills[:2]:
+                items = self.get_content_for_skill(skill, limit=3)
+                phase2_content.extend(items)
+            
+            if phase2_content:
+                roadmap["phases"].append({
+                    "phase": 2,
+                    "title": f"Build Supporting Skills: {', '.join(secondary_skills[:2])}",
+                    "duration_weeks": 3,
+                    "content": phase2_content[:4],
+                    "focus": "supporting"
+                })
+        
+        # Phase 3: Advanced practice
+        phase3_content = self.get_content_for_skill(
+            primary_skill, 
+            content_type="taiken",
+            difficulty="advanced",
+            limit=3
         )
-        if not phase3_content:
-            phase3_content = ContentProviderService.get_content_for_skill(
-                primary_skill, content_type="task"
-            )
         
-        roadmap["phases"].append({
-            "phase": 3,
-            "title": f"Advanced {primary_skill} & Real Projects",
-            "duration_weeks": 3,
-            "content": phase3_content[:2],
-            "focus": "advanced"
-        })
+        if phase3_content:
+            roadmap["phases"].append({
+                "phase": 3,
+                "title": f"Advanced {primary_skill} & Real Projects",
+                "duration_weeks": 3,
+                "content": phase3_content,
+                "focus": "advanced"
+            })
         
-        roadmap["total_duration_weeks"] = 10
-        roadmap["estimated_hours"] = 60
+        roadmap["total_duration_weeks"] = sum(p.get("duration_weeks", 0) for p in roadmap["phases"])
+        roadmap["estimated_hours"] = len([c for p in roadmap["phases"] for c in p.get("content", [])]) * 30
         
-        print(f"[CONTENT] 🗺️  Created learning roadmap for {primary_skill} + {len(secondary_skills)} skills")
+        print(f"[CONTENT] 🗺️ Created learning roadmap for {primary_skill} with {len(roadmap['phases'])} phases")
         return roadmap
+    
+    def search_content(self, query: str, limit: int = 20) -> List[Dict]:
+        """
+        Search across all content types
+        """
+        try:
+            results = []
+            
+            # Search bytes
+            bytes_result = self.client.table('bytes').select('*').ilike('caption', f'%{query}%').limit(limit).execute()
+            for byte in bytes_result.data or []:
+                results.append({
+                    "type": "byte",
+                    "id": byte['byte_id'],
+                    "title": byte.get('caption'),
+                    "url": byte.get('byte'),
+                    "domain": byte.get('domain')
+                })
+            
+            # Search courses
+            courses_result = self.client.table('courses').select('*').or_(
+                f'title.ilike.%{query}%,description.ilike.%{query}%'
+            ).limit(limit).execute()
+            for course in courses_result.data or []:
+                results.append({
+                    "type": "course",
+                    "id": course['course_id'],
+                    "title": course.get('title'),
+                    "url": f"/courses/{course['course_id']}",
+                    "domain": course.get('domain')
+                })
+            
+            # Search taikens
+            taikens_result = self.client.table('taikens').select('*').or_(
+                f'title.ilike.%{query}%,description.ilike.%{query}%'
+            ).eq('is_published', True).limit(limit).execute()
+            for taiken in taikens_result.data or []:
+                results.append({
+                    "type": "taiken",
+                    "id": taiken['taiken_id'],
+                    "title": taiken.get('title'),
+                    "url": f"/taikens/{taiken['taiken_id']}",
+                    "domain": taiken.get('domain')
+                })
+            
+            # Search posts
+            posts_result = self.client.table('post').select('*').or_(
+                f'title.ilike.%{query}%,content.ilike.%{query}%'
+            ).eq('is_published', True).limit(limit).execute()
+            for post in posts_result.data or []:
+                results.append({
+                    "type": "post",
+                    "id": post['post_id'],
+                    "title": post.get('title'),
+                    "url": f"/posts/{post['post_id']}",
+                    "domain": post.get('domain')
+                })
+            
+            return results[:limit]
+            
+        except Exception as e:
+            print(f"[CONTENT] Search error: {e}")
+            return []
 
 
-# Global instance for use across the application
+# Global instance
 content_provider = ContentProviderService()
